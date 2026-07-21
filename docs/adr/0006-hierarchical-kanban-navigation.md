@@ -6,7 +6,7 @@ Proposed
 ## Context
 Octarine utilizes a plaintext hierarchical project pathing syntax (e.g., `+work/client-1/project-a`) as defined in ADR 0001. 
 
-Users need an intuitive Kanban board interface to manage and track task states. A standard Kanban view groups tasks into columns representing statuses (Todo, In Progress, Completed) matching task checkbox states (`[ ]`, `[/]`, `[x]`).
+Users need an intuitive Kanban board interface to manage and track task states. A standard Kanban view groups tasks into columns representing statuses (Todo, In Progress, Completed, Cancelled) matching task checkbox states (`[ ]`, `[/]`, `[x]`, `[-]`).
 
 When browsing hierarchical projects, users navigate to specific nodes in the path tree (e.g., `+work`, `+work/client-1`, or `+work/client-1/project-a`). 
 They expect:
@@ -21,6 +21,7 @@ Kanban boards will automatically group task cards into columns based on their pa
 - **Todo Column:** Matches standard tasks marked with `- [ ]` (Not Started).
 - **In Progress Column:** Matches tasks marked with `- [/]` (In Progress).
 - **Done Column:** Matches completed tasks marked with `- [x]` (Completed).
+- **Cancelled Column:** Matches cancelled tasks marked with `- [-]` (Cancelled).
 - *Exclusion Rule:* Calendar events (`- [>]`) are excluded from standard Kanban task lanes by default to prevent schedule pollution, but can be toggled on as a dedicated timeline track.
 
 ### 2. Hierarchical Scoping (Filtering Rule)
