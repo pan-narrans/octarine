@@ -7,7 +7,8 @@ use std::sync::Mutex;
 use tauri::State;
 use tauri::Manager;
 use octarine::parser::{ParsedTask, ParsedCustomView};
-use octarine::db::{initialize_db, boot_sweep, index_single_file};
+use octarine::file_ops::{FileNode, scan_dir_tree, create_file_on_disk, create_directory_on_disk, delete_path_on_disk, rename_path_on_disk, read_file_content_on_disk, write_file_content_on_disk};
+use octarine::db::{initialize_db, boot_sweep, index_single_file, delete_file};
 use octarine::writer::update_task_status_in_file;
 use octarine::query_dsl::compile_filter_to_sql;
 use octarine::watcher::start_watcher;
@@ -178,6 +179,65 @@ fn set_vault_config(state: State<'_, AppState>, new_dir: String) -> Result<(), S
     Ok(())
 }
 
+// -----------------------------------------------------------------
+// NEW FILE OPERATIONS TAURI IPC COMMANDS
+// -----------------------------------------------------------------
+
+#[tauri::command]
+fn read_dir_tree(state: State<'_, AppState>) -> Result<FileNode, String> {
+    let vault_dir = state.vault_dir.lock().unwrap();
+    let path = std::path::Path::new(&*vault_dir);
+    scan_dir_tree(path)
+}
+
+#[tauri::command]
+fn create_file(parent_dir: String, name: String) -> Result<String, String> {
+    create_file_on_disk(&parent_dir, &name)
+}
+
+#[tauri::command]
+fn create_directory(parent_dir: String, name: String) -> Result<String, String> {
+    create_directory_on_disk(&parent_dir, &name)
+}
+
+#[tauri::command]
+fn delete_path(state: State<'_, AppState>, path: String) -> Result<(), String> {
+    delete_path_on_disk(&path)?;
+    let conn = state.db.lock().unwrap();
+    delete_file(&conn, &path).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn rename_path(state: State<'_, AppState>, old_path: String, new_path: String) -> Result<(), String> {
+    rename_path_on_disk(&old_path, &new_path)?;
+    let conn = state.db.lock().unwrap();
+
+    // Clear old indexed references in SQLite
+    delete_file(&conn, &old_path).map_err(|e| e.to_string())?;
+
+    // Perform immediate re-indexing of the moved path
+    if new_path.ends_with(".md") {
+        index_single_file(&conn, &new_path).map_err(|e| e.to_string())?;
+    } else if std::path::Path::new(&new_path).is_dir() {
+        boot_sweep(&conn, &new_path).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn read_file_content(path: String) -> Result<String, String> {
+    read_file_content_on_disk(&path)
+}
+
+#[tauri::command]
+fn write_file_content(state: State<'_, AppState>, path: String, content: String) -> Result<(), String> {
+    write_file_content_on_disk(&path, &content)?;
+    let conn = state.db.lock().unwrap();
+    index_single_file(&conn, &path).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 fn main() {
     let home_dir = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
     let db_path = format!("{}/.octarine_cache.db", home_dir);
@@ -236,7 +296,14 @@ fn main() {
         get_vault_config,
         set_vault_config,
         update_event_schedule,
-        update_task_status
+        update_task_status,
+        read_dir_tree,
+        create_file,
+        create_directory,
+        delete_path,
+        rename_path,
+        read_file_content,
+        write_file_content
     ]);
 
     builder
