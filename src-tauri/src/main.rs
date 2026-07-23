@@ -5,6 +5,7 @@
 
 use std::sync::Mutex;
 use tauri::State;
+use tauri::Manager;
 use octarine::parser::{ParsedTask, ParsedCustomView};
 use octarine::db::{initialize_db, boot_sweep, index_single_file};
 use octarine::writer::update_task_status_in_file;
@@ -27,7 +28,7 @@ fn get_tasks(state: State<'_, AppState>, filter: Option<String>) -> Result<Vec<P
     };
 
     let query_str = format!(
-        "SELECT line_number, raw_markdown, hash, status, type, description, project, due_date, s_start, duration_secs, recurring, when_done, parse_errors FROM tasks WHERE {}",
+        "SELECT tasks.line_number, tasks.raw_markdown, tasks.hash, tasks.status, tasks.type, tasks.description, tasks.project, tasks.due_date, tasks.s_start, tasks.duration_secs, tasks.recurring, tasks.when_done, tasks.parse_errors, files.path FROM tasks JOIN files ON files.id = tasks.file_id WHERE {}",
         where_clause
     );
 
@@ -46,6 +47,7 @@ fn get_tasks(state: State<'_, AppState>, filter: Option<String>) -> Result<Vec<P
         let recurring: Option<String> = row.get(10)?;
         let when_done: Option<String> = row.get(11)?;
         let parse_errors: Option<String> = row.get(12)?;
+        let file_path: String = row.get(13)?;
 
         Ok(ParsedTask {
             line_number,
@@ -63,6 +65,7 @@ fn get_tasks(state: State<'_, AppState>, filter: Option<String>) -> Result<Vec<P
             tags: vec![],
             contexts: vec![],
             parse_errors,
+            file_path: Some(file_path),
         })
     }).map_err(|e| e.to_string())?;
 
@@ -153,15 +156,11 @@ fn main() {
     let conn = initialize_db(&db_path).expect("failed to initialize SQLite Cache database");
     boot_sweep(&conn, &vault_dir).expect("failed to run boot sweep");
 
-    // Start background watcher
-    let _watcher = start_watcher(db_path.clone(), vault_dir.clone())
-        .expect("failed to start native file watcher");
-
     let mut builder = tauri::Builder::default()
         .manage(AppState {
             db: Mutex::new(conn),
-            db_path,
-            vault_dir,
+            db_path: db_path.clone(),
+            vault_dir: vault_dir.clone(),
         });
 
     #[cfg(feature = "qa-vision")]
@@ -183,6 +182,20 @@ fn main() {
         ]);
     }
 
-    builder.run(tauri::generate_context!())
+    builder
+        .setup(move |app| {
+            let handle = app.handle();
+            // Start background watcher and emit "vault-changed" event on updates
+            let _watcher = start_watcher(db_path, vault_dir, move || {
+                let _ = handle.emit_all("vault-changed", ());
+            })
+            .expect("failed to start native file watcher");
+            
+            // Keep the watcher alive by leaking it
+            Box::leak(Box::new(_watcher));
+            
+            Ok(())
+        })
+        .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

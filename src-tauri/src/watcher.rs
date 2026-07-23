@@ -4,10 +4,14 @@ use std::thread;
 use notify::{Watcher, RecursiveMode, RecommendedWatcher, Config, EventKind};
 use rusqlite::Connection;
 
-pub fn start_watcher<P: AsRef<Path> + Send + 'static>(
+pub fn start_watcher<P: AsRef<Path> + Send + 'static, F>(
     db_path: String,
     vault_dir: P,
-) -> Result<RecommendedWatcher, notify::Error> {
+    on_change: F,
+) -> Result<RecommendedWatcher, notify::Error>
+where
+    F: Fn() + Send + Sync + 'static,
+{
     let (tx, rx) = channel();
 
     let mut watcher = RecommendedWatcher::new(tx, Config::default())?;
@@ -60,14 +64,18 @@ pub fn start_watcher<P: AsRef<Path> + Send + 'static>(
                                     // Re-open DB connection in the watcher thread
                                     if let Ok(conn) = Connection::open(&db_path) {
                                         let _ = conn.execute_batch("PRAGMA foreign_keys = ON;");
+                                        let mut changed = false;
                                         if path.exists() {
-                                            if let Err(e) = crate::db::index_single_file(&conn, path_str) {
-                                                eprintln!("Watcher failed to index file: {}", e);
+                                            if let Ok(_) = crate::db::index_single_file(&conn, path_str) {
+                                                changed = true;
                                             }
                                         } else {
-                                            if let Err(e) = crate::db::delete_file(&conn, path_str) {
-                                                eprintln!("Watcher failed to delete file: {}", e);
+                                            if let Ok(_) = crate::db::delete_file(&conn, path_str) {
+                                                changed = true;
                                             }
+                                        }
+                                        if changed {
+                                            on_change();
                                         }
                                     }
                                 }
@@ -104,6 +112,7 @@ mod tests {
         let _watcher = start_watcher(
             db_path.to_str().unwrap().to_string(),
             vault_dir.clone(),
+            || {},
         )
         .unwrap();
 

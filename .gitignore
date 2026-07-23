@@ -9,3 +9,7 @@
 # Rust / Cargo
 target/
 src-tauri/target/
+
+# Node / Frontend
+node_modules/
+dist/

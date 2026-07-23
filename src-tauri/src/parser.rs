@@ -18,6 +18,7 @@ pub struct ParsedTask {
     pub tags: Vec<String>,
     pub contexts: Vec<String>,
     pub parse_errors: Option<String>, // JSON string array of error messages, or None
+    pub file_path: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
@@ -322,6 +323,7 @@ pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask
                 tags,
                 contexts,
                 parse_errors,
+                file_path: Some(file_path.to_string()),
             });
 
             // Advance the cursor to consume processed note lines
