@@ -232,8 +232,8 @@ fn scan_directory_recursive(dir: &Path, files: &mut Vec<String>) -> std::io::Res
                 scan_directory_recursive(&path, files)?;
             } else if let Some(ext) = path.extension() {
                 if ext == "md" {
-                    if let Some(path_str) = path.to_str() {
-                        files.push(path_str.to_string());
+                    if let Ok(canonical) = fs::canonicalize(&path) {
+                        files.push(canonical.to_string_lossy().to_string());
                     }
                 }
             }
