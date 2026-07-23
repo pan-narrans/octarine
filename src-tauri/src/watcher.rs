@@ -29,36 +29,6 @@ where
 
                     if should_process {
                         for path in event.paths {
-                            #[cfg(feature = "qa-vision")]
-                            {
-                                if path.file_name().map_or(false, |name| name == ".capture_trigger") {
-                                    if path.exists() {
-                                        // 1. Get window ID
-                                        if let Ok(output) = std::process::Command::new("osascript")
-                                            .arg("-e")
-                                            .arg("tell application \"System Events\" to get id of window 1 of (first process whose name is \"octarine-app\" or title is \"Octarine\")")
-                                            .output()
-                                        {
-                                            if output.status.success() {
-                                                let window_id_str = String::from_utf8_lossy(&output.stdout);
-                                                let window_id = window_id_str.trim();
-                                                if !window_id.is_empty() {
-                                                    // 2. Capture screenshot
-                                                    let _ = std::process::Command::new("screencapture")
-                                                        .arg("-l")
-                                                        .arg(window_id)
-                                                        .arg("../screenshot.png")
-                                                        .status();
-                                                }
-                                            }
-                                        }
-                                        // 3. Delete trigger file
-                                        let _ = std::fs::remove_file(&path);
-                                    }
-                                    continue;
-                                }
-                            }
-
                             if path.extension().map_or(false, |ext| ext == "md") {
                                 if let Some(path_str) = path.to_str() {
                                     // Re-open DB connection in the watcher thread

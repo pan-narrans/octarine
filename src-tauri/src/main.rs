@@ -178,42 +178,6 @@ fn set_vault_config(state: State<'_, AppState>, new_dir: String) -> Result<(), S
     Ok(())
 }
 
-#[cfg(feature = "qa-vision")]
-#[tauri::command]
-fn capture_app_window() -> Result<String, String> {
-    // 1. Get window ID using osascript
-    let output = std::process::Command::new("osascript")
-        .arg("-e")
-        .arg("tell application \"System Events\" to get id of window 1 of (first process whose name is \"octarine-app\" or title is \"Octarine\")")
-        .output()
-        .map_err(|e| format!("Failed to execute osascript: {}", e))?;
-
-    if !output.status.success() {
-        let err_msg = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("osascript failed: {}", err_msg));
-    }
-
-    let window_id_str = String::from_utf8_lossy(&output.stdout);
-    let window_id = window_id_str.trim();
-    if window_id.is_empty() {
-        return Err("App window not found or not active.".to_string());
-    }
-
-    // 2. Run screencapture -l <window_id> ../screenshot.png
-    let capture_status = std::process::Command::new("screencapture")
-        .arg("-l")
-        .arg(window_id)
-        .arg("../screenshot.png")
-        .status()
-        .map_err(|e| format!("Failed to run screencapture: {}", e))?;
-
-    if !capture_status.success() {
-        return Err("screencapture command failed.".to_string());
-    }
-
-    Ok("Successfully captured app window to screenshot.png at project root.".to_string())
-}
-
 fn main() {
     let home_dir = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
     let db_path = format!("{}/.octarine_cache.db", home_dir);
@@ -266,30 +230,14 @@ fn main() {
             vault_dir: Mutex::new(vault_dir.clone()),
         });
 
-    #[cfg(feature = "qa-vision")]
-    {
-        builder = builder.invoke_handler(tauri::generate_handler![
-            get_tasks,
-            get_custom_views,
-            update_task_status,
-            get_vault_config,
-            set_vault_config,
-            update_event_schedule,
-            capture_app_window
-        ]);
-    }
-
-    #[cfg(not(feature = "qa-vision"))]
-    {
-        builder = builder.invoke_handler(tauri::generate_handler![
-            get_tasks,
-            get_custom_views,
-            get_vault_config,
-            set_vault_config,
-            update_event_schedule,
-            update_task_status
-        ]);
-    }
+    builder = builder.invoke_handler(tauri::generate_handler![
+        get_tasks,
+        get_custom_views,
+        get_vault_config,
+        set_vault_config,
+        update_event_schedule,
+        update_task_status
+    ]);
 
     builder
         .setup(move |app| {

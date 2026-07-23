@@ -32,4 +32,3 @@ tauri-build = "1.5"
 
 [features]
 default = []
-qa-vision = []

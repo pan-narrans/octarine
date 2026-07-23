@@ -12,7 +12,6 @@ import {
   Loader2, 
   AlertCircle, 
   Search, 
-  Camera,
   Edit2,
   Check,
   X,
@@ -37,7 +36,6 @@ export function App() {
 
   const [selectedSection, setSelectedSection] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [captureStatus, setCaptureStatus] = useState<string | null>(null);
   const [activeVaultPath, setActiveVaultPath] = useState<string>("Loading...");
   
   // Vault Path Inline Editor state
@@ -100,21 +98,6 @@ export function App() {
       task.hash,
       nextStatus
     );
-  };
-
-  // Perform screenshot capture (triggers the qa-vision capture loop)
-  const triggerAppCapture = async () => {
-    setCaptureStatus("Capturing...");
-    try {
-      const result = await invoke<string>("capture_app_window");
-      setCaptureStatus("Captured!");
-      setTimeout(() => setCaptureStatus(null), 3000);
-      console.log(result);
-    } catch (e) {
-      setCaptureStatus("Error!");
-      setTimeout(() => setCaptureStatus(null), 3000);
-      console.error("QA capture failed:", e);
-    }
   };
 
   // In-memory filter logic for selected sidebar items and search query
@@ -548,12 +531,6 @@ export function App() {
             </h1>
             <p>Sub-millisecond plaintext organization</p>
           </div>
-
-          {/* QA-Vision Capture trigger Button */}
-          <button className="dev-capture-btn" onClick={triggerAppCapture}>
-            <Camera size={16} />
-            {captureStatus || "Capture View"}
-          </button>
         </div>
 
         {/* Search Inputs */}

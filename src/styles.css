@@ -346,26 +346,6 @@ body {
   50% { transform: scale(1.05); opacity: 0.8; }
 }
 
-/* Screen Trigger Trigger Btn (For Dev-Visual Testing) */
-.dev-capture-btn {
-  background: rgba(167, 139, 250, 0.1);
-  border: 1px solid rgba(167, 139, 250, 0.3);
-  color: var(--color-violet);
-  padding: 0.6rem 1rem;
-  border-radius: 8px;
-  cursor: pointer;
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  transition: all 0.2s;
-}
-
-.dev-capture-btn:hover {
-  background: rgba(167, 139, 250, 0.2);
-  color: var(--text-primary);
-}
-
 /* Calendar Weekly Grid */
 .calendar-grid {
   display: grid;
