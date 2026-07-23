@@ -281,6 +281,13 @@ fn main() {
     std::fs::create_dir_all(&vault_dir).expect("failed to create vault directory");
 
     let conn = initialize_db(&db_path).expect("failed to initialize SQLite Cache database");
+    
+    // Force a one-time database cache flush to clear out legacy buggy entries (like '+-')
+    // and let our sub-millisecond sweep rebuild everything cleanly from scratch.
+    let _ = conn.execute("DELETE FROM tasks", []);
+    let _ = conn.execute("DELETE FROM custom_views", []);
+    let _ = conn.execute("DELETE FROM files", []);
+
     boot_sweep(&conn, &vault_dir).expect("failed to run boot sweep");
 
     let mut builder = tauri::Builder::default()
