@@ -12,7 +12,10 @@ import {
   Loader2, 
   AlertCircle, 
   Search, 
-  Camera 
+  Camera,
+  Edit2,
+  Check,
+  X
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/tauri";
 
@@ -33,6 +36,11 @@ export function App() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [captureStatus, setCaptureStatus] = useState<string | null>(null);
   const [activeVaultPath, setActiveVaultPath] = useState<string>("Loading...");
+  
+  // Vault Path Inline Editor state
+  const [isEditingVault, setIsEditingVault] = useState<boolean>(false);
+  const [vaultInput, setVaultInput] = useState<string>("");
+  const [savingVault, setSavingVault] = useState<boolean>(false);
 
   // Initial Boot Fetch & Config Query
   useEffect(() => {
@@ -41,7 +49,10 @@ export function App() {
     
     // Fetch active vault path dynamically from Tauri state
     invoke<string>("get_vault_config")
-      .then(path => setActiveVaultPath(path))
+      .then(path => {
+        setActiveVaultPath(path);
+        setVaultInput(path);
+      })
       .catch(err => console.error("Failed to query active vault path:", err));
   }, [fetchTasks, fetchCustomViews]);
 
@@ -164,6 +175,24 @@ export function App() {
     return getISODateString(date) === getISODateString(today);
   };
 
+  const handleSaveVault = async () => {
+    if (!vaultInput.trim()) return;
+    setSavingVault(true);
+    try {
+      await invoke("set_vault_config", { newDir: vaultInput.trim() });
+      setActiveVaultPath(vaultInput.trim());
+      setIsEditingVault(false);
+      // Immediately clear and re-sync stores with the new directory's scanned contents
+      await fetchTasks();
+      await fetchCustomViews();
+    } catch (e) {
+      console.error("Failed to update active vault path:", e);
+      alert(`Failed to save: ${e}`);
+    } finally {
+      setSavingVault(false);
+    }
+  };
+
   return (
     <>
       {/* 1. SIDEBAR PANEL */}
@@ -276,14 +305,63 @@ export function App() {
           </div>
         )}
 
-        {/* Active Vault Location indicator */}
+        {/* Active Vault Location indicator with Inline Editor */}
         <div style={{ marginTop: "auto", borderTop: "1px solid var(--border-card)", paddingTop: "1.5rem" }}>
-          <div style={{ fontSize: "0.75rem", textTransform: "uppercase", color: "var(--text-muted)", fontWeight: 600, letterSpacing: "0.05em", marginBottom: "0.5rem" }}>
-            Active Vault Path
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+            <span style={{ fontSize: "0.75rem", textTransform: "uppercase", color: "var(--text-muted)", fontWeight: 600, letterSpacing: "0.05em" }}>
+              Active Vault Path
+            </span>
+            {!isEditingVault && (
+              <button 
+                onClick={() => setIsEditingVault(true)}
+                style={{ background: "none", border: "none", color: "var(--color-violet)", cursor: "pointer", display: "flex", alignItems: "center", padding: 0 }}
+              >
+                <Edit2 size={12} />
+              </button>
+            )}
           </div>
-          <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)", wordBreak: "break-all", fontStyle: "italic", lineHeight: 1.4 }}>
-            {activeVaultPath}
-          </div>
+          
+          {isEditingVault ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+              <input 
+                type="text"
+                value={vaultInput}
+                onChange={(e) => setVaultInput(e.target.value)}
+                style={{ 
+                  width: "100%", 
+                  background: "rgba(255, 255, 255, 0.05)", 
+                  border: "1px solid var(--border-card)", 
+                  borderRadius: "6px", 
+                  color: "var(--text-primary)", 
+                  padding: "0.4rem 0.6rem", 
+                  fontSize: "0.8rem",
+                  fontFamily: "monospace"
+                }}
+                placeholder="~/octarine_vault"
+                disabled={savingVault}
+              />
+              <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+                <button 
+                  onClick={() => setIsEditingVault(false)}
+                  style={{ background: "rgba(255, 255, 255, 0.05)", border: "1px solid var(--border-card)", color: "var(--text-muted)", padding: "0.25rem 0.5rem", borderRadius: "4px", cursor: "pointer", fontSize: "0.75rem", display: "flex", alignItems: "center", gap: "0.25rem" }}
+                  disabled={savingVault}
+                >
+                  <X size={10} /> Cancel
+                </button>
+                <button 
+                  onClick={handleSaveVault}
+                  style={{ background: "var(--color-violet)", border: "none", color: "white", padding: "0.25rem 0.5rem", borderRadius: "4px", cursor: "pointer", fontSize: "0.75rem", fontWeight: 600, display: "flex", alignItems: "center", gap: "0.25rem" }}
+                  disabled={savingVault}
+                >
+                  {savingVault ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />} Save
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)", wordBreak: "break-all", fontStyle: "italic", lineHeight: 1.4 }}>
+              {activeVaultPath}
+            </div>
+          )}
         </div>
       </div>
 

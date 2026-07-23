@@ -115,6 +115,47 @@ fn get_vault_config(state: State<'_, AppState>) -> Result<String, String> {
     Ok(vault_dir.clone())
 }
 
+#[tauri::command]
+fn set_vault_config(state: State<'_, AppState>, new_dir: String) -> Result<(), String> {
+    let home_dir = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+    let config_path = format!("{}/.octarine_config.json", home_dir);
+
+    let mut resolved_dir = new_dir.clone();
+    if resolved_dir.starts_with("~/") {
+        resolved_dir = resolved_dir.replace("~", &home_dir);
+    }
+
+    // Ensure directory exists
+    std::fs::create_dir_all(&resolved_dir)
+        .map_err(|e| format!("Failed to create directory: {}", e))?;
+
+    // Save to configuration file
+    let config_data = serde_json::json!({
+        "vault_dir": new_dir
+    });
+    let config_str = serde_json::to_string_pretty(&config_data)
+        .map_err(|e| e.to_string())?;
+    std::fs::write(&config_path, config_str)
+        .map_err(|e| format!("Failed to write config file: {}", e))?;
+
+    // Update active vault_dir inside AppState under lock
+    {
+        let mut vault_lock = state.vault_dir.lock().unwrap();
+        *vault_lock = resolved_dir.clone();
+    }
+
+    // Clear old tables inside the SQLite cache
+    let conn = state.db.lock().unwrap();
+    conn.execute("DELETE FROM tasks", []).map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM custom_views", []).map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM files", []).map_err(|e| e.to_string())?;
+
+    // Perform an immediate fresh boot sweep indexing the newly configured vault
+    boot_sweep(&conn, &resolved_dir).map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
 #[cfg(feature = "qa-vision")]
 #[tauri::command]
 fn capture_app_window() -> Result<String, String> {
@@ -210,6 +251,7 @@ fn main() {
             get_custom_views,
             update_task_status,
             get_vault_config,
+            set_vault_config,
             capture_app_window
         ]);
     }
@@ -220,6 +262,7 @@ fn main() {
             get_tasks,
             get_custom_views,
             get_vault_config,
+            set_vault_config,
             update_task_status
         ]);
     }
