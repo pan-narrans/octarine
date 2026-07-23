@@ -1,0 +1,203 @@
+use std::fs;
+use std::path::Path;
+use regex::Regex;
+use rusqlite::{params, Connection};
+
+pub fn update_task_status_in_file(
+    db_conn: &Connection,
+    file_path: &str,
+    original_line_number: usize, // 1-based
+    original_content_hash: &str,
+    new_status: &str, // "todo", "doing", "done", "cancelled"
+) -> Result<(), String> {
+    // 1. Retrieve the original raw markdown from the database
+    let mut stmt = db_conn
+        .prepare("SELECT raw_markdown FROM tasks WHERE hash = ?")
+        .map_err(|e| e.to_string())?;
+    let original_raw_markdown: String = stmt
+        .query_row(params![original_content_hash], |r| r.get(0))
+        .map_err(|_| "Task hash not found in database cache. Please reload.".to_string())?;
+
+    // 2. Read the file from disk
+    if !Path::new(file_path).exists() {
+        return Err(format!("File not found on disk: {}", file_path));
+    }
+    let content = fs::read_to_string(file_path).map_err(|e| e.to_string())?;
+    let lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
+
+    let original_lines: Vec<&str> = original_raw_markdown.lines().collect();
+    if original_lines.is_empty() {
+        return Err("Original raw markdown is empty.".to_string());
+    }
+
+    let mut found_line: Option<usize> = None;
+
+    // Phase 1: Direct Match
+    if original_line_number <= lines.len() {
+        let start_idx = original_line_number - 1;
+        if is_match_at_line(&lines, start_idx, &original_lines) {
+            found_line = Some(start_idx);
+        }
+    }
+
+    // Phase 2: Nearby Search Fallback (up to 15 lines in both directions)
+    if found_line.is_none() {
+        let search_radius = 15;
+        let start_line = original_line_number as i32 - 1;
+        for offset in 1..=search_radius {
+            // Check below
+            let scan_idx = start_line + offset;
+            if scan_idx >= 0 && (scan_idx as usize) < lines.len() {
+                if is_match_at_line(&lines, scan_idx as usize, &original_lines) {
+                    found_line = Some(scan_idx as usize);
+                    break;
+                }
+            }
+            // Check above
+            let scan_idx = start_line - offset;
+            if scan_idx >= 0 && (scan_idx as usize) < lines.len() {
+                if is_match_at_line(&lines, scan_idx as usize, &original_lines) {
+                    found_line = Some(scan_idx as usize);
+                    break;
+                }
+            }
+        }
+    }
+
+    // Phase 3: Conflict Resolution
+    let line_idx = match found_line {
+        Some(idx) => idx,
+        None => {
+            return Err("Concurrency Collision: The task could not be located in the file. It may have been edited or moved externally. Please refresh.".to_string());
+        }
+    };
+
+    // 3. Perform the edit on lines starting at `line_idx`
+    let mut edited_lines = lines;
+    let target_line = &edited_lines[line_idx];
+
+    // Determine the character to write
+    let status_char = match new_status {
+        "todo" => " ",
+        "doing" => "/",
+        "done" => "x",
+        "cancelled" => "-",
+        _ => " ",
+    };
+
+    // Substitute checkbox using regex
+    let re = Regex::new(r"^(\s*[-*+]\s+\[)([\sxX>\-/])(\])(.*)$").unwrap();
+    if let Some(caps) = re.captures(target_line) {
+        let prefix = caps.get(1).unwrap().as_str();
+        let suffix = caps.get(3).unwrap().as_str();
+        let rest = caps.get(4).unwrap().as_str();
+        
+        let new_line = format!("{}{}{}{}", prefix, status_char, suffix, rest);
+        edited_lines[line_idx] = new_line;
+    } else {
+        return Err("Failed to format checkbox on the target line.".to_string());
+    }
+
+    // 4. Save file back to disk
+    let updated_content = edited_lines.join("\n");
+    fs::write(file_path, updated_content).map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+fn is_match_at_line(file_lines: &[String], start_idx: usize, original_lines: &[&str]) -> bool {
+    if start_idx + original_lines.len() > file_lines.len() {
+        return false;
+    }
+    
+    for (offset, orig_line) in original_lines.iter().enumerate() {
+        let disk_line = &file_lines[start_idx + offset];
+        if offset == 0 {
+            // For the first line, compare stripped descriptions/contents ignoring the checkbox state,
+            // to allow editing even if checkboxes are slightly different.
+            // But let's check if the rest of the text matches exactly.
+            let re = Regex::new(r"^\s*[-*+]\s+\[[\sxX>\-/]\]\s*(.*)$").unwrap();
+            let disk_cap = re.captures(disk_line);
+            let orig_cap = re.captures(orig_line);
+            
+            match (disk_cap, orig_cap) {
+                (Some(dc), Some(oc)) => {
+                    if dc.get(1).unwrap().as_str() != oc.get(1).unwrap().as_str() {
+                        return false;
+                    }
+                }
+                _ => return false,
+            }
+        } else {
+            // Subsequent note lines must match exactly
+            if disk_line != orig_line {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::{initialize_db, index_single_file};
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_safe_writer_direct_match_and_line_shift() {
+        let temp_dir = tempdir().unwrap();
+        let db_path = temp_dir.path().join("cache.db");
+        let file_path = temp_dir.path().join("tasks.md");
+
+        // Write initial file
+        fs::write(
+            &file_path,
+            r#"# My Tasks
+- [ ] Implement safe writer @db
+- [ ] Write query dsl +work
+"#,
+        )
+        .unwrap();
+
+        let conn = initialize_db(&db_path).unwrap();
+        index_single_file(&conn, file_path.to_str().unwrap()).unwrap();
+
+        // Get the task's hash from DB
+        let hash: String = conn
+            .query_row(
+                "SELECT hash FROM tasks WHERE description = 'Implement safe writer'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+
+        // 1. Test Direct Match: Mark "Implement safe writer" as doing (/)
+        update_task_status_in_file(&conn, file_path.to_str().unwrap(), 2, &hash, "doing").unwrap();
+
+        // Verify file updated
+        let content_after = fs::read_to_string(&file_path).unwrap();
+        assert!(content_after.contains("- [/] Implement safe writer @db"));
+
+        // 2. Test Line Shift: Pretend an external editor inserts 3 empty lines at the top
+        fs::write(
+            &file_path,
+            r#"
+
+
+# My Tasks
+- [/] Implement safe writer @db
+- [ ] Write query dsl +work
+"#,
+        )
+        .unwrap();
+
+        // The task was originally at line 2. Now it is at line 5.
+        // We will call the update_task_status_in_file specifying the original line 2 and original hash.
+        update_task_status_in_file(&conn, file_path.to_str().unwrap(), 2, &hash, "done").unwrap();
+
+        // Verify the file was updated correctly despite the line shift
+        let content_after_shift = fs::read_to_string(&file_path).unwrap();
+        assert!(content_after_shift.contains("- [x] Implement safe writer @db"));
+    }
+}

@@ -1,0 +1,423 @@
+use regex::Regex;
+use sha2::{Sha256, Digest};
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct ParsedTask {
+    pub line_number: usize, // 1-based index
+    pub raw_markdown: String,
+    pub hash: String,
+    pub status: String,      // "todo", "doing", "done", "cancelled"
+    pub task_type: String,   // "task" or "event"
+    pub description: String,
+    pub project: Option<String>,
+    pub due_date: Option<String>,
+    pub s_start: Option<String>,
+    pub duration_secs: Option<i32>,
+    pub recurring: Option<String>,
+    pub when_done: Option<String>,
+    pub tags: Vec<String>,
+    pub contexts: Vec<String>,
+    pub parse_errors: Option<String>, // JSON string array of error messages, or None
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct ParsedCustomView {
+    pub line_number: usize, // 1-based index
+    pub title: String,
+    pub query_raw: String,
+}
+
+pub fn calculate_hash(file_path: &str, line_number: usize, raw_markdown: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(file_path.as_bytes());
+    hasher.update(line_number.to_string().as_bytes());
+    hasher.update(raw_markdown.as_bytes());
+    hex::encode(hasher.finalize())
+}
+
+// Check if a date string is valid YYYY-MM-DD
+fn is_valid_date(s: &str) -> bool {
+    chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").is_ok()
+}
+
+// Check if a scheduled start is valid YYYY-MM-DD HH:MM
+fn is_valid_datetime(s: &str) -> bool {
+    chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M").is_ok() || is_valid_date(s)
+}
+
+// Parse duration string like "1h30m", "45m", "2h" into seconds
+fn parse_duration(s: &str) -> Result<i32, String> {
+    let re = Regex::new(r"^(?:(\d+)h)?(?:(\d+)m)?$").unwrap();
+    if let Some(caps) = re.captures(s) {
+        let h = caps.get(1).map(|m| m.as_str().parse::<i32>().unwrap_or(0)).unwrap_or(0);
+        let m = caps.get(2).map(|m| m.as_str().parse::<i32>().unwrap_or(0)).unwrap_or(0);
+        if h == 0 && m == 0 {
+            return Err(format!("Invalid duration format: {}", s));
+        }
+        Ok(h * 3600 + m * 60)
+    } else {
+        Err(format!("Invalid duration format: {}", s))
+    }
+}
+
+pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask>, Vec<ParsedCustomView>) {
+    let lines: Vec<&str> = content.lines().collect();
+    let mut tasks = Vec::new();
+    let mut views = Vec::new();
+
+    let header_re = Regex::new(r"^(\s*)([-*+])\s+\[([\sxX>\-/])\]\s*(.*)$").unwrap();
+    let project_re = Regex::new(r"\+([a-zA-Z0-9_\-/]+)").unwrap();
+    let context_re = Regex::new(r"@([a-zA-Z0-9_\-/]+)").unwrap();
+    let tag_re = Regex::new(r"#([a-zA-Z0-9_\-/]+)").unwrap();
+
+    let mut i = 0;
+    while i < lines.len() {
+        let line = lines[i];
+
+        // 1. Parse tasks-query codeblocks
+        if line.trim().starts_with("```tasks-query") {
+            let start_line = i + 1;
+            let mut query_lines = Vec::new();
+            i += 1;
+            while i < lines.len() && !lines[i].trim().starts_with("```") {
+                query_lines.push(lines[i]);
+                i += 1;
+            }
+            let query_raw = query_lines.join("\n");
+            
+            // Extract title from query_raw
+            let mut title = format!("Custom View @ Line {}", start_line);
+            for q_line in &query_lines {
+                if q_line.trim().starts_with("title:") {
+                    let t_val = q_line.trim()["title:".len()..].trim();
+                    title = t_val.trim_matches(|c| c == '"' || c == '\'').to_string();
+                    break;
+                }
+            }
+
+            views.push(ParsedCustomView {
+                line_number: start_line,
+                title,
+                query_raw,
+            });
+            i += 1;
+            continue;
+        }
+
+        // 2. Parse Checklist Tasks/Events
+        if let Some(caps) = header_re.captures(line) {
+            let start_line = i + 1;
+            let indent = caps.get(1).unwrap().as_str();
+            let marker = caps.get(3).unwrap().as_str();
+            let rest = caps.get(4).unwrap().as_str();
+
+            // Status and Type determination
+            let (status, task_type) = match marker {
+                " " => ("todo".to_string(), "task".to_string()),
+                "/" => ("doing".to_string(), "task".to_string()),
+                "x" | "X" => ("done".to_string(), "task".to_string()),
+                "-" => ("cancelled".to_string(), "task".to_string()),
+                ">" => ("todo".to_string(), "event".to_string()),
+                _ => ("todo".to_string(), "task".to_string()),
+            };
+
+            // Gather indented multiline notes
+            let mut raw_markdown_lines = vec![line.to_string()];
+            let mut next_i = i + 1;
+            while next_i < lines.len() {
+                let next_line = lines[next_i];
+                if next_line.trim().is_empty() {
+                    raw_markdown_lines.push(next_line.to_string());
+                    next_i += 1;
+                    continue;
+                }
+
+                // Check indentation
+                let next_indent_len = next_line.chars().take_while(|c| c.is_whitespace()).count();
+                if next_indent_len > indent.len() {
+                    // Check if it starts a new task list item
+                    if header_re.is_match(next_line) {
+                        break; // It's a sub-task, handle separately
+                    }
+                    raw_markdown_lines.push(next_line.to_string());
+                    next_i += 1;
+                } else {
+                    break;
+                }
+            }
+
+            // Clean trailing blank lines from the gathered block
+            while raw_markdown_lines.len() > 1 && raw_markdown_lines.last().unwrap().trim().is_empty() {
+                raw_markdown_lines.pop();
+            }
+
+            let raw_markdown = raw_markdown_lines.join("\n");
+            let hash = calculate_hash(file_path, start_line, &raw_markdown);
+
+            // Now parse metadata elements in the first line
+            let mut projects = Vec::new();
+            for p_cap in project_re.captures_iter(rest) {
+                projects.push(p_cap.get(1).unwrap().as_str().to_string());
+            }
+            let project = projects.first().cloned();
+
+            let mut contexts = Vec::new();
+            for c_cap in context_re.captures_iter(rest) {
+                contexts.push(c_cap.get(1).unwrap().as_str().to_string());
+            }
+
+            let mut tags = Vec::new();
+            for t_cap in tag_re.captures_iter(rest) {
+                tags.push(t_cap.get(1).unwrap().as_str().to_string());
+            }
+
+            let mut clean_description = rest.to_string();
+            let mut errors = Vec::new();
+
+            // 1. Extract and strip s (scheduled start)
+            let s_re = Regex::new(r"\bs:(?:\x22([^\x22]+)\x22|'([^']+)'|(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2})|([^\s]+))").unwrap();
+            let s_start = s_re.captures(rest).map(|caps| {
+                let val = if let Some(m) = caps.get(1) {
+                    m.as_str().to_string()
+                } else if let Some(m) = caps.get(2) {
+                    m.as_str().to_string()
+                } else if let Some(m) = caps.get(3) {
+                    m.as_str().to_string()
+                } else {
+                    caps.get(4).unwrap().as_str().to_string()
+                };
+                if let Some(m) = caps.get(0) {
+                    clean_description = clean_description.replace(m.as_str(), "");
+                }
+                
+                if !is_valid_datetime(&val) {
+                    errors.push(format!("Invalid scheduled start format: '{}' (expected YYYY-MM-DD HH:MM)", val));
+                }
+                val
+            });
+
+            // 2. Extract and strip due date
+            let due_re = Regex::new(r"\bdue:(?:\x22([^\x22]+)\x22|'([^']+)'|([^\s]+))").unwrap();
+            let due_date = due_re.captures(rest).map(|caps| {
+                let val = if let Some(m) = caps.get(1) {
+                    m.as_str().to_string()
+                } else if let Some(m) = caps.get(2) {
+                    m.as_str().to_string()
+                } else {
+                    caps.get(3).unwrap().as_str().to_string()
+                };
+                if let Some(m) = caps.get(0) {
+                    clean_description = clean_description.replace(m.as_str(), "");
+                }
+                
+                if !is_valid_date(&val) {
+                    errors.push(format!("Invalid due date format: '{}' (expected YYYY-MM-DD)", val));
+                }
+                val
+            });
+
+            // 3. Extract and strip duration
+            let dur_re = Regex::new(r"\bdur:(?:\x22([^\x22]+)\x22|'([^']+)'|([^\s]+))").unwrap();
+            let duration_secs = dur_re.captures(rest).and_then(|caps| {
+                let val = if let Some(m) = caps.get(1) {
+                    m.as_str().to_string()
+                } else if let Some(m) = caps.get(2) {
+                    m.as_str().to_string()
+                } else {
+                    caps.get(3).unwrap().as_str().to_string()
+                };
+                if let Some(m) = caps.get(0) {
+                    clean_description = clean_description.replace(m.as_str(), "");
+                }
+                
+                match parse_duration(&val) {
+                    Ok(secs) => Some(secs),
+                    Err(err) => {
+                        errors.push(err);
+                        None
+                    }
+                }
+            });
+
+            // 4. Extract and strip recurring
+            let rec_re = Regex::new(r"\brecurring:(?:\x22([^\x22]+)\x22|'([^']+)'|([^\s]+))").unwrap();
+            let recurring = rec_re.captures(rest).map(|caps| {
+                let val = if let Some(m) = caps.get(1) {
+                    m.as_str().to_string()
+                } else if let Some(m) = caps.get(2) {
+                    m.as_str().to_string()
+                } else {
+                    caps.get(3).unwrap().as_str().to_string()
+                };
+                if let Some(m) = caps.get(0) {
+                    clean_description = clean_description.replace(m.as_str(), "");
+                }
+                val
+            });
+
+            // 5. Extract and strip when_done
+            let wd_re = Regex::new(r"\bwhen_done:(?:\x22([^\x22]+)\x22|'([^']+)'|([^\s]+))").unwrap();
+            let when_done = wd_re.captures(rest).map(|caps| {
+                let val = if let Some(m) = caps.get(1) {
+                    m.as_str().to_string()
+                } else if let Some(m) = caps.get(2) {
+                    m.as_str().to_string()
+                } else {
+                    caps.get(3).unwrap().as_str().to_string()
+                };
+                if let Some(m) = caps.get(0) {
+                    clean_description = clean_description.replace(m.as_str(), "");
+                }
+                
+                if val != "delete" && val != "archive" {
+                    errors.push(format!("Invalid when_done action: '{}' (expected 'delete' or 'archive')", val));
+                }
+                val
+            });
+
+            // Strip project, context, tag markers from the description
+            for p in &projects {
+                let pattern = format!(r"\+{}", regex::escape(p));
+                if let Ok(re) = Regex::new(&pattern) {
+                    clean_description = re.replace_all(&clean_description, "").into_owned();
+                }
+            }
+            for c in &contexts {
+                let pattern = format!(r"@{}", regex::escape(c));
+                if let Ok(re) = Regex::new(&pattern) {
+                    clean_description = re.replace_all(&clean_description, "").into_owned();
+                }
+            }
+            for t in &tags {
+                let pattern = format!(r"#{}", regex::escape(t));
+                if let Ok(re) = Regex::new(&pattern) {
+                    clean_description = re.replace_all(&clean_description, "").into_owned();
+                }
+            }
+
+            // Cleanup whitespace in description
+            let clean_description = clean_description.trim()
+                .replace("  ", " ");
+            let clean_description = Regex::new(r"\s+").unwrap().replace_all(&clean_description, " ").to_string();
+
+            let parse_errors = if errors.is_empty() {
+                None
+            } else {
+                Some(serde_json::to_string(&errors).unwrap_or_default())
+            };
+
+            tasks.push(ParsedTask {
+                line_number: start_line,
+                raw_markdown,
+                hash,
+                status,
+                task_type,
+                description: clean_description,
+                project,
+                due_date,
+                s_start,
+                duration_secs,
+                recurring,
+                when_done,
+                tags,
+                contexts,
+                parse_errors,
+            });
+
+            // Advance the cursor to consume processed note lines
+            i = next_i;
+            continue;
+        }
+
+        i += 1;
+    }
+
+    (tasks, views)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_simple_task() {
+        let content = "- [ ] Call client @phone +work/marketing due:2026-07-25 #urgent";
+        let (tasks, _) = parse_markdown_content("test.md", content);
+        assert_eq!(tasks.len(), 1);
+        let task = &tasks[0];
+        assert_eq!(task.status, "todo");
+        assert_eq!(task.task_type, "task");
+        assert_eq!(task.project.as_deref(), Some("work/marketing"));
+        assert_eq!(task.due_date.as_deref(), Some("2026-07-25"));
+        assert!(task.contexts.contains(&"phone".to_string()));
+        assert!(task.tags.contains(&"urgent".to_string()));
+        assert_eq!(task.description, "Call client");
+        assert_eq!(task.parse_errors, None);
+    }
+
+    #[test]
+    fn test_parse_event_and_duration() {
+        let content = "- [>] Strategy meeting s:2026-07-22 14:00 dur:1h30m +work";
+        let (tasks, _) = parse_markdown_content("test.md", content);
+        assert_eq!(tasks.len(), 1);
+        let task = &tasks[0];
+        assert_eq!(task.status, "todo");
+        assert_eq!(task.task_type, "event");
+        assert_eq!(task.project.as_deref(), Some("work"));
+        assert_eq!(task.s_start.as_deref(), Some("2026-07-22 14:00"));
+        assert_eq!(task.duration_secs, Some(5400));
+        assert_eq!(task.description, "Strategy meeting");
+    }
+
+    #[test]
+    fn test_parse_multiline_note() {
+        let content = r#"- [/] Write parser +work
+    This is an indented note paragraph.
+    It has multiple lines.
+    - And a sub-bullet that isn't a task.
+- [ ] Another task"#;
+        let (tasks, _) = parse_markdown_content("test.md", content);
+        assert_eq!(tasks.len(), 2);
+        
+        let task1 = &tasks[0];
+        assert_eq!(task1.status, "doing");
+        assert_eq!(task1.description, "Write parser");
+        assert!(task1.raw_markdown.contains("This is an indented note paragraph."));
+        assert!(task1.raw_markdown.contains("- And a sub-bullet"));
+        
+        let task2 = &tasks[1];
+        assert_eq!(task2.status, "todo");
+        assert_eq!(task2.description, "Another task");
+    }
+
+    #[test]
+    fn test_parse_errors() {
+        let content = "- [ ] Broken metadata due:invalid-date dur:10x when_done:unsupported";
+        let (tasks, _) = parse_markdown_content("test.md", content);
+        assert_eq!(tasks.len(), 1);
+        let task = &tasks[0];
+        assert!(task.parse_errors.is_some());
+        let errors: Vec<String> = serde_json::from_str(task.parse_errors.as_ref().unwrap()).unwrap();
+        assert_eq!(errors.len(), 3);
+        assert!(errors[0].contains("Invalid due date"));
+        assert!(errors[1].contains("Invalid duration format"));
+        assert!(errors[2].contains("Invalid when_done action"));
+    }
+
+    #[test]
+    fn test_parse_custom_view() {
+        let content = r#"# Notes
+Some notes here.
+
+```tasks-query
+title: "Today's Errands"
+filter: "due = today AND @errands"
+group_by: "none"
+```
+"#;
+        let (_, views) = parse_markdown_content("test.md", content);
+        assert_eq!(views.len(), 1);
+        assert_eq!(views[0].title, "Today's Errands");
+        assert!(views[0].query_raw.contains("filter: \"due = today AND @errands\""));
+    }
+}
