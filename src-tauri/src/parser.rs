@@ -479,7 +479,7 @@ group_by: "none"
 
     #[test]
     fn test_ignore_metadata_in_unclosed_links() {
-        let content = "- [x] Actualizar la página de confluence de [Jerarquía de Productos y Categorías](https://teamnetconomy.atlassian.net/wiki/spaces/EGLCB2B/pages/968262013/WIP+-+Jerarqu+a+de+Productos+y+Categor+as)";
+        let content = "- [x] Actualizar la página de confluence de [Jerarquía de Productos y Categorías](https://example.atlassian.net/wiki/spaces/TEST/pages/12345/WIP+-+Jerarqu+a+de+Productos+y+Categor+as)";
         let (tasks, _) = parse_markdown_content("test.md", content);
         assert_eq!(tasks.len(), 1);
         let task = &tasks[0];
@@ -490,6 +490,6 @@ group_by: "none"
         assert_eq!(task.tags.len(), 0);
 
         // The raw string remains fully preserved in the description
-        assert_eq!(task.description, "Actualizar la página de confluence de [Jerarquía de Productos y Categorías](https://teamnetconomy.atlassian.net/wiki/spaces/EGLCB2B/pages/968262013/WIP+-+Jerarqu+a+de+Productos+y+Categor+as)");
+        assert_eq!(task.description, "Actualizar la página de confluence de [Jerarquía de Productos y Categorías](https://example.atlassian.net/wiki/spaces/TEST/pages/12345/WIP+-+Jerarqu+a+de+Productos+y+Categor+as)");
     }
 }
