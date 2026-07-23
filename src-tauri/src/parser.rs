@@ -1,5 +1,31 @@
 use regex::Regex;
 use sha2::{Sha256, Digest};
+use std::sync::OnceLock;
+use crate::CHECKLIST_CHAR_CLASS;
+
+static HEADER_RE: OnceLock<Regex> = OnceLock::new();
+static PROJECT_RE: OnceLock<Regex> = OnceLock::new();
+static CONTEXT_RE: OnceLock<Regex> = OnceLock::new();
+static TAG_RE: OnceLock<Regex> = OnceLock::new();
+
+fn get_header_re() -> &'static Regex {
+    HEADER_RE.get_or_init(|| {
+        let pattern = format!(r"^(\s*)([-*+])\s+\[([{}])\]\s*(.*)$", CHECKLIST_CHAR_CLASS);
+        Regex::new(&pattern).unwrap()
+    })
+}
+
+fn get_project_re() -> &'static Regex {
+    PROJECT_RE.get_or_init(|| Regex::new(r"\+([a-zA-Z0-9_\-/]+)").unwrap())
+}
+
+fn get_context_re() -> &'static Regex {
+    CONTEXT_RE.get_or_init(|| Regex::new(r"@([a-zA-Z0-9_\-/]+)").unwrap())
+}
+
+fn get_tag_re() -> &'static Regex {
+    TAG_RE.get_or_init(|| Regex::new(r"#([a-zA-Z0-9_\-/]+)").unwrap())
+}
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct ParsedTask {
@@ -66,10 +92,10 @@ pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask
     let mut tasks = Vec::new();
     let mut views = Vec::new();
 
-    let header_re = Regex::new(r"^(\s*)([-*+])\s+\[([\sxX<\-/])\]\s*(.*)$").unwrap();
-    let project_re = Regex::new(r"\+([a-zA-Z0-9_\-/]+)").unwrap();
-    let context_re = Regex::new(r"@([a-zA-Z0-9_\-/]+)").unwrap();
-    let tag_re = Regex::new(r"#([a-zA-Z0-9_\-/]+)").unwrap();
+    let header_re = get_header_re();
+    let project_re = get_project_re();
+    let context_re = get_context_re();
+    let tag_re = get_tag_re();
 
     let mut i = 0;
     while i < lines.len() {

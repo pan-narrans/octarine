@@ -2,6 +2,25 @@ use std::fs;
 use std::path::Path;
 use regex::Regex;
 use rusqlite::{params, Connection};
+use std::sync::OnceLock;
+use crate::CHECKLIST_CHAR_CLASS;
+
+static CHECKBOX_SUB_RE: OnceLock<Regex> = OnceLock::new();
+static STRIP_CHECKBOX_RE: OnceLock<Regex> = OnceLock::new();
+
+fn get_checkbox_sub_re() -> &'static Regex {
+    CHECKBOX_SUB_RE.get_or_init(|| {
+        let pattern = format!(r"^(\s*[-*+]\s+\[)([{}])(\])(.*)$", CHECKLIST_CHAR_CLASS);
+        Regex::new(&pattern).unwrap()
+    })
+}
+
+fn get_strip_checkbox_re() -> &'static Regex {
+    STRIP_CHECKBOX_RE.get_or_init(|| {
+        let pattern = format!(r"^\s*[-*+]\s+\[[{}]\]\s*(.*)$", CHECKLIST_CHAR_CLASS);
+        Regex::new(&pattern).unwrap()
+    })
+}
 
 pub fn update_task_status_in_file(
     db_conn: &Connection,
@@ -86,7 +105,7 @@ pub fn update_task_status_in_file(
     };
 
     // Substitute checkbox using regex
-    let re = Regex::new(r"^(\s*[-*+]\s+\[)([\sxX<\-/])(\])(.*)$").unwrap();
+    let re = get_checkbox_sub_re();
     if let Some(caps) = re.captures(target_line) {
         let prefix = caps.get(1).unwrap().as_str();
         let suffix = caps.get(3).unwrap().as_str();
@@ -116,7 +135,7 @@ fn is_match_at_line(file_lines: &[String], start_idx: usize, original_lines: &[&
             // For the first line, compare stripped descriptions/contents ignoring the checkbox state,
             // to allow editing even if checkboxes are slightly different.
             // But let's check if the rest of the text matches exactly.
-            let re = Regex::new(r"^\s*[-*+]\s+\[[\sxX<\-/]\]\s*(.*)$").unwrap();
+            let re = get_strip_checkbox_re();
             let disk_cap = re.captures(disk_line);
             let orig_cap = re.captures(orig_line);
             
