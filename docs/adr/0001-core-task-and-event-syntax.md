@@ -14,7 +14,7 @@ We will use a hybrid syntax that leverages Markdown task lists as the foundation
    - `- [/]` (In Progress)
    - `- [x]` (Completed)
    - `- [-]` (Cancelled)
-   - `- [>]` (Event - explicitly marks the item as a Calendar Event, bypassing the need to parse all standard bullets).
+   - `- [<]` (Event - explicitly marks the item as a Calendar Event, bypassing the need to parse all standard bullets).
 2. **Multi-line Support:** Tasks will support standard Markdown indentation. The parser will capture the entire AST block, not just single lines.
 3. **Tags:** 
    - **Projects** are prefixed with `+` and support hierarchical paths (e.g., `+work/client/project-a`). Filtering for `+work` includes all descendants.

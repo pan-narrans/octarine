@@ -86,7 +86,7 @@ pub fn update_task_status_in_file(
     };
 
     // Substitute checkbox using regex
-    let re = Regex::new(r"^(\s*[-*+]\s+\[)([\sxX>\-/])(\])(.*)$").unwrap();
+    let re = Regex::new(r"^(\s*[-*+]\s+\[)([\sxX<\-/])(\])(.*)$").unwrap();
     if let Some(caps) = re.captures(target_line) {
         let prefix = caps.get(1).unwrap().as_str();
         let suffix = caps.get(3).unwrap().as_str();
@@ -116,7 +116,7 @@ fn is_match_at_line(file_lines: &[String], start_idx: usize, original_lines: &[&
             // For the first line, compare stripped descriptions/contents ignoring the checkbox state,
             // to allow editing even if checkboxes are slightly different.
             // But let's check if the rest of the text matches exactly.
-            let re = Regex::new(r"^\s*[-*+]\s+\[[\sxX>\-/]\]\s*(.*)$").unwrap();
+            let re = Regex::new(r"^\s*[-*+]\s+\[[\sxX<\-/]\]\s*(.*)$").unwrap();
             let disk_cap = re.captures(disk_line);
             let orig_cap = re.captures(orig_line);
             
@@ -313,7 +313,7 @@ mod tests {
         fs::write(
             &file_path,
             r#"# Calendar Events
-- [>] Project kickoff meeting s:2026-07-23 10:00 dur:60m
+- [<] Project kickoff meeting s:2026-07-23 10:00 dur:60m
 "#,
         )
         .unwrap();
@@ -343,6 +343,6 @@ mod tests {
 
         // Verify the file updated correctly on disk
         let content_after = fs::read_to_string(&file_path).unwrap();
-        assert!(content_after.contains("- [>] Project kickoff meeting s:2026-07-23 11:30 dur:90m"));
+        assert!(content_after.contains("- [<] Project kickoff meeting s:2026-07-23 11:30 dur:90m"));
     }
 }

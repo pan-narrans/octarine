@@ -75,7 +75,7 @@ CREATE TABLE tasks (
     raw_markdown TEXT NOT NULL,        -- Complete block raw text (including nested blocks)
     hash TEXT NOT NULL,                -- Hash of FilePath + Starting Line + RawMarkdown
     status TEXT NOT NULL,              -- 'todo' ([ ]), 'doing' ([/]), 'done' ([x]), 'cancelled' ([-])
-    type TEXT NOT NULL,                -- 'task' or 'event' ([>])
+    type TEXT NOT NULL,                -- 'task' or 'event' ([<])
     description TEXT NOT NULL,         -- Pure description text stripped of meta tags
     project TEXT,                      -- Hierarchy path (e.g. 'work/client/project-a')
     due_date TEXT,                     -- 'YYYY-MM-DD'

@@ -22,7 +22,7 @@ Kanban boards will automatically group task cards into columns based on their pa
 - **In Progress Column:** Matches tasks marked with `- [/]` (In Progress).
 - **Done Column:** Matches completed tasks marked with `- [x]` (Completed).
 - **Cancelled Column:** Matches cancelled tasks marked with `- [-]` (Cancelled).
-- *Exclusion Rule:* Calendar events (`- [>]`) are excluded from standard Kanban task lanes by default to prevent schedule pollution, but can be toggled on as a dedicated timeline track.
+- *Exclusion Rule:* Calendar events (`- [<]`) are excluded from standard Kanban task lanes by default to prevent schedule pollution, but can be toggled on as a dedicated timeline track.
 
 ### 2. Hierarchical Scoping (Filtering Rule)
 Let $V$ represent the currently selected/viewed project path (e.g., `["work"]` for `+work`).

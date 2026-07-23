@@ -66,7 +66,7 @@ pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask
     let mut tasks = Vec::new();
     let mut views = Vec::new();
 
-    let header_re = Regex::new(r"^(\s*)([-*+])\s+\[([\sxX>\-/])\]\s*(.*)$").unwrap();
+    let header_re = Regex::new(r"^(\s*)([-*+])\s+\[([\sxX<\-/])\]\s*(.*)$").unwrap();
     let project_re = Regex::new(r"\+([a-zA-Z0-9_\-/]+)").unwrap();
     let context_re = Regex::new(r"@([a-zA-Z0-9_\-/]+)").unwrap();
     let tag_re = Regex::new(r"#([a-zA-Z0-9_\-/]+)").unwrap();
@@ -118,7 +118,7 @@ pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask
                 "/" => ("doing".to_string(), "task".to_string()),
                 "x" | "X" => ("done".to_string(), "task".to_string()),
                 "-" => ("cancelled".to_string(), "task".to_string()),
-                ">" => ("todo".to_string(), "event".to_string()),
+                "<" => ("todo".to_string(), "event".to_string()),
                 _ => ("todo".to_string(), "task".to_string()),
             };
 
@@ -359,7 +359,7 @@ mod tests {
 
     #[test]
     fn test_parse_event_and_duration() {
-        let content = "- [>] Strategy meeting s:2026-07-22 14:00 dur:1h30m +work";
+        let content = "- [<] Strategy meeting s:2026-07-22 14:00 dur:1h30m +work";
         let (tasks, _) = parse_markdown_content("test.md", content);
         assert_eq!(tasks.len(), 1);
         let task = &tasks[0];

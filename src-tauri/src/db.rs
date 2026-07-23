@@ -291,7 +291,7 @@ mod tests {
         fs::write(
             &file_path,
             r#"- [ ] Design SQLite schema @db +work/database due:2026-07-22 #high-priority
-- [>] Attend scrum s:2026-07-22 09:30 dur:30m +work
+- [<] Attend scrum s:2026-07-22 09:30 dur:30m +work
 "#,
         )
         .unwrap();
