@@ -116,6 +116,28 @@ fn get_vault_config(state: State<'_, AppState>) -> Result<String, String> {
 }
 
 #[tauri::command]
+fn update_event_schedule(
+    state: State<'_, AppState>,
+    file_path: String,
+    line_number: usize,
+    hash: String,
+    new_s_start: Option<String>,
+    new_duration_secs: Option<i32>,
+) -> Result<(), String> {
+    let conn = state.db.lock().unwrap();
+    octarine::writer::update_event_schedule_in_file(
+        &conn,
+        &file_path,
+        line_number,
+        &hash,
+        new_s_start,
+        new_duration_secs,
+    )?;
+    index_single_file(&conn, &file_path).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 fn set_vault_config(state: State<'_, AppState>, new_dir: String) -> Result<(), String> {
     let home_dir = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
     let config_path = format!("{}/.octarine_config.json", home_dir);
@@ -252,6 +274,7 @@ fn main() {
             update_task_status,
             get_vault_config,
             set_vault_config,
+            update_event_schedule,
             capture_app_window
         ]);
     }
@@ -263,6 +286,7 @@ fn main() {
             get_custom_views,
             get_vault_config,
             set_vault_config,
+            update_event_schedule,
             update_task_status
         ]);
     }

@@ -15,7 +15,10 @@ import {
   Camera,
   Edit2,
   Check,
-  X
+  X,
+  ChevronLeft,
+  ChevronRight,
+  Clock
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/tauri";
 
@@ -41,6 +44,19 @@ export function App() {
   const [isEditingVault, setIsEditingVault] = useState<boolean>(false);
   const [vaultInput, setVaultInput] = useState<string>("");
   const [savingVault, setSavingVault] = useState<boolean>(false);
+
+  // Complete Calendar / Scheduler state
+  const [calendarViewMode, setCalendarViewMode] = useState<"week" | "month">("month");
+  const [currentDate, setCurrentDate] = useState<Date>(new Date());
+  const [showDrawer, setShowDrawer] = useState<boolean>(false);
+  const [drawerDate, setDrawerDate] = useState<Date | null>(null);
+  const [showFutureRepetitions, setShowFutureRepetitions] = useState<boolean>(false);
+
+  // Event Edit Inline Popover Form state
+  const [editingEventHash, setEditingEventHash] = useState<string | null>(null);
+  const [editDateInput, setEditDateInput] = useState<string>("");
+  const [editTimeInput, setEditTimeInput] = useState<string>("");
+  const [editDurationInput, setEditDurationInput] = useState<number>(60);
 
   // Initial Boot Fetch & Config Query
   useEffect(() => {
@@ -143,14 +159,37 @@ export function App() {
     }
   };
 
-  // Helper to extract days of current week (Monday to Sunday)
-  const getDaysOfWeek = () => {
-    const today = new Date();
-    const day = today.getDay();
-    // Adjust so week starts on Monday
-    const diff = today.getDate() - day + (day === 0 ? -6 : 1);
-    const monday = new Date(today.setDate(diff));
-    
+  // -------------------------------------------------------------
+  // CALENDAR CALCULATION ENGINE
+  // -------------------------------------------------------------
+
+  // Calculates 42 monthly cells (6 rows x 7 cols) starting from the correct Monday
+  const getDaysInMonthView = (date: Date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDayOfMonth = new Date(year, month, 1);
+    let startDayOfWeek = firstDayOfMonth.getDay(); // 0 = Sunday, 1 = Monday...
+    let startOffset = startDayOfWeek === 0 ? 6 : startDayOfWeek - 1;
+
+    const startCellDate = new Date(firstDayOfMonth);
+    startCellDate.setDate(firstDayOfMonth.getDate() - startOffset);
+
+    const cells = [];
+    for (let i = 0; i < 42; i++) {
+      const cellDate = new Date(startCellDate);
+      cellDate.setDate(startCellDate.getDate() + i);
+      cells.push(cellDate);
+    }
+    return cells;
+  };
+
+  // Calculates 7 weekly cells centered around the currentDate
+  const getDaysInWeekView = (date: Date) => {
+    const day = date.getDay();
+    let diff = date.getDate() - day + (day === 0 ? -6 : 1);
+    const monday = new Date(date);
+    monday.setDate(diff);
+
     const days = [];
     for (let i = 0; i < 7; i++) {
       const nextDay = new Date(monday);
@@ -160,21 +199,150 @@ export function App() {
     return days;
   };
 
-  const daysOfWeek = getDaysOfWeek();
+  const getISODateString = (date: Date) => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  };
+
+  const isToday = (date: Date) => {
+    return getISODateString(date) === getISODateString(new Date());
+  };
+
   const formatDayName = (date: Date) => {
     return date.toLocaleDateString("en-US", { weekday: "short" });
   };
+
   const formatDayDate = (date: Date) => {
     return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   };
-  const getISODateString = (date: Date) => {
-    return date.toISOString().split("T")[0]; // "YYYY-MM-DD"
-  };
-  const isToday = (date: Date) => {
-    const today = new Date();
-    return getISODateString(date) === getISODateString(today);
+
+  // Recurrence Matching Engine
+  const doesEventRecurOn = (event: Task, date: Date) => {
+    if (!event.recurring) return false;
+    const rule = event.recurring.toLowerCase().trim();
+    const dayName = date.toLocaleDateString("en-US", { weekday: "long" }).toLowerCase();
+
+    if (event.s_start) {
+      const startDay = new Date(event.s_start.slice(0, 10));
+      // Recurring occurrences only virtual-clone on dates equal to or after their literal start day
+      if (date < startDay) return false;
+    }
+
+    if (rule === "every day") return true;
+    if (rule === "every weekday") {
+      const d = date.getDay();
+      return d !== 0 && d !== 6;
+    }
+    if (rule.startsWith("every ")) {
+      const targetDay = rule.slice(6).trim();
+      return targetDay === dayName;
+    }
+    return false;
   };
 
+  // Retrieves all literal + recurring events matching a calendar day
+  const getEventsForDay = (date: Date) => {
+    const isoDate = getISODateString(date);
+    return tasks.filter(t => {
+      if (t.task_type !== "event") return false;
+      const startsOnDay = t.s_start && t.s_start.startsWith(isoDate);
+      if (startsOnDay) return true;
+
+      // Under Option C, we expand virtual occurrences if toggle is ticked
+      if (showFutureRepetitions && doesEventRecurOn(t, date)) {
+        return true;
+      }
+      return false;
+    });
+  };
+
+  // Chronologically sorts events for Day Detail Drawer
+  const getSortedEventsForDay = (date: Date) => {
+    const dayEvents = getEventsForDay(date);
+    return [...dayEvents].sort((a, b) => {
+      const timeA = a.s_start && a.s_start.length > 10 ? a.s_start.slice(11, 16) : "00:00";
+      const timeB = b.s_start && b.s_start.length > 10 ? b.s_start.slice(11, 16) : "00:00";
+      return timeA.localeCompare(timeB);
+    });
+  };
+
+  // Pagination navigation clicks
+  const handlePrev = () => {
+    const nextDate = new Date(currentDate);
+    if (calendarViewMode === "month") {
+      nextDate.setMonth(currentDate.getMonth() - 1);
+    } else {
+      nextDate.setDate(currentDate.getDate() - 7);
+    }
+    setCurrentDate(nextDate);
+  };
+
+  const handleNext = () => {
+    const nextDate = new Date(currentDate);
+    if (calendarViewMode === "month") {
+      nextDate.setMonth(currentDate.getMonth() + 1);
+    } else {
+      nextDate.setDate(currentDate.getDate() + 7);
+    }
+    setCurrentDate(nextDate);
+  };
+
+  const getCalendarHeaderLabel = () => {
+    if (calendarViewMode === "month") {
+      return currentDate.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+    } else {
+      const days = getDaysInWeekView(currentDate);
+      const startStr = days[0].toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      const endStr = days[6].toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+      return `${startStr} - ${endStr}`;
+    }
+  };
+
+  // Day Cell click handler
+  const handleDayCellClick = (date: Date) => {
+    setDrawerDate(date);
+    setShowDrawer(true);
+    setEditingEventHash(null); // Reset any open form
+  };
+
+  // Inline Form clicks
+  const handleEditClick = (e: React.MouseEvent, event: Task) => {
+    e.stopPropagation();
+    setEditingEventHash(event.hash);
+
+    const s = event.s_start || "";
+    const datePart = s.length >= 10 ? s.slice(0, 10) : getISODateString(new Date());
+    const timePart = s.length > 10 ? s.slice(11, 16) : "12:00";
+
+    setEditDateInput(datePart);
+    setEditTimeInput(timePart);
+    setEditDurationInput(event.duration_secs ? event.duration_secs / 60 : 60);
+  };
+
+  const handleSaveSchedule = async (event: Task) => {
+    try {
+      const new_s_start = `${editDateInput.trim()} ${editTimeInput.trim()}`;
+      const new_duration_secs = editDurationInput * 60;
+
+      await invoke("update_event_schedule", {
+        filePath: (event as any).file_path || "",
+        lineNumber: event.line_number,
+        hash: event.hash,
+        newSStart: new_s_start,
+        newDurationSecs: new_duration_secs
+      });
+
+      setEditingEventHash(null);
+      fetchTasks(); // Reload local store dynamically
+    } catch (e) {
+      console.error("Failed to update event schedule:", e);
+      alert(`Error saving schedule: ${e}`);
+    }
+  };
+
+  // Config Saving Command
   const handleSaveVault = async () => {
     if (!vaultInput.trim()) return;
     setSavingVault(true);
@@ -182,7 +350,6 @@ export function App() {
       await invoke("set_vault_config", { newDir: vaultInput.trim() });
       setActiveVaultPath(vaultInput.trim());
       setIsEditingVault(false);
-      // Immediately clear and re-sync stores with the new directory's scanned contents
       await fetchTasks();
       await fetchCustomViews();
     } catch (e) {
@@ -408,49 +575,150 @@ export function App() {
           </div>
         )}
 
-        {/* Calendar Weekly Grid or Task List Render container */}
+        {/* Calendar Scheduler View */}
         {!loading && selectedSection === "events" ? (
-          <div className="calendar-grid">
-            {daysOfWeek.map(day => {
-              const isoDate = getISODateString(day);
-              const dayEvents = tasks.filter(t => 
-                t.task_type === "event" && 
-                t.s_start && 
-                t.s_start.startsWith(isoDate)
-              );
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            
+            {/* Calendar Controls Panel */}
+            <div className="calendar-controls">
+              
+              {/* Tab Toggles */}
+              <div className="calendar-tabs">
+                <button 
+                  className={`calendar-tab-btn ${calendarViewMode === "week" ? "active" : ""}`}
+                  onClick={() => setCalendarViewMode("week")}
+                >
+                  Week Grid
+                </button>
+                <button 
+                  className={`calendar-tab-btn ${calendarViewMode === "month" ? "active" : ""}`}
+                  onClick={() => setCalendarViewMode("month")}
+                >
+                  Month View
+                </button>
+              </div>
 
-              return (
-                <div key={isoDate} className={`calendar-column ${isToday(day) ? "today" : ""}`}>
-                  <div className="calendar-column-header">
-                    <div className="calendar-day-name">{formatDayName(day)}</div>
-                    <div className="calendar-day-date">{formatDayDate(day)}</div>
-                  </div>
-                  <div className="calendar-events-list">
-                    {dayEvents.length === 0 ? (
-                      <div style={{ color: "var(--text-muted)", fontSize: "0.8rem", textAlign: "center", marginTop: "1rem" }}>
-                        No events
-                      </div>
-                    ) : (
-                      dayEvents.map(event => {
-                        const timePart = event.s_start && event.s_start.length > 10 ? event.s_start.slice(11) : "All Day";
-                        return (
-                          <div 
-                            key={event.hash} 
-                            className="calendar-event-card"
-                            onClick={(e) => handleCheckboxClick(e, event)}
-                          >
-                            <div className="calendar-event-time">
-                              {timePart} {event.duration_secs ? `(${event.duration_secs / 60}m)` : ""}
-                            </div>
-                            <div className="calendar-event-title">{event.description}</div>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
+              {/* Navigation Pagination */}
+              <div className="calendar-nav">
+                <button className="calendar-nav-btn" onClick={handlePrev}>
+                  <ChevronLeft size={16} />
+                </button>
+                <div className="calendar-current-label">
+                  {getCalendarHeaderLabel()}
                 </div>
-              );
-            })}
+                <button className="calendar-nav-btn" onClick={handleNext}>
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+
+              {/* Recurrence Toggle */}
+              <div className="calendar-toggle-section">
+                <input 
+                  type="checkbox" 
+                  id="show-recurrence-cb"
+                  className="calendar-toggle-checkbox"
+                  checked={showFutureRepetitions}
+                  onChange={(e) => setShowFutureRepetitions(e.target.checked)}
+                />
+                <label htmlFor="show-recurrence-cb">Show Future Repetitions</label>
+              </div>
+            </div>
+
+            {/* Rendering active grid mode */}
+            {calendarViewMode === "week" ? (
+              <div className="calendar-grid">
+                {getDaysInWeekView(currentDate).map(day => {
+                  const isoDate = getISODateString(day);
+                  const dayEvents = getSortedEventsForDay(day);
+
+                  return (
+                    <div 
+                      key={isoDate} 
+                      className={`calendar-column ${isToday(day) ? "today" : ""}`}
+                      onClick={() => handleDayCellClick(day)}
+                    >
+                      <div className="calendar-column-header">
+                        <div className="calendar-day-name">{formatDayName(day)}</div>
+                        <div className="calendar-day-date">{formatDayDate(day)}</div>
+                      </div>
+                      <div className="calendar-events-list">
+                        {dayEvents.length === 0 ? (
+                          <div style={{ color: "var(--text-muted)", fontSize: "0.8rem", textAlign: "center", marginTop: "1rem" }}>
+                            No events
+                          </div>
+                        ) : (
+                          dayEvents.map(event => {
+                            const timePart = event.s_start && event.s_start.length > 10 ? event.s_start.slice(11) : "All Day";
+                            const isRecurrent = !!event.recurring && !event.s_start?.startsWith(isoDate);
+                            return (
+                              <div 
+                                key={`${event.hash}-${isoDate}`} 
+                                className={`calendar-event-card ${isRecurrent ? "recurrent" : ""}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleCheckboxClick(e, event);
+                                }}
+                              >
+                                <div className="calendar-event-time">
+                                  {timePart} {event.duration_secs ? `(${event.duration_secs / 60}m)` : ""}
+                                  {isRecurrent && " 🔁"}
+                                </div>
+                                <div className="calendar-event-title">{event.description}</div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="month-grid">
+                {getDaysInMonthView(currentDate).map((day, idx) => {
+                  const isoDate = getISODateString(day);
+                  const dayEvents = getSortedEventsForDay(day);
+                  const isCurrentMonth = day.getMonth() === currentDate.getMonth();
+                  
+                  // Smart Overflow limit of 2 items
+                  const visibleEvents = dayEvents.slice(0, 2);
+                  const overflowCount = dayEvents.length - visibleEvents.length;
+
+                  return (
+                    <div 
+                      key={`${isoDate}-${idx}`} 
+                      className={`month-cell ${isToday(day) ? "today" : ""} ${!isCurrentMonth ? "other-month" : ""}`}
+                      onClick={() => handleDayCellClick(day)}
+                    >
+                      <div className="month-cell-header">
+                        <span className="month-cell-number">{day.getDate()}</span>
+                      </div>
+                      
+                      <div className="month-cell-events">
+                        {visibleEvents.map(event => {
+                          const timePart = event.s_start && event.s_start.length > 10 ? event.s_start.slice(11, 16) : "All Day";
+                          const isRecurrent = !!event.recurring && !event.s_start?.startsWith(isoDate);
+                          return (
+                            <div 
+                              key={`${event.hash}-${isoDate}`} 
+                              className={`month-mini-event ${isRecurrent ? "recurrent" : ""}`}
+                              title={event.description}
+                            >
+                              {timePart} {event.description}
+                            </div>
+                          );
+                        })}
+                        {overflowCount > 0 && (
+                          <div className="month-cell-more">
+                            +{overflowCount} more
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         ) : !loading && filteredTasks.length === 0 ? (
           <div className="empty-state">
@@ -512,6 +780,128 @@ export function App() {
           </div>
         )}
       </div>
+
+      {/* 3. RIGHT DAY DETAIL DRAWER MODAL OVERLAY */}
+      {showDrawer && drawerDate && (
+        <div className="day-drawer-overlay" onClick={() => setShowDrawer(false)}>
+          <div className="day-drawer" onClick={(e) => e.stopPropagation()}>
+            
+            {/* Drawer Header */}
+            <div className="day-drawer-header">
+              <div>
+                <h3 style={{ fontSize: "1.3rem", color: "var(--text-primary)" }}>
+                  {drawerDate.toLocaleDateString("en-US", { weekday: "long" })}
+                </h3>
+                <span style={{ fontSize: "0.9rem", color: "var(--text-muted)" }}>
+                  {drawerDate.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+                </span>
+              </div>
+              <button className="day-drawer-close" onClick={() => setShowDrawer(false)}>
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Drawer Event List */}
+            <div className="day-drawer-events-list">
+              {getSortedEventsForDay(drawerDate).length === 0 ? (
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100px", color: "var(--text-muted)", gap: "0.5rem" }}>
+                  <AlertCircle size={24} />
+                  <span>No events scheduled</span>
+                </div>
+              ) : (
+                getSortedEventsForDay(drawerDate).map(event => {
+                  const timePart = event.s_start && event.s_start.length > 10 ? event.s_start.slice(11, 16) : "All Day";
+                  const isEditing = editingEventHash === event.hash;
+
+                  return (
+                    <div key={event.hash} className="drawer-event-card">
+                      <div className="drawer-event-header">
+                        <div>
+                          <span className="drawer-event-time">
+                            <Clock size={12} style={{ display: "inline", marginRight: "0.25rem", verticalAlign: "middle" }} />
+                            {timePart} {event.duration_secs ? `(${event.duration_secs / 60}m)` : ""}
+                          </span>
+                          <div className="drawer-event-desc">{event.description}</div>
+                        </div>
+                        {!isEditing && (
+                          <button 
+                            className="drawer-event-edit-btn"
+                            onClick={(e) => handleEditClick(e, event)}
+                            title="Reschedule event"
+                          >
+                            <Edit2 size={14} />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Notes/Recurring rules indicators */}
+                      {event.recurring && (
+                        <div style={{ fontSize: "0.8rem", color: "var(--color-violet)", fontWeight: 500, marginTop: "0.25rem" }}>
+                          🔁 Recurs: {event.recurring}
+                        </div>
+                      )}
+
+                      {/* Inline reschedule form popover */}
+                      {isEditing && (
+                        <div className="edit-schedule-popover">
+                          
+                          <div className="edit-popover-field">
+                            <label>Date</label>
+                            <input 
+                              type="date"
+                              className="edit-popover-input"
+                              value={editDateInput}
+                              onChange={(e) => setEditDateInput(e.target.value)}
+                            />
+                          </div>
+
+                          <div className="edit-popover-field">
+                            <label>Start Time</label>
+                            <input 
+                              type="time"
+                              className="edit-popover-input"
+                              value={editTimeInput}
+                              onChange={(e) => setEditTimeInput(e.target.value)}
+                            />
+                          </div>
+
+                          <div className="edit-popover-field">
+                            <label>Duration (minutes)</label>
+                            <input 
+                              type="number"
+                              className="edit-popover-input"
+                              value={editDurationInput}
+                              onChange={(e) => setEditDurationInput(parseInt(e.target.value) || 0)}
+                              min={0}
+                            />
+                          </div>
+
+                          <div className="edit-popover-actions">
+                            <button 
+                              className="calendar-tab-btn" 
+                              style={{ border: "1px solid var(--border-card)" }}
+                              onClick={() => setEditingEventHash(null)}
+                            >
+                              Cancel
+                            </button>
+                            <button 
+                              className="calendar-tab-btn active"
+                              onClick={() => handleSaveSchedule(event)}
+                            >
+                              Save Changes
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+          </div>
+        </div>
+      )}
     </>
   );
 }

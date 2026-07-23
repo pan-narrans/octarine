@@ -138,6 +138,108 @@ fn is_match_at_line(file_lines: &[String], start_idx: usize, original_lines: &[&
     true
 }
 
+pub fn update_event_schedule_in_file(
+    db_conn: &Connection,
+    file_path: &str,
+    original_line_number: usize,
+    original_content_hash: &str,
+    new_s_start: Option<String>,
+    new_duration_secs: Option<i32>,
+) -> Result<(), String> {
+    // 1. Retrieve the original raw markdown from the database
+    let mut stmt = db_conn
+        .prepare("SELECT raw_markdown FROM tasks WHERE hash = ?")
+        .map_err(|e| e.to_string())?;
+    let original_raw_markdown: String = stmt
+        .query_row(params![original_content_hash], |r| r.get(0))
+        .map_err(|_| "Task hash not found in database cache. Please reload.".to_string())?;
+
+    // 2. Read the file from disk
+    if !Path::new(file_path).exists() {
+        return Err(format!("File not found on disk: {}", file_path));
+    }
+    let content = fs::read_to_string(file_path).map_err(|e| e.to_string())?;
+    let lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
+
+    let original_lines: Vec<&str> = original_raw_markdown.lines().collect();
+    if original_lines.is_empty() {
+        return Err("Original raw markdown is empty.".to_string());
+    }
+
+    let mut found_line: Option<usize> = None;
+
+    // Direct match check (Phase 1)
+    if original_line_number <= lines.len() {
+        let start_idx = original_line_number - 1;
+        if is_match_at_line(&lines, start_idx, &original_lines) {
+            found_line = Some(start_idx);
+        }
+    }
+
+    // Fallback search check (Phase 2)
+    if found_line.is_none() {
+        let search_radius = 15;
+        let start_line = original_line_number as i32 - 1;
+        for offset in 1..=search_radius {
+            let scan_idx = start_line + offset;
+            if scan_idx >= 0 && (scan_idx as usize) < lines.len() {
+                if is_match_at_line(&lines, scan_idx as usize, &original_lines) {
+                    found_line = Some(scan_idx as usize);
+                    break;
+                }
+            }
+            let scan_idx = start_line - offset;
+            if scan_idx >= 0 && (scan_idx as usize) < lines.len() {
+                if is_match_at_line(&lines, scan_idx as usize, &original_lines) {
+                    found_line = Some(scan_idx as usize);
+                    break;
+                }
+            }
+        }
+    }
+
+    let line_idx = match found_line {
+        Some(idx) => idx,
+        None => {
+            return Err("Concurrency Collision: The event could not be located in the file. It may have been edited or moved externally. Please refresh.".to_string());
+        }
+    };
+
+    let mut edited_lines = lines;
+    let target_line = &edited_lines[line_idx];
+
+    // Strip out any existing s: and dur: tags from the target line
+    let re_s = Regex::new(r"\s+s:\d{4}-\d{2}-\d{2}(\s+\d{2}:\d{2})?").unwrap();
+    let re_dur = Regex::new(r"\s+dur:\d+[a-zA-Z\d]*").unwrap();
+
+    let mut line_clean = re_s.replace(target_line, "").to_string();
+    line_clean = re_dur.replace(&line_clean, "").to_string();
+
+    // Construct the new suffix
+    let mut suffix = String::new();
+    if let Some(s_val) = new_s_start {
+        if !s_val.trim().is_empty() {
+            suffix.push_str(&format!(" s:{}", s_val.trim()));
+        }
+    }
+    if let Some(dur_val) = new_duration_secs {
+        if dur_val > 0 {
+            // Format as minutes, e.g. dur:90m
+            let minutes = dur_val / 60;
+            suffix.push_str(&format!(" dur:{}m", minutes));
+        }
+    }
+
+    let new_line = format!("{}{}", line_clean, suffix);
+    edited_lines[line_idx] = new_line;
+
+    // Save back to disk
+    let updated_content = edited_lines.join("\n");
+    fs::write(file_path, updated_content).map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -199,5 +301,48 @@ mod tests {
         // Verify the file was updated correctly despite the line shift
         let content_after_shift = fs::read_to_string(&file_path).unwrap();
         assert!(content_after_shift.contains("- [x] Implement safe writer @db"));
+    }
+
+    #[test]
+    fn test_update_event_schedule_in_file() {
+        let temp_dir = tempdir().unwrap();
+        let db_path = temp_dir.path().join("cache.db");
+        let file_path = temp_dir.path().join("events.md");
+
+        // Write initial event file
+        fs::write(
+            &file_path,
+            r#"# Calendar Events
+- [>] Project kickoff meeting s:2026-07-23 10:00 dur:60m
+"#,
+        )
+        .unwrap();
+
+        let conn = initialize_db(&db_path).unwrap();
+        index_single_file(&conn, file_path.to_str().unwrap()).unwrap();
+
+        // Get event's hash from DB
+        let hash: String = conn
+            .query_row(
+                "SELECT hash FROM tasks WHERE description = 'Project kickoff meeting'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+
+        // Update schedule metadata to 11:30 and 1.5 hours duration (90 minutes / 5400 secs)
+        update_event_schedule_in_file(
+            &conn,
+            file_path.to_str().unwrap(),
+            2,
+            &hash,
+            Some("2026-07-23 11:30".to_string()),
+            Some(5400),
+        )
+        .unwrap();
+
+        // Verify the file updated correctly on disk
+        let content_after = fs::read_to_string(&file_path).unwrap();
+        assert!(content_after.contains("- [>] Project kickoff meeting s:2026-07-23 11:30 dur:90m"));
     }
 }
