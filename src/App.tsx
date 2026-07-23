@@ -32,11 +32,17 @@ export function App() {
   const [selectedSection, setSelectedSection] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [captureStatus, setCaptureStatus] = useState<string | null>(null);
+  const [activeVaultPath, setActiveVaultPath] = useState<string>("Loading...");
 
-  // Initial Boot Fetch
+  // Initial Boot Fetch & Config Query
   useEffect(() => {
     fetchTasks();
     fetchCustomViews();
+    
+    // Fetch active vault path dynamically from Tauri state
+    invoke<string>("get_vault_config")
+      .then(path => setActiveVaultPath(path))
+      .catch(err => console.error("Failed to query active vault path:", err));
   }, [fetchTasks, fetchCustomViews]);
 
   // Aggregate unique projects, contexts, and tags dynamically from loaded tasks
@@ -269,6 +275,16 @@ export function App() {
             </ul>
           </div>
         )}
+
+        {/* Active Vault Location indicator */}
+        <div style={{ marginTop: "auto", borderTop: "1px solid var(--border-card)", paddingTop: "1.5rem" }}>
+          <div style={{ fontSize: "0.75rem", textTransform: "uppercase", color: "var(--text-muted)", fontWeight: 600, letterSpacing: "0.05em", marginBottom: "0.5rem" }}>
+            Active Vault Path
+          </div>
+          <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)", wordBreak: "break-all", fontStyle: "italic", lineHeight: 1.4 }}>
+            {activeVaultPath}
+          </div>
+        </div>
       </div>
 
       {/* 2. MAIN WORKSPACE PANEL */}

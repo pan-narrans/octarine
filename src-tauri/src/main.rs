@@ -16,7 +16,7 @@ use rusqlite::Connection;
 struct AppState {
     db: Mutex<Connection>,
     db_path: String,
-    vault_dir: String,
+    vault_dir: Mutex<String>,
 }
 
 #[tauri::command]
@@ -109,6 +109,12 @@ fn update_task_status(
     Ok(())
 }
 
+#[tauri::command]
+fn get_vault_config(state: State<'_, AppState>) -> Result<String, String> {
+    let vault_dir = state.vault_dir.lock().unwrap();
+    Ok(vault_dir.clone())
+}
+
 #[cfg(feature = "qa-vision")]
 #[tauri::command]
 fn capture_app_window() -> Result<String, String> {
@@ -148,9 +154,43 @@ fn capture_app_window() -> Result<String, String> {
 fn main() {
     let home_dir = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
     let db_path = format!("{}/.octarine_cache.db", home_dir);
-    let vault_dir = format!("{}/octarine_vault", home_dir);
+    let config_path = format!("{}/.octarine_config.json", home_dir);
 
-    // Ensure vault directory exists
+    // 1. Resolve configurable vault directory
+    let mut vault_dir = format!("{}/octarine_vault", home_dir);
+
+    // Read GITHUB/OS environment variables first
+    if let Ok(env_vault) = std::env::var("OCTARINE_VAULT_DIR") {
+        if !env_vault.trim().is_empty() {
+            vault_dir = env_vault;
+        }
+    } else if std::path::Path::new(&config_path).exists() {
+        // Read JSON configuration file
+        if let Ok(config_content) = std::fs::read_to_string(&config_path) {
+            if let Ok(config_json) = serde_json::from_str::<serde_json::Value>(&config_content) {
+                if let Some(cfg_vault) = config_json.get("vault_dir").and_then(|v| v.as_str()) {
+                    if !cfg_vault.trim().is_empty() {
+                        vault_dir = cfg_vault.to_string();
+                    }
+                }
+            }
+        }
+    } else {
+        // Automatically scaffold default config file on first run
+        let default_config = serde_json::json!({
+            "vault_dir": vault_dir
+        });
+        if let Ok(config_str) = serde_json::to_string_pretty(&default_config) {
+            let _ = std::fs::write(&config_path, config_str);
+        }
+    }
+
+    // Expand tilde (~/) if present in the configured path
+    if vault_dir.starts_with("~/") {
+        vault_dir = vault_dir.replace("~", &home_dir);
+    }
+
+    // Ensure the resolved directory physically exists on disk
     std::fs::create_dir_all(&vault_dir).expect("failed to create vault directory");
 
     let conn = initialize_db(&db_path).expect("failed to initialize SQLite Cache database");
@@ -160,7 +200,7 @@ fn main() {
         .manage(AppState {
             db: Mutex::new(conn),
             db_path: db_path.clone(),
-            vault_dir: vault_dir.clone(),
+            vault_dir: Mutex::new(vault_dir.clone()),
         });
 
     #[cfg(feature = "qa-vision")]
@@ -169,6 +209,7 @@ fn main() {
             get_tasks,
             get_custom_views,
             update_task_status,
+            get_vault_config,
             capture_app_window
         ]);
     }
@@ -178,6 +219,7 @@ fn main() {
         builder = builder.invoke_handler(tauri::generate_handler![
             get_tasks,
             get_custom_views,
+            get_vault_config,
             update_task_status
         ]);
     }
