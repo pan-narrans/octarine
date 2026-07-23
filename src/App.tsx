@@ -84,11 +84,13 @@ export function App() {
   // Aggregate unique projects, contexts, and tags dynamically from loaded tasks
   const projects = Array.from(new Set(tasks.map(t => t.project).filter((p): p is string => !!p)));
   const contexts = Array.from(new Set(tasks.flatMap(t => {
-    const ctxMatches = t.raw_markdown.match(/@([a-zA-Z0-9_\-/]+)/g);
+    const cleanText = t.raw_markdown.replace(/\[[^\]]*\]\([^)]*\)/g, "").replace(/https?:\/\/[^\s]+/g, "");
+    const ctxMatches = cleanText.match(/@([a-zA-Z0-9_\-/]+)/g);
     return ctxMatches ? ctxMatches.map(c => c.slice(1)) : [];
   })));
   const tags = Array.from(new Set(tasks.flatMap(t => {
-    const tagMatches = t.raw_markdown.match(/#([a-zA-Z0-9_\-/]+)/g);
+    const cleanText = t.raw_markdown.replace(/\[[^\]]*\]\([^)]*\)/g, "").replace(/https?:\/\/[^\s]+/g, "");
+    const tagMatches = cleanText.match(/#([a-zA-Z0-9_\-/]+)/g);
     return tagMatches ? tagMatches.map(c => c.slice(1)) : [];
   })));
 

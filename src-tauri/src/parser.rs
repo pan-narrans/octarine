@@ -182,9 +182,13 @@ pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask
             let hash = calculate_hash(file_path, start_line, &raw_markdown);
 
             // Now parse metadata elements in the first line
-            // Strip markdown links completely from metadata parsing target to ignore any link's content
+            // 1. Strip standard closed markdown links completely
             let link_re = Regex::new(r"\[[^\]]*\]\([^)]*\)").unwrap();
-            let metadata_text = link_re.replace_all(rest, "").to_string();
+            let mut metadata_text = link_re.replace_all(rest, "").to_string();
+
+            // 2. Strip any raw URLs starting with http/https up to whitespace (handles unclosed links!)
+            let url_re = Regex::new(r"https?://[^\s]+").unwrap();
+            metadata_text = url_re.replace_all(&metadata_text, "").to_string();
 
             let mut projects = Vec::new();
             for p_cap in project_re.captures_iter(&metadata_text) {
@@ -471,5 +475,21 @@ group_by: "none"
         
         // The markdown link itself should remain fully preserved in the final description!
         assert_eq!(task.description, "Visit [our +work page with @phone details and #urgent tag](https://example.com/#tag)");
+    }
+
+    #[test]
+    fn test_ignore_metadata_in_unclosed_links() {
+        let content = "- [x] Actualizar la página de confluence de [Jerarquía de Productos y Categorías](https://teamnetconomy.atlassian.net/wiki/spaces/EGLCB2B/pages/968262013/WIP+-+Jerarqu+a+de+Productos+y+Categor+as)";
+        let (tasks, _) = parse_markdown_content("test.md", content);
+        assert_eq!(tasks.len(), 1);
+        let task = &tasks[0];
+
+        // The malformed/closed link must not leak any projects (like "+-")
+        assert_eq!(task.project, None);
+        assert_eq!(task.contexts.len(), 0);
+        assert_eq!(task.tags.len(), 0);
+
+        // The raw string remains fully preserved in the description
+        assert_eq!(task.description, "Actualizar la página de confluence de [Jerarquía de Productos y Categorías](https://teamnetconomy.atlassian.net/wiki/spaces/EGLCB2B/pages/968262013/WIP+-+Jerarqu+a+de+Productos+y+Categor+as)");
     }
 }
