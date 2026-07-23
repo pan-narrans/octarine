@@ -765,3 +765,292 @@ body {
   justify-content: flex-end;
   margin-top: 0.5rem;
 }
+
+/* Editor Split Workspace Layout */
+.editor-workspace-container {
+  display: flex;
+  gap: 1.5rem;
+  height: calc(100vh - 200px);
+  margin-top: 1rem;
+}
+
+.editor-filetree-column {
+  width: 260px;
+  background: rgba(255, 255, 255, 0.015);
+  border: 1px solid var(--border-card);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  padding: 1rem;
+  overflow-y: auto;
+}
+
+.filetree-header {
+  border-bottom: 1px solid var(--border-card);
+  padding-bottom: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.filetree-header h4 {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.filetree-body {
+  flex-grow: 1;
+}
+
+/* Recursive File Tree Styles */
+.file-tree-node {
+  margin-left: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.file-tree-row {
+  display: flex;
+  align-items: center;
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  color: var(--text-secondary);
+}
+
+.file-tree-row:hover {
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-primary);
+}
+
+.file-tree-row.selected {
+  background: rgba(139, 92, 246, 0.1);
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  color: var(--color-violet);
+  font-weight: 600;
+}
+
+.file-tree-arrow {
+  display: flex;
+  align-items: center;
+  margin-right: 0.25rem;
+  color: var(--text-muted);
+}
+
+.file-tree-arrow-spacer {
+  width: 18px;
+}
+
+.file-tree-icon {
+  margin-right: 0.5rem;
+  display: flex;
+  align-items: center;
+}
+
+.file-tree-name {
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  flex-grow: 1;
+}
+
+.file-tree-actions {
+  display: none;
+  position: absolute;
+  right: 0.5rem;
+  background: var(--bg-space);
+  border: 1px solid var(--border-card);
+  border-radius: 4px;
+  padding: 0.1rem;
+  gap: 0.1rem;
+}
+
+.file-tree-row:hover .file-tree-actions {
+  display: flex;
+  align-items: center;
+}
+
+.file-action-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0.2rem;
+  border-radius: 3px;
+  transition: all 0.2s;
+}
+
+.file-action-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+}
+
+.file-action-btn.trash:hover {
+  color: #ef4444;
+}
+
+/* File Tree Inputs */
+.file-tree-edit-form {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-grow: 1;
+}
+
+.file-tree-input {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-card);
+  border-radius: 4px;
+  color: var(--text-primary);
+  padding: 0.15rem 0.35rem;
+  font-size: 0.8rem;
+  width: 100%;
+}
+
+.file-tree-edit-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.15rem;
+  border-radius: 3px;
+}
+
+.file-tree-edit-btn.success {
+  color: #10b981;
+}
+
+.file-tree-edit-btn.cancel {
+  color: var(--text-muted);
+}
+
+/* CodeMirror Active Canvas Right Column */
+.editor-canvas-column {
+  flex-grow: 1;
+  background: rgba(255, 255, 255, 0.005);
+  border: 1px solid var(--border-card);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.editor-workspace {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.015);
+  border-bottom: 1px solid var(--border-card);
+  padding: 0.75rem 1.5rem;
+}
+
+.editor-meta h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.editor-path {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-family: monospace;
+  margin-top: 0.15rem;
+  display: block;
+}
+
+.editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.dirty-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--color-violet);
+  border-radius: 50%;
+  display: inline-block;
+  box-shadow: 0 0 8px var(--color-violet);
+  animation: pulse 1.5s infinite;
+}
+
+.editor-btn {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-card);
+  color: var(--text-primary);
+  padding: 0.4rem 0.8rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  transition: all 0.2s;
+}
+
+.editor-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.editor-btn.save {
+  background: var(--color-violet);
+  border: none;
+  color: white;
+}
+
+.editor-btn.save:hover {
+  background: #7c3aed;
+}
+
+.editor-btn.save:disabled {
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text-muted);
+  border: 1px solid var(--border-card);
+  cursor: not-allowed;
+}
+
+.editor-canvas {
+  flex-grow: 1;
+  overflow-y: auto;
+  font-size: 0.9rem;
+}
+
+/* CodeMirror 6 custom styling overrides for One Dark integration */
+.cm-editor {
+  height: 100%;
+}
+
+.cm-scroller {
+  font-family: inherit !important;
+}
+
+.editor-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex-grow: 1;
+  color: var(--text-muted);
+  gap: 0.75rem;
+  padding: 3rem;
+  text-align: center;
+}
+
+.editor-empty-state h3 {
+  font-size: 1.15rem;
+  color: var(--text-primary);
+  margin-top: 0.5rem;
+}
+
+.editor-empty-state p {
+  font-size: 0.9rem;
+  max-width: 280px;
+}

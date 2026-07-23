@@ -44,3 +44,10 @@ export function isCustomView(payload: unknown): payload is CustomView {
     typeof p.query_raw === "string"
   );
 }
+
+export interface FileNode {
+  name: string;
+  path: string;
+  is_dir: boolean;
+  children: FileNode[] | null;
+}

@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { useTaskStore } from "./hooks/use-task-store";
 import { useTauriEvents } from "./hooks/use-tauri-events";
-import { Task } from "./types";
+import { Task, FileNode } from "./types";
+import { FileTree } from "./components/FileTree";
+import { MarkdownEditor } from "./components/MarkdownEditor";
 import { 
   Inbox, 
   Calendar, 
@@ -12,12 +14,14 @@ import {
   Loader2, 
   AlertCircle, 
   Search, 
+  Camera,
   Edit2,
   Check,
   X,
   ChevronLeft,
   ChevronRight,
-  Clock
+  Clock,
+  FileText
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/tauri";
 
@@ -36,6 +40,7 @@ export function App() {
 
   const [selectedSection, setSelectedSection] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const [captureStatus, setCaptureStatus] = useState<string | null>(null);
   const [activeVaultPath, setActiveVaultPath] = useState<string>("Loading...");
   
   // Vault Path Inline Editor state
@@ -55,6 +60,14 @@ export function App() {
   const [editDateInput, setEditDateInput] = useState<string>("");
   const [editTimeInput, setEditTimeInput] = useState<string>("");
   const [editDurationInput, setEditDurationInput] = useState<number>(60);
+
+  // -----------------------------------------------------------------
+  // NEW OBSIDIAN-REPLACEMENT NOTES EDITOR STATE
+  // -----------------------------------------------------------------
+  const [isEditorMode, setIsEditorMode] = useState<boolean>(false);
+  const [dirTree, setDirTree] = useState<FileNode | null>(null);
+  const [activeFilePath, setActiveFilePath] = useState<string | null>(null);
+  const [activeFileContent, setActiveFileContent] = useState<string | null>(null);
 
   // Initial Boot Fetch & Config Query
   useEffect(() => {
@@ -100,6 +113,21 @@ export function App() {
     );
   };
 
+  // Perform screenshot capture (triggers the qa-vision capture loop)
+  const triggerAppCapture = async () => {
+    setCaptureStatus("Capturing...");
+    try {
+      const result = await invoke<string>("capture_app_window");
+      setCaptureStatus("Captured!");
+      setTimeout(() => setCaptureStatus(null), 3000);
+      console.log(result);
+    } catch (e) {
+      setCaptureStatus("Error!");
+      setTimeout(() => setCaptureStatus(null), 3000);
+      console.error("QA capture failed:", e);
+    }
+  };
+
   // In-memory filter logic for selected sidebar items and search query
   const filteredTasks = tasks.filter(task => {
     // 1. Search Query Filter
@@ -134,11 +162,95 @@ export function App() {
   });
 
   const handleSidebarItemClick = (section: string, filterStr?: string) => {
+    setIsEditorMode(false); // Smooth pivot back to Task Dashboard!
     setSelectedSection(section);
     if (section.startsWith("view:") && filterStr) {
       fetchTasks(filterStr);
     } else {
       fetchTasks();
+    }
+  };
+
+  // -------------------------------------------------------------
+  // NEW DIRECTORY TREE & NOTE MANIPULATION API CALLS
+  // -------------------------------------------------------------
+
+  const fetchDirTree = async () => {
+    try {
+      const tree = await invoke<FileNode>("read_dir_tree");
+      setDirTree(tree);
+    } catch (e) {
+      console.error("Failed to load directory tree:", e);
+    }
+  };
+
+  const handleSelectFile = async (path: string) => {
+    try {
+      const content = await invoke<string>("read_file_content", { path });
+      setActiveFilePath(path);
+      setActiveFileContent(content);
+    } catch (e) {
+      console.error("Failed to read file:", e);
+      alert(`Error loading note: ${e}`);
+    }
+  };
+
+  const handleCreateFile = async (parentPath: string, name: string) => {
+    try {
+      const createdPath = await invoke<string>("create_file", { parentDir: parentPath, name });
+      await fetchDirTree();
+      await handleSelectFile(createdPath);
+    } catch (e) {
+      console.error("Failed to create file:", e);
+      alert(`Error creating note: ${e}`);
+    }
+  };
+
+  const handleCreateFolder = async (parentPath: string, name: string) => {
+    try {
+      await invoke("create_directory", { parentDir: parentPath, name });
+      await fetchDirTree();
+    } catch (e) {
+      console.error("Failed to create directory:", e);
+      alert(`Error creating directory: ${e}`);
+    }
+  };
+
+  const handleDeletePath = async (path: string) => {
+    try {
+      await invoke("delete_path", { path });
+      if (activeFilePath === path) {
+        setActiveFilePath(null);
+        setActiveFileContent(null);
+      }
+      await fetchDirTree();
+    } catch (e) {
+      console.error("Failed to delete path:", e);
+      alert(`Error deleting path: ${e}`);
+    }
+  };
+
+  const handleRenamePath = async (oldPath: string, newPath: string) => {
+    try {
+      await invoke("rename_path", { oldPath, newPath });
+      if (activeFilePath === oldPath) {
+        setActiveFilePath(newPath);
+      }
+      await fetchDirTree();
+    } catch (e) {
+      console.error("Failed to rename path:", e);
+      alert(`Error renaming path: ${e}`);
+    }
+  };
+
+  const handleSaveFileContent = async (content: string) => {
+    if (!activeFilePath) return;
+    try {
+      await invoke("write_file_content", { path: activeFilePath, content });
+      setActiveFileContent(content);
+    } catch (e) {
+      console.error("Failed to save note:", e);
+      throw e;
     }
   };
 
@@ -335,6 +447,9 @@ export function App() {
       setIsEditingVault(false);
       await fetchTasks();
       await fetchCustomViews();
+      if (isEditorMode) {
+        await fetchDirTree();
+      }
     } catch (e) {
       console.error("Failed to update active vault path:", e);
       alert(`Failed to save: ${e}`);
@@ -355,28 +470,39 @@ export function App() {
           <h4>Smart Views</h4>
           <ul className="sidebar-list">
             <li 
-              className={`sidebar-item ${selectedSection === "all" ? "active" : ""}`}
+              className={`sidebar-item ${!isEditorMode && selectedSection === "all" ? "active" : ""}`}
               onClick={() => handleSidebarItemClick("all")}
             >
               <Inbox size={16} /> All Tasks
             </li>
             <li 
-              className={`sidebar-item ${selectedSection === "todo" ? "active" : ""}`}
+              className={`sidebar-item ${!isEditorMode && selectedSection === "todo" ? "active" : ""}`}
               onClick={() => handleSidebarItemClick("todo")}
             >
               <CheckCircle2 size={16} color="#9ca3af" /> Not Started
             </li>
             <li 
-              className={`sidebar-item ${selectedSection === "doing" ? "active" : ""}`}
+              className={`sidebar-item ${!isEditorMode && selectedSection === "doing" ? "active" : ""}`}
               onClick={() => handleSidebarItemClick("doing")}
             >
               <Loader2 size={16} className="animate-spin" color="#a78bfa" /> In Progress
             </li>
             <li 
-              className={`sidebar-item ${selectedSection === "events" ? "active" : ""}`}
+              className={`sidebar-item ${!isEditorMode && selectedSection === "events" ? "active" : ""}`}
               onClick={() => handleSidebarItemClick("events")}
             >
               <Calendar size={16} color="#818cf8" /> Schedule Events
+            </li>
+
+            {/* Obsidian-Replacement Plaintext Note Editor Navigation */}
+            <li 
+              className={`sidebar-item ${isEditorMode ? "active" : ""}`}
+              onClick={() => {
+                setIsEditorMode(true);
+                fetchDirTree();
+              }}
+            >
+              <FileText size={16} color="#34d399" /> Plaintext Vault Notes
             </li>
           </ul>
         </div>
@@ -393,7 +519,7 @@ export function App() {
                 return (
                   <li 
                     key={`${view.title}-${view.line_number}`}
-                    className={`sidebar-item ${selectedSection === `view:${view.title}` ? "active" : ""}`}
+                    className={`sidebar-item ${!isEditorMode && selectedSection === `view:${view.title}` ? "active" : ""}`}
                     onClick={() => handleSidebarItemClick(`view:${view.title}`, filterStr)}
                   >
                     <Layers size={16} /> {view.title}
@@ -411,7 +537,7 @@ export function App() {
               {projects.map(p => (
                 <li 
                   key={p}
-                  className={`sidebar-item ${selectedSection === `proj:${p}` ? "active" : ""}`}
+                  className={`sidebar-item ${!isEditorMode && selectedSection === `proj:${p}` ? "active" : ""}`}
                   onClick={() => handleSidebarItemClick(`proj:${p}`)}
                 >
                   <Hash size={16} /> {p}
@@ -428,7 +554,7 @@ export function App() {
               {contexts.map(c => (
                 <li 
                   key={c}
-                  className={`sidebar-item ${selectedSection === `ctx:${c}` ? "active" : ""}`}
+                  className={`sidebar-item ${!isEditorMode && selectedSection === `ctx:${c}` ? "active" : ""}`}
                   onClick={() => handleSidebarItemClick(`ctx:${c}`)}
                 >
                   <Tag size={16} /> @{c}
@@ -445,7 +571,7 @@ export function App() {
               {tags.map(t => (
                 <li 
                   key={t}
-                  className={`sidebar-item ${selectedSection === `tag:${t}` ? "active" : ""}`}
+                  className={`sidebar-item ${!isEditorMode && selectedSection === `tag:${t}` ? "active" : ""}`}
                   onClick={() => handleSidebarItemClick(`tag:${t}`)}
                 >
                   <Hash size={16} /> #{t}
@@ -520,29 +646,38 @@ export function App() {
         <div className="main-header">
           <div className="main-title">
             <h1>
-              {selectedSection === "all" && "Inbox Dashboard"}
-              {selectedSection === "todo" && "Inbox: Todo"}
-              {selectedSection === "doing" && "Active Sprints"}
-              {selectedSection === "events" && "Calendar Timeline"}
-              {selectedSection.startsWith("proj:") && `Project: ${selectedSection.slice(5)}`}
-              {selectedSection.startsWith("ctx:") && `Context: @${selectedSection.slice(4)}`}
-              {selectedSection.startsWith("tag:") && `Tag: #${selectedSection.slice(4)}`}
-              {selectedSection.startsWith("view:") && `Query: ${selectedSection.slice(5)}`}
+              {isEditorMode && "Plaintext Vault Notes"}
+              {!isEditorMode && selectedSection === "all" && "Inbox Dashboard"}
+              {!isEditorMode && selectedSection === "todo" && "Inbox: Todo"}
+              {!isEditorMode && selectedSection === "doing" && "Active Sprints"}
+              {!isEditorMode && selectedSection === "events" && "Calendar Timeline"}
+              {!isEditorMode && selectedSection.startsWith("proj:") && `Project: ${selectedSection.slice(5)}`}
+              {!isEditorMode && selectedSection.startsWith("ctx:") && `Context: @${selectedSection.slice(4)}`}
+              {!isEditorMode && selectedSection.startsWith("tag:") && `Tag: #${selectedSection.slice(4)}`}
+              {!isEditorMode && selectedSection.startsWith("view:") && `Query: ${selectedSection.slice(5)}`}
             </h1>
-            <p>Sub-millisecond plaintext organization</p>
+            <p>{isEditorMode ? "Direct Markdown Editor Workspace" : "Sub-millisecond plaintext organization"}</p>
           </div>
+
+          {/* QA-Vision Capture trigger Button */}
+          <button className="dev-capture-btn" onClick={triggerAppCapture}>
+            <Camera size={16} />
+            {captureStatus || "Capture View"}
+          </button>
         </div>
 
-        {/* Search Inputs */}
-        <div className="search-container">
-          <Search size={18} color="#6b7280" />
-          <input 
-            type="text" 
-            placeholder="Search tasks, descriptions or projects..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
+        {/* Search Inputs (only displayed in dashboard mode) */}
+        {!isEditorMode && (
+          <div className="search-container">
+            <Search size={18} color="#6b7280" />
+            <input 
+              type="text" 
+              placeholder="Search tasks, descriptions or projects..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+        )}
 
         {/* Active Loader */}
         {loading && tasks.length === 0 && (
@@ -552,8 +687,56 @@ export function App() {
           </div>
         )}
 
-        {/* Calendar Scheduler View */}
-        {!loading && selectedSection === "events" ? (
+        {/* Render Notes Editor Mode or Normal Task Dashboard Content */}
+        {isEditorMode ? (
+          <div className="editor-workspace-container">
+            {/* Folder Explorer Column */}
+            <div className="editor-filetree-column">
+              <div className="filetree-header">
+                <h4>Vault Explorer</h4>
+              </div>
+              <div className="filetree-body">
+                {dirTree ? (
+                  <FileTree 
+                    node={dirTree}
+                    selectedPath={activeFilePath}
+                    onSelectFile={handleSelectFile}
+                    onCreateFile={handleCreateFile}
+                    onCreateFolder={handleCreateFolder}
+                    onRename={handleRenamePath}
+                    onDelete={handleDeletePath}
+                  />
+                ) : (
+                  <div style={{ color: "var(--text-muted)", fontSize: "0.85rem", padding: "1rem" }}>
+                    Loading file structure...
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* CodeMirror Active Canvas Right Column */}
+            <div className="editor-canvas-column">
+              {activeFilePath && activeFileContent !== null ? (
+                <MarkdownEditor 
+                  key={activeFilePath} // Remount when file path changes
+                  filePath={activeFilePath}
+                  initialContent={activeFileContent}
+                  onSave={handleSaveFileContent}
+                  onClose={() => {
+                    setActiveFilePath(null);
+                    setActiveFileContent(null);
+                  }}
+                />
+              ) : (
+                <div className="editor-empty-state">
+                  <FileText size={48} color="var(--border-card)" />
+                  <h3>No Note Selected</h3>
+                  <p>Select a markdown note from the explorer tree or hover folders to create new files.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : !loading && selectedSection === "events" ? (
           <div style={{ display: "flex", flexDirection: "column" }}>
             
             {/* Calendar Controls Panel */}
