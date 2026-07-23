@@ -182,19 +182,23 @@ pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask
             let hash = calculate_hash(file_path, start_line, &raw_markdown);
 
             // Now parse metadata elements in the first line
+            // Strip markdown links completely from metadata parsing target to ignore any link's content
+            let link_re = Regex::new(r"\[[^\]]*\]\([^)]*\)").unwrap();
+            let metadata_text = link_re.replace_all(rest, "").to_string();
+
             let mut projects = Vec::new();
-            for p_cap in project_re.captures_iter(rest) {
+            for p_cap in project_re.captures_iter(&metadata_text) {
                 projects.push(p_cap.get(1).unwrap().as_str().to_string());
             }
             let project = projects.first().cloned();
 
             let mut contexts = Vec::new();
-            for c_cap in context_re.captures_iter(rest) {
+            for c_cap in context_re.captures_iter(&metadata_text) {
                 contexts.push(c_cap.get(1).unwrap().as_str().to_string());
             }
 
             let mut tags = Vec::new();
-            for t_cap in tag_re.captures_iter(rest) {
+            for t_cap in tag_re.captures_iter(&metadata_text) {
                 tags.push(t_cap.get(1).unwrap().as_str().to_string());
             }
 
@@ -203,7 +207,7 @@ pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask
 
             // 1. Extract and strip s (scheduled start)
             let s_re = Regex::new(r"\bs:(?:\x22([^\x22]+)\x22|'([^']+)'|(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2})|([^\s]+))").unwrap();
-            let s_start = s_re.captures(rest).map(|caps| {
+            let s_start = s_re.captures(&metadata_text).map(|caps| {
                 let val = if let Some(m) = caps.get(1) {
                     m.as_str().to_string()
                 } else if let Some(m) = caps.get(2) {
@@ -225,7 +229,7 @@ pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask
 
             // 2. Extract and strip due date
             let due_re = Regex::new(r"\bdue:(?:\x22([^\x22]+)\x22|'([^']+)'|([^\s]+))").unwrap();
-            let due_date = due_re.captures(rest).map(|caps| {
+            let due_date = due_re.captures(&metadata_text).map(|caps| {
                 let val = if let Some(m) = caps.get(1) {
                     m.as_str().to_string()
                 } else if let Some(m) = caps.get(2) {
@@ -245,7 +249,7 @@ pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask
 
             // 3. Extract and strip duration
             let dur_re = Regex::new(r"\bdur:(?:\x22([^\x22]+)\x22|'([^']+)'|([^\s]+))").unwrap();
-            let duration_secs = dur_re.captures(rest).and_then(|caps| {
+            let duration_secs = dur_re.captures(&metadata_text).and_then(|caps| {
                 let val = if let Some(m) = caps.get(1) {
                     m.as_str().to_string()
                 } else if let Some(m) = caps.get(2) {
@@ -268,7 +272,7 @@ pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask
 
             // 4. Extract and strip recurring
             let rec_re = Regex::new(r"\brecurring:(?:\x22([^\x22]+)\x22|'([^']+)'|([^\s]+))").unwrap();
-            let recurring = rec_re.captures(rest).map(|caps| {
+            let recurring = rec_re.captures(&metadata_text).map(|caps| {
                 let val = if let Some(m) = caps.get(1) {
                     m.as_str().to_string()
                 } else if let Some(m) = caps.get(2) {
@@ -284,7 +288,7 @@ pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask
 
             // 5. Extract and strip when_done
             let wd_re = Regex::new(r"\bwhen_done:(?:\x22([^\x22]+)\x22|'([^']+)'|([^\s]+))").unwrap();
-            let when_done = wd_re.captures(rest).map(|caps| {
+            let when_done = wd_re.captures(&metadata_text).map(|caps| {
                 let val = if let Some(m) = caps.get(1) {
                     m.as_str().to_string()
                 } else if let Some(m) = caps.get(2) {
@@ -447,5 +451,25 @@ group_by: "none"
         assert_eq!(views.len(), 1);
         assert_eq!(views[0].title, "Today's Errands");
         assert!(views[0].query_raw.contains("filter: \"due = today AND @errands\""));
+    }
+
+    #[test]
+    fn test_ignore_metadata_in_links() {
+        let content = "- [ ] Visit [our +work page with @phone details and #urgent tag](https://example.com/#tag) s:2026-07-23 due:2026-07-23";
+        let (tasks, _) = parse_markdown_content("test.md", content);
+        assert_eq!(tasks.len(), 1);
+        let task = &tasks[0];
+        
+        // Projects, contexts, and tags inside links must be completely ignored
+        assert_eq!(task.project, None);
+        assert_eq!(task.contexts.len(), 0);
+        assert_eq!(task.tags.len(), 0);
+        
+        // Metadata outside links must be parsed correctly
+        assert_eq!(task.s_start.as_deref(), Some("2026-07-23"));
+        assert_eq!(task.due_date.as_deref(), Some("2026-07-23"));
+        
+        // The markdown link itself should remain fully preserved in the final description!
+        assert_eq!(task.description, "Visit [our +work page with @phone details and #urgent tag](https://example.com/#tag)");
     }
 }
