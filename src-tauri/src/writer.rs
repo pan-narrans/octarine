@@ -22,6 +22,17 @@ fn get_strip_checkbox_re() -> &'static Regex {
     })
 }
 
+static RE_S: OnceLock<Regex> = OnceLock::new();
+static RE_DUR: OnceLock<Regex> = OnceLock::new();
+
+fn get_re_s() -> &'static Regex {
+    RE_S.get_or_init(|| Regex::new(r"\s+s:\d{4}-\d{2}-\d{2}(\s+\d{2}:\d{2})?").unwrap())
+}
+
+fn get_re_dur() -> &'static Regex {
+    RE_DUR.get_or_init(|| Regex::new(r"\s+dur:\d+[a-zA-Z\d]*").unwrap())
+}
+
 pub fn update_task_status_in_file(
     db_conn: &Connection,
     file_path: &str,
@@ -228,8 +239,8 @@ pub fn update_event_schedule_in_file(
     let target_line = &edited_lines[line_idx];
 
     // Strip out any existing s: and dur: tags from the target line
-    let re_s = Regex::new(r"\s+s:\d{4}-\d{2}-\d{2}(\s+\d{2}:\d{2})?").unwrap();
-    let re_dur = Regex::new(r"\s+dur:\d+[a-zA-Z\d]*").unwrap();
+    let re_s = get_re_s();
+    let re_dur = get_re_dur();
 
     let mut line_clean = re_s.replace(target_line, "").to_string();
     line_clean = re_dur.replace(&line_clean, "").to_string();

@@ -1,4 +1,16 @@
 use regex::Regex;
+use std::sync::OnceLock;
+
+static OP_RE: OnceLock<Regex> = OnceLock::new();
+static COMP_RE: OnceLock<Regex> = OnceLock::new();
+
+fn get_op_re() -> &'static Regex {
+    OP_RE.get_or_init(|| Regex::new(r"^(<=|>=|!=|=|<|>)").unwrap())
+}
+
+fn get_comp_re() -> &'static Regex {
+    COMP_RE.get_or_init(|| Regex::new(r"^(due|status|type)(<=|>=|!=|=|<|>)(.+)$").unwrap())
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
@@ -54,7 +66,7 @@ fn tokenize(query: &str) -> Vec<Token> {
                     // Peek ahead to see if there is an operator like <=, >=, =, <, > or !=
                     let rest: String = chars[i..].iter().collect();
                     let trimmed = rest.trim_start();
-                    let op_re = Regex::new(r"^(<=|>=|!=|=|<|>)").unwrap();
+                    let op_re = get_op_re();
                     if let Some(caps) = op_re.captures(trimmed) {
                         let op = caps.get(1).unwrap().as_str();
                         let op_len = op.len();
@@ -132,7 +144,7 @@ fn compile_term(term: &str) -> Result<String, String> {
         ))
     } else {
         // Metadata comparison term, e.g., due<=today, status=todo, type=event
-        let comp_re = Regex::new(r"^(due|status|type)(<=|>=|!=|=|<|>)(.+)$").unwrap();
+        let comp_re = get_comp_re();
         if let Some(caps) = comp_re.captures(term) {
             let field = caps.get(1).unwrap().as_str();
             let op = caps.get(2).unwrap().as_str();
