@@ -353,4 +353,48 @@ mod tests {
         let task_count_after: i64 = conn.query_row("SELECT count(*) FROM tasks", [], |r| r.get(0)).unwrap();
         assert_eq!(task_count_after, 0);
     }
+
+    #[test]
+    fn test_external_edit_duplication_bug() {
+        let temp_dir = tempdir().unwrap();
+        let db_path = temp_dir.path().join("cache.db");
+        let vault_dir = temp_dir.path().join("vault");
+        fs::create_dir_all(&vault_dir).unwrap();
+
+        let conn = initialize_db(&db_path).unwrap();
+
+        // 1. Initial creation and sweep index
+        let file_path = vault_dir.join("tasks.md");
+        fs::write(
+            &file_path,
+            r#"- [<] Fisio s:2026-08-11 due:2026-08-11"#,
+        )
+        .unwrap();
+
+        // Simulating non-canonical path indexing (standard in relative sweeps)
+        let relative_path_str = format!("{}/./tasks.md", vault_dir.to_string_lossy());
+        index_single_file(&conn, &relative_path_str).unwrap();
+
+        // Verify exactly 1 task exists initially
+        let initial_count: i64 = conn.query_row("SELECT count(*) FROM tasks", [], |r| r.get(0)).unwrap();
+        assert_eq!(initial_count, 1);
+
+        // 2. Simulating external modification returned as absolute canonical path by watchers
+        let canonical_path = file_path.canonicalize().unwrap();
+        let canonical_path_str = canonical_path.to_string_lossy().to_string();
+
+        fs::write(
+            &file_path,
+            r#"- [<] Fisio s:2026-08-11 due:2026-08-11 (edited)"#,
+        )
+        .unwrap();
+
+        // Index edited path returned by file-watcher
+        index_single_file(&conn, &canonical_path_str).unwrap();
+
+        // Verify that we DO NOT have duplicates in database.
+        // Under the current buggy behavior, final_count will be 2 because the two paths don't match!
+        let final_count: i64 = conn.query_row("SELECT count(*) FROM tasks", [], |r| r.get(0)).unwrap();
+        assert_eq!(final_count, 1);
+    }
 }
