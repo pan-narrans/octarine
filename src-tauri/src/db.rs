@@ -128,9 +128,12 @@ pub fn delete_file(conn: &Connection, path: &str) -> Result<()> {
 }
 
 pub fn index_single_file(conn: &Connection, path: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let metadata = fs::metadata(path)?;
+    let path_buf = fs::canonicalize(path)?;
+    let canonical_path = path_buf.to_string_lossy().to_string();
+
+    let metadata = fs::metadata(&canonical_path)?;
     let mtime = metadata.modified()?.duration_since(UNIX_EPOCH)?.as_secs() as i64;
-    let content = fs::read_to_string(path)?;
+    let content = fs::read_to_string(&canonical_path)?;
     
     // Compute checksum
     let mut hasher = sha2::Sha256::new();
@@ -138,14 +141,14 @@ pub fn index_single_file(conn: &Connection, path: &str) -> Result<(), Box<dyn st
     let file_hash = hex::encode(hasher.finalize());
 
     // Check if cached
-    if let Some((cached_mtime, cached_hash)) = get_file_mtime_and_hash(conn, path)? {
+    if let Some((cached_mtime, cached_hash)) = get_file_mtime_and_hash(conn, &canonical_path)? {
         if cached_mtime == mtime && cached_hash == file_hash {
             return Ok(()); // Match, skip parsing
         }
     }
 
     // Parse
-    let (tasks, views) = parser::parse_markdown_content(path, &content);
+    let (tasks, views) = parser::parse_markdown_content(&canonical_path, &content);
 
     // Save to DB in transaction
     let mut tx_conn = Connection::open_with_flags(
@@ -159,9 +162,9 @@ pub fn index_single_file(conn: &Connection, path: &str) -> Result<(), Box<dyn st
     tx.execute(
         "INSERT INTO files (path, mtime, hash) VALUES (?1, ?2, ?3)
          ON CONFLICT(path) DO UPDATE SET mtime = ?2, hash = ?3",
-        params![path, mtime, file_hash],
+        params![&canonical_path, mtime, file_hash],
     )?;
-    let file_id: i64 = tx.query_row("SELECT id FROM files WHERE path = ?", params![path], |r| r.get(0))?;
+    let file_id: i64 = tx.query_row("SELECT id FROM files WHERE path = ?", params![&canonical_path], |r| r.get(0))?;
 
     // Delete existing tasks & views for file
     tx.execute("DELETE FROM tasks WHERE file_id = ?", params![file_id])?;
