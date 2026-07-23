@@ -10,7 +10,8 @@ All branch names must be lowercase, use hyphens to separate words, and adhere st
 
 | Branch Prefix | Purpose | Naming Format | Example |
 | :--- | :--- | :--- | :--- |
-| **Features** | New atomic functionalities linked to a GitHub Issue | `feature/[ID-]<name>` | `feature/41-markdown-parser` |
+| **Epics** | Large milestones containing multiple tasks/features | `epic/<number>` | `epic/1` |
+| **Features** | New atomic functionalities | `feature/<name>` or `feature/[ID-]<name>` | `feature/41-markdown-parser` |
 | **Bugfixes** | Defect resolutions linked to a GitHub Bug Issue | `bugfix/[ID-]<name>` | `bugfix/102-sqlite-wal-concurrency` |
 | **Releases** | Grouping of milestone features before merging to main | `release/<name>` | `release/v1.0-alpha` |
 | **Hotfixes** | Urgent production fixes targeting main directly | `hotfix/[ID-]<name>` | `hotfix/104-ipc-deadlock` |
