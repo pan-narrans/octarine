@@ -400,4 +400,39 @@ mod tests {
         let final_count: i64 = conn.query_row("SELECT count(*) FROM tasks", [], |r| r.get(0)).unwrap();
         assert_eq!(final_count, 1);
     }
+
+    #[test]
+    fn test_hierarchical_project_queries() {
+        let temp_dir = tempdir().unwrap();
+        let db_path = temp_dir.path().join("cache.db");
+        let vault_dir = temp_dir.path().join("vault");
+        fs::create_dir_all(&vault_dir).unwrap();
+
+        let conn = initialize_db(&db_path).unwrap();
+
+        // Write file with parent task (+work) and nested task (+work/client/project)
+        let file_path = vault_dir.join("tasks.md");
+        fs::write(
+            &file_path,
+            r#"# Project Tasks
+- [ ] Parent task +work
+- [ ] Child task +work/client/project
+"#,
+        )
+        .unwrap();
+
+        index_single_file(&conn, file_path.to_str().unwrap()).unwrap();
+
+        // Compile query "+work" which translates to hierarchical SQL
+        let sql_filter = crate::query_dsl::compile_filter_to_sql("+work").unwrap();
+        
+        let query_str = format!(
+            "SELECT count(*) FROM tasks WHERE {}",
+            sql_filter
+        );
+
+        // Execute query and assert that BOTH parent and nested child task are returned!
+        let matched_tasks: i64 = conn.query_row(&query_str, [], |r| r.get(0)).unwrap();
+        assert_eq!(matched_tasks, 2);
+    }
 }

@@ -130,7 +130,7 @@ export function App() {
     
     if (selectedSection.startsWith("proj:")) {
       const proj = selectedSection.slice("proj:".length);
-      return task.project === proj;
+      return task.project === proj || (task.project !== null && task.project.startsWith(proj + "/"));
     }
     if (selectedSection.startsWith("ctx:")) {
       const ctx = selectedSection.slice("ctx:".length);
@@ -235,6 +235,53 @@ export function App() {
       console.error("Failed to save note:", e);
       throw e;
     }
+  };
+
+  // -------------------------------------------------------------
+  // HIERARCHICAL PROJECTS COMPILER & RENDERER
+  // -------------------------------------------------------------
+  const buildProjectTree = (flatProjects: string[]) => {
+    const root: Record<string, any> = {};
+
+    for (const path of flatProjects) {
+      const parts = path.split("/");
+      let current = root;
+      let currentPath = "";
+
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i];
+        currentPath = currentPath ? `${currentPath}/${part}` : part;
+        if (!current[part]) {
+          current[part] = {
+            name: part,
+            fullPath: currentPath,
+            children: {}
+          };
+        }
+        current = current[part].children;
+      }
+    }
+    return root;
+  };
+
+  const renderProjectNode = (node: any, level: number = 0) => {
+    const isSelected = selectedSection === `proj:${node.fullPath}`;
+    const childKeys = Object.keys(node.children);
+    const hasChildren = childKeys.length > 0;
+
+    return (
+      <div key={node.fullPath} style={{ display: "flex", flexDirection: "column" }}>
+        <li 
+          className={`sidebar-item ${!isEditorMode && isSelected ? "active" : ""}`}
+          onClick={() => handleSidebarItemClick(`proj:${node.fullPath}`)}
+          style={{ paddingLeft: `${Math.min(level * 10 + 8, 48)}px`, fontSize: "0.82rem" }}
+        >
+          <span style={{ marginRight: "0.4rem", opacity: 0.6, fontSize: "0.75rem", fontFamily: "monospace" }}>+</span>
+          <span>{node.name}</span>
+        </li>
+        {hasChildren && childKeys.map(key => renderProjectNode(node.children[key], level + 1))}
+      </div>
+    );
   };
 
   // -------------------------------------------------------------
@@ -517,15 +564,9 @@ export function App() {
           <div className="sidebar-section">
             <h4>Projects</h4>
             <ul className="sidebar-list">
-              {projects.map(p => (
-                <li 
-                  key={p}
-                  className={`sidebar-item ${!isEditorMode && selectedSection === `proj:${p}` ? "active" : ""}`}
-                  onClick={() => handleSidebarItemClick(`proj:${p}`)}
-                >
-                  <Hash size={16} /> {p}
-                </li>
-              ))}
+              {Object.keys(buildProjectTree(projects)).map(key => 
+                renderProjectNode(buildProjectTree(projects)[key])
+              )}
             </ul>
           </div>
         )}
