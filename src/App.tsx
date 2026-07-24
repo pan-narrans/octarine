@@ -900,6 +900,121 @@ export function App() {
               </div>
             )}
           </div>
+        ) : !loading && selectedSection === "all" ? (
+          <div className="unified-dashboard">
+            {/* Left Column: Events (Today's Events & Future Events) */}
+            <div className="dashboard-column events">
+              <h2>Events Timeline 📅</h2>
+              
+              {/* Today's Events */}
+              <div className="events-sub-section">
+                <h3>Today's Schedule</h3>
+                {(() => {
+                  const today = new Date();
+                  const todayEvents = getSortedEventsForDay(today);
+                  if (todayEvents.length === 0) {
+                    return <p className="no-items">No events scheduled for today.</p>;
+                  }
+                  return (
+                    <div className="events-vertical-list">
+                      {todayEvents.map(event => {
+                        const timePart = event.s_start && event.s_start.length > 10 ? event.s_start.slice(11) : "All Day";
+                        return (
+                          <div key={event.hash} className="dashboard-event-card">
+                            <span className="event-time">{timePart}</span>
+                            <span className="event-desc">{event.description}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Future Events */}
+              <div className="events-sub-section" style={{ marginTop: "1.5rem" }}>
+                <h3>Upcoming Events</h3>
+                {(() => {
+                  const todayStr = getISODateString(new Date());
+                  const futureEvents = tasks.filter(t => t.task_type === "event" && t.s_start && t.s_start.slice(0, 10) > todayStr)
+                    .sort((a, b) => (a.s_start || "").localeCompare(b.s_start || ""));
+                  
+                  if (futureEvents.length === 0) {
+                    return <p className="no-items">No upcoming future events.</p>;
+                  }
+                  return (
+                    <div className="events-vertical-list">
+                      {futureEvents.slice(0, 5).map(event => {
+                        const datePart = event.s_start ? event.s_start.slice(5, 10) : "";
+                        const timePart = event.s_start && event.s_start.length > 10 ? event.s_start.slice(11) : "All Day";
+                        return (
+                          <div key={event.hash} className="dashboard-event-card upcoming">
+                            <span className="event-date">{datePart}</span>
+                            <span className="event-time">{timePart}</span>
+                            <span className="event-desc">{event.description}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+
+            {/* Right Column: Pressing Tasks */}
+            <div className="dashboard-column tasks">
+              <h2>Most Pressing Tasks 🚀</h2>
+              {(() => {
+                const pressingTasks = tasks.filter(t => t.task_type === "task" && (t.status === "todo" || t.status === "doing"))
+                  .sort((a, b) => {
+                    const pA = a.priority === null || a.priority === undefined ? Infinity : a.priority;
+                    const pB = b.priority === null || b.priority === undefined ? Infinity : b.priority;
+                    return pA - pB;
+                  });
+
+                if (pressingTasks.length === 0) {
+                  return <p className="no-items">Clear Space! No active tasks found.</p>;
+                }
+                return (
+                  <div className="task-list">
+                    {pressingTasks.slice(0, 8).map(task => {
+                      const rawLines = task.raw_markdown.split("\n");
+                      const hasNotes = rawLines.length > 1;
+                      const notes = hasNotes ? rawLines.slice(1).join("\n") : "";
+
+                      return (
+                        <div 
+                          key={task.hash} 
+                          className={`task-card ${task.status}`}
+                          onClick={(e) => handleCheckboxClick(e, task)}
+                        >
+                          <div 
+                            className={`checkbox ${task.status}`}
+                            onClick={(e) => handleCheckboxClick(e, task)}
+                          >
+                            {task.status === "done" && "✓"}
+                            {task.status === "doing" && "•"}
+                            {task.status === "cancelled" && "×"}
+                          </div>
+                          <div className="task-details">
+                            <div className="task-desc">{task.description}</div>
+                            {hasNotes && <div className="task-notes">{notes}</div>}
+                            <div className="metadata-container">
+                              {task.priority !== null && task.priority !== undefined && (
+                                <span className={`pill priority p-${task.priority}`}>p:{task.priority}</span>
+                              )}
+                              {task.project && <span className="pill project">+{task.project}</span>}
+                              {task.due_date && <span className="pill due">due:{task.due_date}</span>}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
         ) : !loading && filteredTasks.length === 0 ? (
           <div className="empty-state">
             <AlertCircle className="empty-state-icon" size={32} />

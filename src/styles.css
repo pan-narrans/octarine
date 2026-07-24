@@ -1072,3 +1072,69 @@ body {
   font-size: 0.9rem;
   max-width: 280px;
 }
+
+/* Unified Dashboard Layout */
+.unified-dashboard {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  margin-top: 1rem;
+}
+
+.dashboard-column h2 {
+  font-size: 1.15rem;
+  color: var(--text-primary);
+  margin-bottom: 1.25rem;
+  font-weight: 700;
+  border-bottom: 1px solid var(--border-card);
+  padding-bottom: 0.5rem;
+}
+
+.events-sub-section h3 {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.75rem;
+}
+
+.no-items {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.events-vertical-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.dashboard-event-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+}
+
+.dashboard-event-card .event-time {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #a78bfa;
+  font-family: monospace;
+}
+
+.dashboard-event-card .event-desc {
+  font-size: 0.88rem;
+  color: var(--text-primary);
+}
+
+.dashboard-event-card.upcoming .event-date {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #818cf8;
+  font-family: monospace;
+}
