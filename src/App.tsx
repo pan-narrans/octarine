@@ -239,6 +239,42 @@ export function App() {
     }
   };
 
+  const renderMarkdownDescription = (text: string) => {
+    const linkRegex = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
+    const parts = [];
+    let lastIndex = 0;
+    let match;
+
+    linkRegex.lastIndex = 0;
+    while ((match = linkRegex.exec(text)) !== null) {
+      const matchIndex = match.index;
+      if (matchIndex > lastIndex) {
+        parts.push(text.slice(lastIndex, matchIndex));
+      }
+      const anchor = match[1];
+      const url = match[2];
+      parts.push(
+        <a 
+          key={matchIndex}
+          href={url} 
+          target="_blank" 
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="task-inline-link"
+        >
+          {anchor}
+        </a>
+      );
+      lastIndex = linkRegex.lastIndex;
+    }
+
+    if (lastIndex < text.length) {
+      parts.push(text.slice(lastIndex));
+    }
+
+    return parts.length > 0 ? parts : text;
+  };
+
   // -------------------------------------------------------------
   // HIERARCHICAL PROJECTS COMPILER & RENDERER
   // -------------------------------------------------------------
@@ -997,7 +1033,7 @@ export function App() {
                             {task.status === "cancelled" && "×"}
                           </div>
                           <div className="task-details">
-                            <div className="task-desc">{task.description}</div>
+                            <div className="task-desc">{renderMarkdownDescription(task.description)}</div>
                             {hasNotes && <div className="task-notes">{notes}</div>}
                             <div className="metadata-container">
                               {task.priority !== null && task.priority !== undefined && (
@@ -1053,7 +1089,7 @@ export function App() {
 
                     {/* Task details */}
                     <div className="task-details">
-                      <div className="task-desc">{task.description}</div>
+                      <div className="task-desc">{renderMarkdownDescription(task.description)}</div>
                       
                       {/* Notes block */}
                       {hasNotes && (
