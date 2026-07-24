@@ -78,7 +78,6 @@ export function App() {
   const [savingJournal, setSavingJournal] = useState<boolean>(false);
   const [notesExpanded, setNotesExpanded] = useState<boolean>(false);
   const [journalsExpanded, setJournalsExpanded] = useState<boolean>(false);
-  const [collapseAllTrigger, setCollapseAllTrigger] = useState<number>(0);
 
   // Initial Boot Fetch & Config Query
   useEffect(() => {
@@ -630,19 +629,7 @@ export function App() {
         </h2>
 
         <div className="sidebar-section">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.25rem" }}>
-            <h4 style={{ margin: 0 }}>Smart Views</h4>
-            <button 
-              onClick={() => {
-                setNotesExpanded(false);
-                setJournalsExpanded(false);
-                setCollapseAllTrigger(prev => prev + 1);
-              }}
-              style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "0.7rem", padding: 0 }}
-            >
-              Collapse All
-            </button>
-          </div>
+          <h4>Smart Views</h4>
           <ul className="sidebar-list">
             <li 
               className={`sidebar-item ${activeFilePath === null && selectedSection === "all" ? "active" : ""}`}
@@ -711,7 +698,6 @@ export function App() {
                     selectedPath={activeFilePath}
                     onSelectFile={handleSelectFile}
                     readOnly={true}
-                    collapseAllTrigger={collapseAllTrigger}
                   />
                 ))
               ) : (
@@ -747,7 +733,6 @@ export function App() {
                     onCreateFolder={handleCreateFolder}
                     onRename={handleRenamePath}
                     onDelete={handleDeletePath}
-                    collapseAllTrigger={collapseAllTrigger}
                   />
                 ))
               ) : (
