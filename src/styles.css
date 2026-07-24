@@ -1151,3 +1151,39 @@ body {
   color: #c084fc;
   text-decoration: underline;
 }
+
+/* Condensed Task Cards on Dashboard */
+.task-list.condensed {
+  gap: 0.4rem;
+}
+
+.task-list.condensed .task-card {
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+}
+
+.task-list.condensed .task-desc {
+  font-size: 0.82rem;
+  line-height: 1.3;
+}
+
+.task-list.condensed .task-notes {
+  font-size: 0.76rem;
+  margin-top: 0.15rem;
+}
+
+.task-list.condensed .metadata-container {
+  margin-top: 0.15rem;
+  gap: 0.3rem;
+}
+
+.task-list.condensed .pill {
+  font-size: 0.68rem;
+  padding: 0.08rem 0.25rem;
+}
+
+.task-list.condensed .checkbox {
+  width: 14px;
+  height: 14px;
+  font-size: 0.68rem;
+}

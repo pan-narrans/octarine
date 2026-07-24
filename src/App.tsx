@@ -1205,7 +1205,7 @@ export function App() {
                   return <p className="no-items">Clear Space! No active tasks found.</p>;
                 }
                 return (
-                  <div className="task-list">
+                  <div className="task-list condensed">
                     {pressingTasks.slice(0, 8).map(task => {
                       const rawLines = task.raw_markdown.split("\n");
                       const hasNotes = rawLines.length > 1;
