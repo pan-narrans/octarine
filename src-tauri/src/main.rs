@@ -18,6 +18,7 @@ struct AppState {
     db: Mutex<Connection>,
     db_path: String,
     vault_dir: Mutex<String>,
+    journal_dir: Mutex<String>,
 }
 
 #[tauri::command]
@@ -155,10 +156,15 @@ fn set_vault_config(state: State<'_, AppState>, new_dir: String) -> Result<(), S
         .map_err(|e| format!("Failed to create directory: {}", e))?;
 
     // Save to configuration file
-    let config_data = serde_json::json!({
-        "vault_dir": new_dir
-    });
-    let config_str = serde_json::to_string_pretty(&config_data)
+    let mut config_json = if std::path::Path::new(&config_path).exists() {
+        let content = std::fs::read_to_string(&config_path).unwrap_or_default();
+        serde_json::from_str::<serde_json::Value>(&content).unwrap_or_else(|_| serde_json::json!({}))
+    } else {
+        serde_json::json!({})
+    };
+    config_json["vault_dir"] = serde_json::Value::String(new_dir.clone());
+
+    let config_str = serde_json::to_string_pretty(&config_json)
         .map_err(|e| e.to_string())?;
     std::fs::write(&config_path, config_str)
         .map_err(|e| format!("Failed to write config file: {}", e))?;
@@ -179,6 +185,56 @@ fn set_vault_config(state: State<'_, AppState>, new_dir: String) -> Result<(), S
     boot_sweep(&conn, &resolved_dir).map_err(|e| e.to_string())?;
 
     Ok(())
+}
+
+#[tauri::command]
+fn get_journal_config(state: State<'_, AppState>) -> Result<String, String> {
+    let journal_dir = state.journal_dir.lock().unwrap();
+    Ok(journal_dir.clone())
+}
+
+#[tauri::command]
+fn set_journal_config(state: State<'_, AppState>, new_dir: String) -> Result<(), String> {
+    let home_dir = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+    let config_path = format!("{}/.octarine_config.json", home_dir);
+
+    let mut resolved_dir = new_dir.clone();
+    if resolved_dir.starts_with("~/") {
+        resolved_dir = resolved_dir.replace("~", &home_dir);
+    }
+
+    // Ensure directory exists
+    std::fs::create_dir_all(&resolved_dir)
+        .map_err(|e| format!("Failed to create directory: {}", e))?;
+
+    // Save to configuration file
+    let mut config_json = if std::path::Path::new(&config_path).exists() {
+        let content = std::fs::read_to_string(&config_path).unwrap_or_default();
+        serde_json::from_str::<serde_json::Value>(&content).unwrap_or_else(|_| serde_json::json!({}))
+    } else {
+        serde_json::json!({})
+    };
+    config_json["journal_dir"] = serde_json::Value::String(new_dir.clone());
+
+    let config_str = serde_json::to_string_pretty(&config_json)
+        .map_err(|e| e.to_string())?;
+    std::fs::write(&config_path, config_str)
+        .map_err(|e| format!("Failed to write config file: {}", e))?;
+
+    // Update active journal_dir inside AppState under lock
+    {
+        let mut journal_lock = state.journal_dir.lock().unwrap();
+        *journal_lock = resolved_dir;
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+fn read_journal_tree(state: State<'_, AppState>) -> Result<FileNode, String> {
+    let journal_dir = state.journal_dir.lock().unwrap();
+    let path = std::path::Path::new(&*journal_dir);
+    octarine::file_ops::build_journal_tree(path)
 }
 
 // -----------------------------------------------------------------
@@ -245,8 +301,9 @@ fn main() {
     let db_path = format!("{}/.octarine_cache.db", home_dir);
     let config_path = format!("{}/.octarine_config.json", home_dir);
 
-    // 1. Resolve configurable vault directory
+    // 1. Resolve configurable directories
     let mut vault_dir = format!("{}/octarine_vault", home_dir);
+    let mut journal_dir = format!("{}/octarine_journal", home_dir);
 
     // Read GITHUB/OS environment variables first
     if let Ok(env_vault) = std::env::var("OCTARINE_VAULT_DIR") {
@@ -262,25 +319,42 @@ fn main() {
                         vault_dir = cfg_vault.to_string();
                     }
                 }
+                if let Some(cfg_journal) = config_json.get("journal_dir").and_then(|v| v.as_str()) {
+                    if !cfg_journal.trim().is_empty() {
+                        journal_dir = cfg_journal.to_string();
+                    }
+                } else {
+                    // Update existing config file with default journal path if missing
+                    let mut updated_config = config_json.clone();
+                    updated_config["journal_dir"] = serde_json::Value::String("~/octarine_journal".to_string());
+                    if let Ok(config_str) = serde_json::to_string_pretty(&updated_config) {
+                        let _ = std::fs::write(&config_path, config_str);
+                    }
+                }
             }
         }
     } else {
         // Automatically scaffold default config file on first run
         let default_config = serde_json::json!({
-            "vault_dir": vault_dir
+            "vault_dir": "~/octarine_vault",
+            "journal_dir": "~/octarine_journal"
         });
         if let Ok(config_str) = serde_json::to_string_pretty(&default_config) {
             let _ = std::fs::write(&config_path, config_str);
         }
     }
 
-    // Expand tilde (~/) if present in the configured path
+    // Expand tilde (~/) if present in the configured paths
     if vault_dir.starts_with("~/") {
         vault_dir = vault_dir.replace("~", &home_dir);
     }
+    if journal_dir.starts_with("~/") {
+        journal_dir = journal_dir.replace("~", &home_dir);
+    }
 
-    // Ensure the resolved directory physically exists on disk
+    // Ensure the resolved directories physically exist on disk
     std::fs::create_dir_all(&vault_dir).expect("failed to create vault directory");
+    std::fs::create_dir_all(&journal_dir).expect("failed to create journal directory");
 
     let conn = initialize_db(&db_path).expect("failed to initialize SQLite Cache database");
     
@@ -297,6 +371,7 @@ fn main() {
             db: Mutex::new(conn),
             db_path: db_path.clone(),
             vault_dir: Mutex::new(vault_dir.clone()),
+            journal_dir: Mutex::new(journal_dir.clone()),
         });
 
     builder = builder.invoke_handler(tauri::generate_handler![
@@ -304,6 +379,9 @@ fn main() {
         get_custom_views,
         get_vault_config,
         set_vault_config,
+        get_journal_config,
+        set_journal_config,
+        read_journal_tree,
         update_event_schedule,
         update_task_status,
         read_dir_tree,

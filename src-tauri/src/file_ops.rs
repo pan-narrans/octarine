@@ -151,6 +151,124 @@ pub fn write_file_content_on_disk(path_str: &str, content: &str) -> Result<(), S
     Ok(())
 }
 
+use std::collections::BTreeMap;
+use std::sync::OnceLock;
+use regex::Regex;
+
+static JOURNAL_REGEX: OnceLock<Regex> = OnceLock::new();
+
+fn get_journal_regex() -> &'static Regex {
+    JOURNAL_REGEX.get_or_init(|| Regex::new(r"^\d{4}-\d{2}-\d{2}\.md$").unwrap())
+}
+
+fn get_month_name(month: u32) -> &'static str {
+    match month {
+        1 => "January",
+        2 => "February",
+        3 => "March",
+        4 => "April",
+        5 => "May",
+        6 => "June",
+        7 => "July",
+        8 => "August",
+        9 => "September",
+        10 => "October",
+        11 => "November",
+        12 => "December",
+        _ => "Unknown",
+    }
+}
+
+pub fn build_journal_tree(journal_dir_path: &Path) -> Result<FileNode, String> {
+    if !journal_dir_path.exists() {
+        fs::create_dir_all(journal_dir_path)
+            .map_err(|e| format!("Failed to create journal directory: {}", e))?;
+    }
+
+    let mut matching_files = Vec::new();
+    if journal_dir_path.is_dir() {
+        let entries = fs::read_dir(journal_dir_path)
+            .map_err(|e| format!("Failed to read journal directory: {}", e))?;
+        for entry in entries {
+            if let Ok(entry) = entry {
+                let entry_path = entry.path();
+                if entry_path.is_file() {
+                    let file_name = entry_path.file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_default();
+                    if get_journal_regex().is_match(&file_name) {
+                        matching_files.push((file_name, entry_path));
+                    }
+                }
+            }
+        }
+    }
+
+    let total_files = matching_files.len();
+
+    // Group files: Year (String) -> Month (u32) -> Vec<FileNode>
+    let mut groups: BTreeMap<String, BTreeMap<u32, Vec<FileNode>>> = BTreeMap::new();
+    for (file_name, entry_path) in matching_files {
+        let date_str = file_name.replace(".md", "");
+        let parts: Vec<&str> = date_str.split('-').collect();
+        if parts.len() == 3 {
+            let year = parts[0].to_string();
+            if let (Ok(month), Ok(_day)) = (parts[1].parse::<u32>(), parts[2].parse::<u32>()) {
+                let node = FileNode {
+                    name: date_str.clone(),
+                    path: entry_path.to_string_lossy().to_string(),
+                    is_dir: false,
+                    children: None,
+                };
+                groups.entry(year)
+                    .or_insert_with(BTreeMap::new)
+                    .entry(month)
+                    .or_insert_with(Vec::new)
+                    .push(node);
+            }
+        }
+    }
+
+    let mut year_nodes = Vec::new();
+    for (year, months) in groups {
+        let mut month_nodes = Vec::new();
+        let mut year_file_count = 0;
+
+        for (month_num, mut day_nodes) in months {
+            let month_file_count = day_nodes.len();
+            year_file_count += month_file_count;
+
+            day_nodes.sort_by(|a, b| a.name.cmp(&b.name));
+
+            let month_name = get_month_name(month_num);
+            let month_node = FileNode {
+                name: format!("{} ({})", month_name, month_file_count),
+                path: format!("000 - journals/{}/{}", year, month_name),
+                is_dir: true,
+                children: Some(day_nodes),
+            };
+            month_nodes.push(month_node);
+        }
+
+        let year_node = FileNode {
+            name: format!("{} ({})", year, year_file_count),
+            path: format!("000 - journals/{}", year),
+            is_dir: true,
+            children: Some(month_nodes),
+        };
+        year_nodes.push(year_node);
+    }
+
+    let root_node = FileNode {
+        name: format!("000 - journals ({})", total_files),
+        path: "000 - journals".to_string(),
+        is_dir: true,
+        children: Some(year_nodes),
+    };
+
+    Ok(root_node)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -198,5 +316,46 @@ mod tests {
         // 5. Delete file
         delete_path_on_disk(&new_file_a1.to_string_lossy()).unwrap();
         assert!(!new_file_a1.exists());
+    }
+
+    #[test]
+    fn test_build_journal_tree() {
+        let temp_dir = tempdir().unwrap();
+        let journal_path = temp_dir.path();
+
+        // Create some sample journal files
+        // Match pattern YYYY-MM-DD.md
+        let file_2026_07_23 = journal_path.join("2026-07-23.md");
+        fs::write(&file_2026_07_23, "# 2026-07-23").unwrap();
+
+        let file_2026_06_15 = journal_path.join("2026-06-15.md");
+        fs::write(&file_2026_06_15, "# 2026-06-15").unwrap();
+
+        let file_2025_12_01 = journal_path.join("2025-12-01.md");
+        fs::write(&file_2025_12_01, "# 2025-12-01").unwrap();
+
+        // Write some non-matching files to ensure they are ignored
+        let file_ignored = journal_path.join("random_file.md");
+        fs::write(&file_ignored, "# Ignored").unwrap();
+
+        let tree = build_journal_tree(journal_path).unwrap();
+        assert_eq!(tree.name, "000 - journals (3)");
+        assert_eq!(tree.is_dir, true);
+
+        let years = tree.children.unwrap();
+        assert_eq!(years.len(), 2); // 2025, 2026
+        assert_eq!(years[0].name, "2025 (1)");
+        assert_eq!(years[1].name, "2026 (2)");
+
+        let months_2026 = years[1].children.as_ref().unwrap();
+        assert_eq!(months_2026.len(), 2); // June, July
+        assert_eq!(months_2026[0].name, "June (1)");
+        assert_eq!(months_2026[1].name, "July (1)");
+
+        let days_july = months_2026[1].children.as_ref().unwrap();
+        assert_eq!(days_july.len(), 1);
+        assert_eq!(days_july[0].name, "2026-07-23");
+        assert_eq!(days_july[0].is_dir, false);
+        assert_eq!(days_july[0].path, file_2026_07_23.to_string_lossy().to_string());
     }
 }

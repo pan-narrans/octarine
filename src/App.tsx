@@ -20,10 +20,12 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
-  FileText
+  FileText,
+  BookOpen
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/tauri";
 import { open } from "@tauri-apps/api/shell";
+import { listen } from "@tauri-apps/api/event";
 
 export function App() {
   // Activate live Tauri event listener for real-time background watcher sync
@@ -68,10 +70,21 @@ export function App() {
   const [activeFilePath, setActiveFilePath] = useState<string | null>(null);
   const [activeFileContent, setActiveFileContent] = useState<string | null>(null);
 
+  // -----------------------------------------------------------------
+  // NEW VIRTUAL JOURNAL WORKSPACE STATE
+  // -----------------------------------------------------------------
+  const [journalTree, setJournalTree] = useState<FileNode | null>(null);
+  const [activeJournalPath, setActiveJournalPath] = useState<string>("Loading...");
+  const [isEditingJournal, setIsEditingJournal] = useState<boolean>(false);
+  const [journalInput, setJournalInput] = useState<string>("");
+  const [savingJournal, setSavingJournal] = useState<boolean>(false);
+
   // Initial Boot Fetch & Config Query
   useEffect(() => {
     fetchTasks();
     fetchCustomViews();
+    fetchDirTree();
+    fetchJournalTree();
     
     // Fetch active vault path dynamically from Tauri state
     invoke<string>("get_vault_config")
@@ -80,7 +93,35 @@ export function App() {
         setVaultInput(path);
       })
       .catch(err => console.error("Failed to query active vault path:", err));
+
+    // Fetch active journal path dynamically from Tauri state
+    invoke<string>("get_journal_config")
+      .then(path => {
+        setActiveJournalPath(path);
+        setJournalInput(path);
+      })
+      .catch(err => console.error("Failed to query active journal path:", err));
   }, [fetchTasks, fetchCustomViews]);
+
+  // Listen to background watcher change events to update directories dynamically
+  useEffect(() => {
+    let unlistenFn: (() => void) | null = null;
+    const setup = async () => {
+      try {
+        unlistenFn = await listen("vault-changed", () => {
+          console.log("Vault change event detected on frontend! Refreshing trees...");
+          fetchDirTree();
+          fetchJournalTree();
+        });
+      } catch (e) {
+        console.error("Failed to listen to vault-changed inside App:", e);
+      }
+    };
+    setup();
+    return () => {
+      if (unlistenFn) unlistenFn();
+    };
+  }, []);
 
   // Aggregate unique projects, contexts, and tags dynamically from loaded tasks
   const projects = Array.from(new Set(tasks.map(t => t.project).filter((p): p is string => !!p)));
@@ -167,6 +208,57 @@ export function App() {
       setDirTree(tree);
     } catch (e) {
       console.error("Failed to load directory tree:", e);
+    }
+  };
+
+  const fetchJournalTree = async () => {
+    try {
+      const tree = await invoke<FileNode>("read_journal_tree");
+      setJournalTree(tree);
+    } catch (e) {
+      console.error("Failed to load journal tree:", e);
+    }
+  };
+
+  const handleSaveJournal = async () => {
+    setSavingJournal(true);
+    try {
+      await invoke("set_journal_config", { newDir: journalInput.trim() });
+      setActiveJournalPath(journalInput.trim());
+      setIsEditingJournal(false);
+      await fetchJournalTree();
+    } catch (e) {
+      console.error("Failed to save journal config:", e);
+      alert(`Error saving journal path: ${e}`);
+    } finally {
+      setSavingJournal(false);
+    }
+  };
+
+  const handleOpenTodayJournal = async () => {
+    try {
+      const today = new Date();
+      const yyyy = today.getFullYear();
+      const mm = String(today.getMonth() + 1).padStart(2, '0');
+      const dd = String(today.getDate()).padStart(2, '0');
+      const todayStr = `${yyyy}-${mm}-${dd}`;
+      const filePath = `${activeJournalPath}/${todayStr}.md`;
+
+      let content = "";
+      try {
+        content = await invoke("read_file_content", { path: filePath });
+      } catch (_) {
+        // File does not exist yet, write empty string to scaffold it!
+        await invoke("write_file_content", { path: filePath, content: `# 📓 Journal Entry: ${todayStr}\n\n` });
+        content = `# 📓 Journal Entry: ${todayStr}\n\n`;
+      }
+      await fetchJournalTree();
+      setActiveFilePath(filePath);
+      setActiveFileContent(content);
+      setIsEditorMode(true); // Toggle to Notes Editor workspace!
+    } catch (e) {
+      console.error("Failed to open today's journal note:", e);
+      alert(`Error opening journal: ${e}`);
     }
   };
 
@@ -567,13 +659,21 @@ export function App() {
 
             {/* Obsidian-Replacement Plaintext Note Editor Navigation */}
             <li 
-              className={`sidebar-item ${isEditorMode ? "active" : ""}`}
+              className={`sidebar-item ${isEditorMode && activeFilePath && activeFilePath.startsWith(activeJournalPath) ? "" : isEditorMode ? "active" : ""}`}
               onClick={() => {
                 setIsEditorMode(true);
                 fetchDirTree();
               }}
             >
               <FileText size={16} color="#34d399" /> Plaintext Vault Notes
+            </li>
+
+            {/* Open Today's Journal Entry Link */}
+            <li 
+              className={`sidebar-item ${isEditorMode && activeFilePath && activeFilePath.startsWith(activeJournalPath) ? "active" : ""}`}
+              onClick={handleOpenTodayJournal}
+            >
+              <BookOpen size={16} color="#fbbf26" /> Daily Journal Note
             </li>
           </ul>
         </div>
@@ -704,6 +804,65 @@ export function App() {
             </div>
           )}
         </div>
+
+        {/* Active Journal Location indicator with Inline Editor */}
+        <div style={{ marginTop: "1rem", borderTop: "1px solid rgba(255,255,255,0.03)", paddingTop: "1rem" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+            <span style={{ fontSize: "0.75rem", textTransform: "uppercase", color: "var(--text-muted)", fontWeight: 600, letterSpacing: "0.05em" }}>
+              Active Journal Path
+            </span>
+            {!isEditingJournal && (
+              <button 
+                onClick={() => setIsEditingJournal(true)}
+                style={{ background: "none", border: "none", color: "var(--color-violet)", cursor: "pointer", display: "flex", alignItems: "center", padding: 0 }}
+              >
+                <Edit2 size={12} />
+              </button>
+            )}
+          </div>
+          
+          {isEditingJournal ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+              <input 
+                type="text"
+                value={journalInput}
+                onChange={(e) => setJournalInput(e.target.value)}
+                style={{ 
+                  width: "100%", 
+                  background: "rgba(255, 255, 255, 0.05)", 
+                  border: "1px solid var(--border-card)", 
+                  borderRadius: "6px", 
+                  color: "var(--text-primary)", 
+                  padding: "0.4rem 0.6rem", 
+                  fontSize: "0.8rem",
+                  fontFamily: "monospace"
+                }}
+                placeholder="~/octarine_journal"
+                disabled={savingJournal}
+              />
+              <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+                <button 
+                  onClick={() => setIsEditingJournal(false)}
+                  style={{ background: "rgba(255, 255, 255, 0.05)", border: "1px solid var(--border-card)", color: "var(--text-muted)", padding: "0.25rem 0.5rem", borderRadius: "4px", cursor: "pointer", fontSize: "0.75rem", display: "flex", alignItems: "center", gap: "0.25rem" }}
+                  disabled={savingJournal}
+                >
+                  <X size={10} /> Cancel
+                </button>
+                <button 
+                  onClick={handleSaveJournal}
+                  style={{ background: "var(--color-violet)", border: "none", color: "white", padding: "0.25rem 0.5rem", borderRadius: "4px", cursor: "pointer", fontSize: "0.75rem", fontWeight: 600, display: "flex", alignItems: "center", gap: "0.25rem" }}
+                  disabled={savingJournal}
+                >
+                  {savingJournal ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />} Save
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)", wordBreak: "break-all", fontStyle: "italic", lineHeight: 1.4 }}>
+              {activeJournalPath}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* 2. MAIN WORKSPACE PANEL */}
@@ -749,28 +908,61 @@ export function App() {
         {/* Render Notes Editor Mode or Normal Task Dashboard Content */}
         {isEditorMode ? (
           <div className="editor-workspace-container">
-            {/* Folder Explorer Column */}
-            <div className="editor-filetree-column">
-              <div className="filetree-header">
-                <h4>Vault Explorer</h4>
+            {/* Folder Explorer Column (Notes & Journals Split-Screen) */}
+            <div className="editor-filetree-column" style={{ display: "flex", flexDirection: "column", height: "100%", gap: "1rem" }}>
+              
+              {/* Vault Section */}
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, borderBottom: "1px solid var(--border-card)", paddingBottom: "1rem" }}>
+                <div className="filetree-header" style={{ padding: "0.25rem 0.5rem", marginBottom: "0.25rem" }}>
+                  <h4 style={{ fontSize: "0.8rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", margin: 0 }}>Vault Explorer</h4>
+                </div>
+                <div className="filetree-body" style={{ flex: 1, overflowY: "auto", paddingRight: "0.25rem" }}>
+                  {dirTree ? (
+                    <FileTree 
+                      node={dirTree}
+                      selectedPath={activeFilePath}
+                      onSelectFile={handleSelectFile}
+                      onCreateFile={handleCreateFile}
+                      onCreateFolder={handleCreateFolder}
+                      onRename={handleRenamePath}
+                      onDelete={handleDeletePath}
+                    />
+                  ) : (
+                    <div style={{ color: "var(--text-muted)", fontSize: "0.85rem", padding: "1rem" }}>
+                      Loading file structure...
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="filetree-body">
-                {dirTree ? (
-                  <FileTree 
-                    node={dirTree}
-                    selectedPath={activeFilePath}
-                    onSelectFile={handleSelectFile}
-                    onCreateFile={handleCreateFile}
-                    onCreateFolder={handleCreateFolder}
-                    onRename={handleRenamePath}
-                    onDelete={handleDeletePath}
-                  />
-                ) : (
-                  <div style={{ color: "var(--text-muted)", fontSize: "0.85rem", padding: "1rem" }}>
-                    Loading file structure...
-                  </div>
-                )}
+
+              {/* Journals Section */}
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
+                <div className="filetree-header" style={{ padding: "0.25rem 0.5rem", marginBottom: "0.25rem", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <h4 style={{ fontSize: "0.8rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", margin: 0 }}>000 - journals</h4>
+                  <button 
+                    onClick={handleOpenTodayJournal}
+                    title="Write Today's Entry"
+                    style={{ background: "none", border: "none", color: "var(--color-violet)", cursor: "pointer", display: "flex", alignItems: "center", padding: 0 }}
+                  >
+                    <BookOpen size={14} />
+                  </button>
+                </div>
+                <div className="filetree-body" style={{ flex: 1, overflowY: "auto", paddingRight: "0.25rem" }}>
+                  {journalTree ? (
+                    <FileTree 
+                      node={journalTree}
+                      selectedPath={activeFilePath}
+                      onSelectFile={handleSelectFile}
+                      readOnly={true} // Safe virtual grouping read-only mode!
+                    />
+                  ) : (
+                    <div style={{ color: "var(--text-muted)", fontSize: "0.85rem", padding: "1rem" }}>
+                      Loading journals...
+                    </div>
+                  )}
+                </div>
               </div>
+
             </div>
 
             {/* CodeMirror Active Canvas Right Column */}

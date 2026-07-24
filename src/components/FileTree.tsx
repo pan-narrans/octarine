@@ -26,10 +26,11 @@ interface FileTreeProps {
   node: FileNode;
   selectedPath: string | null;
   onSelectFile: (path: string) => void;
-  onCreateFile: (parentPath: string, name: string) => Promise<void>;
-  onCreateFolder: (parentPath: string, name: string) => Promise<void>;
-  onRename: (oldPath: string, newPath: string) => Promise<void>;
-  onDelete: (path: string) => Promise<void>;
+  onCreateFile?: (parentPath: string, name: string) => Promise<void>;
+  onCreateFolder?: (parentPath: string, name: string) => Promise<void>;
+  onRename?: (oldPath: string, newPath: string) => Promise<void>;
+  onDelete?: (path: string) => Promise<void>;
+  readOnly?: boolean;
 }
 
 export function FileTree({ 
@@ -39,7 +40,8 @@ export function FileTree({
   onCreateFile, 
   onCreateFolder, 
   onRename, 
-  onDelete 
+  onDelete,
+  readOnly = false
 }: FileTreeProps) {
   const [isOpen, setIsOpen] = useState<boolean>(true);
   
@@ -74,15 +76,15 @@ export function FileTree({
     if (!inputText.trim()) return;
 
     try {
-      if (editMode === "rename") {
+      if (editMode === "rename" && onRename) {
         const parentParts = node.path.split("/");
         parentParts.pop();
         const newPath = [...parentParts, inputText.trim()].join("/");
         await onRename(node.path, newPath);
-      } else if (editMode === "create_file") {
+      } else if (editMode === "create_file" && onCreateFile) {
         await onCreateFile(node.path, inputText.trim());
         setIsOpen(true); // Ensure expanded to show new file
-      } else if (editMode === "create_dir") {
+      } else if (editMode === "create_dir" && onCreateFolder) {
         await onCreateFolder(node.path, inputText.trim());
         setIsOpen(true); // Ensure expanded to show new directory
       }
@@ -97,7 +99,9 @@ export function FileTree({
     const label = node.is_dir ? "folder and all its contents" : "note";
     if (confirm(`Are you sure you want to delete this ${label}?\n${node.name}`)) {
       try {
-        await onDelete(node.path);
+        if (onDelete) {
+          await onDelete(node.path);
+        }
       } catch (err) {
         console.error("Delete failed:", err);
       }
@@ -150,7 +154,7 @@ export function FileTree({
         )}
 
         {/* Action icons shown on hover */}
-        {!editMode && (
+        {!editMode && !readOnly && (
           <div className="file-tree-actions">
             {node.is_dir && (
               <>
@@ -201,6 +205,7 @@ export function FileTree({
               onCreateFolder={onCreateFolder}
               onRename={onRename}
               onDelete={onDelete}
+              readOnly={readOnly}
             />
           ))}
         </div>
