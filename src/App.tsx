@@ -23,6 +23,7 @@ import {
   FileText
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/tauri";
+import { open } from "@tauri-apps/api/shell";
 
 export function App() {
   // Activate live Tauri event listener for real-time background watcher sync
@@ -257,9 +258,11 @@ export function App() {
         <a 
           key={matchIndex}
           href={url} 
-          target="_blank" 
-          rel="noopener noreferrer"
-          onClick={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            open(url).catch(err => console.error("Failed to open URL:", err));
+          }}
           className="task-inline-link"
         >
           {anchor}
