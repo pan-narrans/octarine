@@ -703,14 +703,17 @@ export function App() {
           </div>
           {journalsExpanded && (
             <div style={{ marginTop: "0.5rem", maxHeight: "250px", overflowY: "auto", paddingLeft: "0.15rem" }}>
-              {journalTree ? (
-                <FileTree 
-                  node={journalTree}
-                  selectedPath={activeFilePath}
-                  onSelectFile={handleSelectFile}
-                  readOnly={true}
-                  collapseAllTrigger={collapseAllTrigger}
-                />
+              {journalTree && journalTree.children ? (
+                journalTree.children.map((child, index) => (
+                  <FileTree 
+                    key={`${child.path}-${index}`}
+                    node={child}
+                    selectedPath={activeFilePath}
+                    onSelectFile={handleSelectFile}
+                    readOnly={true}
+                    collapseAllTrigger={collapseAllTrigger}
+                  />
+                ))
               ) : (
                 <div style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>
                   Loading journals...
@@ -733,17 +736,20 @@ export function App() {
           </div>
           {notesExpanded && (
             <div style={{ marginTop: "0.5rem", maxHeight: "250px", overflowY: "auto", paddingLeft: "0.15rem" }}>
-              {dirTree ? (
-                <FileTree 
-                  node={dirTree}
-                  selectedPath={activeFilePath}
-                  onSelectFile={handleSelectFile}
-                  onCreateFile={handleCreateFile}
-                  onCreateFolder={handleCreateFolder}
-                  onRename={handleRenamePath}
-                  onDelete={handleDeletePath}
-                  collapseAllTrigger={collapseAllTrigger}
-                />
+              {dirTree && dirTree.children ? (
+                dirTree.children.map((child, index) => (
+                  <FileTree 
+                    key={`${child.path}-${index}`}
+                    node={child}
+                    selectedPath={activeFilePath}
+                    onSelectFile={handleSelectFile}
+                    onCreateFile={handleCreateFile}
+                    onCreateFolder={handleCreateFolder}
+                    onRename={handleRenamePath}
+                    onDelete={handleDeletePath}
+                    collapseAllTrigger={collapseAllTrigger}
+                  />
+                ))
               ) : (
                 <div style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>
                   Loading notes...
