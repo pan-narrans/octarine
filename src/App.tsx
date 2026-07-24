@@ -76,8 +76,9 @@ export function App() {
   const [isEditingJournal, setIsEditingJournal] = useState<boolean>(false);
   const [journalInput, setJournalInput] = useState<string>("");
   const [savingJournal, setSavingJournal] = useState<boolean>(false);
-  const [notesExpanded, setNotesExpanded] = useState<boolean>(true);
+  const [notesExpanded, setNotesExpanded] = useState<boolean>(false);
   const [journalsExpanded, setJournalsExpanded] = useState<boolean>(false);
+  const [collapseAllTrigger, setCollapseAllTrigger] = useState<number>(0);
 
   // Initial Boot Fetch & Config Query
   useEffect(() => {
@@ -629,7 +630,19 @@ export function App() {
         </h2>
 
         <div className="sidebar-section">
-          <h4>Smart Views</h4>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.25rem" }}>
+            <h4 style={{ margin: 0 }}>Smart Views</h4>
+            <button 
+              onClick={() => {
+                setNotesExpanded(false);
+                setJournalsExpanded(false);
+                setCollapseAllTrigger(prev => prev + 1);
+              }}
+              style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "0.7rem", padding: 0 }}
+            >
+              Collapse All
+            </button>
+          </div>
           <ul className="sidebar-list">
             <li 
               className={`sidebar-item ${activeFilePath === null && selectedSection === "all" ? "active" : ""}`}
@@ -658,39 +671,7 @@ export function App() {
           </ul>
         </div>
 
-        {/* Collapsible Vault Notes Explorer Tree */}
-        <div className="sidebar-section">
-          <div 
-            onClick={() => setNotesExpanded(!notesExpanded)}
-            style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", marginBottom: "0.25rem" }}
-          >
-            <h4 style={{ margin: 0 }}>Notes</h4>
-            <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>
-              {notesExpanded ? "Collapse" : "Expand"}
-            </span>
-          </div>
-          {notesExpanded && (
-            <div style={{ marginTop: "0.5rem", maxHeight: "250px", overflowY: "auto", paddingLeft: "0.15rem" }}>
-              {dirTree ? (
-                <FileTree 
-                  node={dirTree}
-                  selectedPath={activeFilePath}
-                  onSelectFile={handleSelectFile}
-                  onCreateFile={handleCreateFile}
-                  onCreateFolder={handleCreateFolder}
-                  onRename={handleRenamePath}
-                  onDelete={handleDeletePath}
-                />
-              ) : (
-                <div style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>
-                  Loading notes...
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Collapsible Journals Virtual Explorer Tree */}
+        {/* Collapsible Journals Virtual Explorer Tree (Swapped to First!) */}
         <div className="sidebar-section">
           <div 
             style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.25rem" }}
@@ -728,10 +709,44 @@ export function App() {
                   selectedPath={activeFilePath}
                   onSelectFile={handleSelectFile}
                   readOnly={true}
+                  collapseAllTrigger={collapseAllTrigger}
                 />
               ) : (
                 <div style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>
                   Loading journals...
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Collapsible Vault Notes Explorer Tree (Swapped to Second!) */}
+        <div className="sidebar-section">
+          <div 
+            onClick={() => setNotesExpanded(!notesExpanded)}
+            style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", marginBottom: "0.25rem" }}
+          >
+            <h4 style={{ margin: 0 }}>Notes</h4>
+            <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>
+              {notesExpanded ? "Collapse" : "Expand"}
+            </span>
+          </div>
+          {notesExpanded && (
+            <div style={{ marginTop: "0.5rem", maxHeight: "250px", overflowY: "auto", paddingLeft: "0.15rem" }}>
+              {dirTree ? (
+                <FileTree 
+                  node={dirTree}
+                  selectedPath={activeFilePath}
+                  onSelectFile={handleSelectFile}
+                  onCreateFile={handleCreateFile}
+                  onCreateFolder={handleCreateFolder}
+                  onRename={handleRenamePath}
+                  onDelete={handleDeletePath}
+                  collapseAllTrigger={collapseAllTrigger}
+                />
+              ) : (
+                <div style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>
+                  Loading notes...
                 </div>
               )}
             </div>

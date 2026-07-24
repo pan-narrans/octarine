@@ -238,7 +238,8 @@ pub fn build_journal_tree(journal_dir_path: &Path) -> Result<FileNode, String> {
             let month_file_count = day_nodes.len();
             year_file_count += month_file_count;
 
-            day_nodes.sort_by(|a, b| a.name.cmp(&b.name));
+            // Sort days descending (newest first)
+            day_nodes.sort_by(|a, b| b.name.cmp(&a.name));
 
             let month_name = get_month_name(month_num);
             let month_node = FileNode {
@@ -250,6 +251,9 @@ pub fn build_journal_tree(journal_dir_path: &Path) -> Result<FileNode, String> {
             month_nodes.push(month_node);
         }
 
+        // Reverse month nodes to show newest first (e.g. July before June)
+        month_nodes.reverse();
+
         let year_node = FileNode {
             name: format!("{} ({})", year, year_file_count),
             path: format!("000 - journals/{}", year),
@@ -258,6 +262,9 @@ pub fn build_journal_tree(journal_dir_path: &Path) -> Result<FileNode, String> {
         };
         year_nodes.push(year_node);
     }
+
+    // Reverse year nodes to show newest first (e.g. 2026 before 2025)
+    year_nodes.reverse();
 
     let root_node = FileNode {
         name: format!("000 - journals ({})", total_files),
@@ -343,16 +350,16 @@ mod tests {
         assert_eq!(tree.is_dir, true);
 
         let years = tree.children.unwrap();
-        assert_eq!(years.len(), 2); // 2025, 2026
-        assert_eq!(years[0].name, "2025 (1)");
-        assert_eq!(years[1].name, "2026 (2)");
+        assert_eq!(years.len(), 2); // 2026, 2025 (newest first!)
+        assert_eq!(years[0].name, "2026 (2)");
+        assert_eq!(years[1].name, "2025 (1)");
 
-        let months_2026 = years[1].children.as_ref().unwrap();
-        assert_eq!(months_2026.len(), 2); // June, July
-        assert_eq!(months_2026[0].name, "June (1)");
-        assert_eq!(months_2026[1].name, "July (1)");
+        let months_2026 = years[0].children.as_ref().unwrap();
+        assert_eq!(months_2026.len(), 2); // July, June (newest first!)
+        assert_eq!(months_2026[0].name, "July (1)");
+        assert_eq!(months_2026[1].name, "June (1)");
 
-        let days_july = months_2026[1].children.as_ref().unwrap();
+        let days_july = months_2026[0].children.as_ref().unwrap();
         assert_eq!(days_july.len(), 1);
         assert_eq!(days_july[0].name, "2026-07-23");
         assert_eq!(days_july[0].is_dir, false);

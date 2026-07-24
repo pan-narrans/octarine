@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { 
   Folder, 
   FolderOpen, 
@@ -31,6 +31,15 @@ interface FileTreeProps {
   onRename?: (oldPath: string, newPath: string) => Promise<void>;
   onDelete?: (path: string) => Promise<void>;
   readOnly?: boolean;
+  collapseAllTrigger?: number;
+}
+
+export interface FileTreePropsLocal {
+  node: FileNode;
+  selectedPath: string | null;
+  onSelectFile: (path: string) => void;
+  readOnly?: boolean;
+  collapseAllTrigger?: number;
 }
 
 export function FileTree({ 
@@ -41,10 +50,18 @@ export function FileTree({
   onCreateFolder, 
   onRename, 
   onDelete,
-  readOnly = false
+  readOnly = false,
+  collapseAllTrigger = 0
 }: FileTreeProps) {
-  const [isOpen, setIsOpen] = useState<boolean>(true);
+  const [isOpen, setIsOpen] = useState<boolean>(false);
   
+  // Collapse folders on global collapse trigger
+  useEffect(() => {
+    if (collapseAllTrigger > 0 && node.is_dir) {
+      setIsOpen(false);
+    }
+  }, [collapseAllTrigger]);
+
   // Inline input editor state for renaming or adding
   const [editMode, setEditMode] = useState<"rename" | "create_file" | "create_dir" | null>(null);
   const [inputText, setInputText] = useState<string>("");
@@ -206,6 +223,7 @@ export function FileTree({
               onRename={onRename}
               onDelete={onDelete}
               readOnly={readOnly}
+              collapseAllTrigger={collapseAllTrigger}
             />
           ))}
         </div>
