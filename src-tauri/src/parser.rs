@@ -41,6 +41,7 @@ pub struct ParsedTask {
     pub duration_secs: Option<i32>,
     pub recurring: Option<String>,
     pub when_done: Option<String>,
+    pub priority: Option<i32>,
     pub tags: Vec<String>,
     pub contexts: Vec<String>,
     pub parse_errors: Option<String>, // JSON string array of error messages, or None
@@ -310,6 +311,29 @@ pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask
                 val
             });
 
+            // 6. Extract and strip priority
+            let p_re = Regex::new(r"\bp:(?:\x22([^\x22]+)\x22|'([^']+)'|([^\s]+))").unwrap();
+            let priority = p_re.captures(&metadata_text).and_then(|caps| {
+                let val = if let Some(m) = caps.get(1) {
+                    m.as_str().to_string()
+                } else if let Some(m) = caps.get(2) {
+                    m.as_str().to_string()
+                } else {
+                    caps.get(3).unwrap().as_str().to_string()
+                };
+                if let Some(m) = caps.get(0) {
+                    clean_description = clean_description.replace(m.as_str(), "");
+                }
+                
+                match val.parse::<i32>() {
+                    Ok(p_num) => Some(p_num),
+                    Err(_) => {
+                        errors.push(format!("Invalid priority format: '{}' (expected an integer, e.g. p:1)", val));
+                        None
+                    }
+                }
+            });
+
             // Strip project, context, tag markers from the description
             for p in &projects {
                 let pattern = format!(r"\+{}", regex::escape(p));
@@ -354,6 +378,7 @@ pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask
                 duration_secs,
                 recurring,
                 when_done,
+                priority,
                 tags,
                 contexts,
                 parse_errors,

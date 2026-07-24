@@ -908,55 +908,66 @@ export function App() {
           </div>
         ) : (
           <div className="task-list">
-            {filteredTasks.map(task => {
-              const rawLines = task.raw_markdown.split("\n");
-              const hasNotes = rawLines.length > 1;
-              const notes = hasNotes ? rawLines.slice(1).join("\n") : "";
+            {(() => {
+              const sortedTasks = [...filteredTasks].sort((a, b) => {
+                const pA = a.priority === null || a.priority === undefined ? Infinity : a.priority;
+                const pB = b.priority === null || b.priority === undefined ? Infinity : b.priority;
+                return pA - pB;
+              });
 
-              return (
-                <div 
-                  key={task.hash} 
-                  className={`task-card ${task.status}`}
-                  onClick={(e) => handleCheckboxClick(e, task)}
-                >
-                  {/* Status Indicator Checkbox */}
+              return sortedTasks.map(task => {
+                const rawLines = task.raw_markdown.split("\n");
+                const hasNotes = rawLines.length > 1;
+                const notes = hasNotes ? rawLines.slice(1).join("\n") : "";
+
+                return (
                   <div 
-                    className={`checkbox ${task.status}`}
+                    key={task.hash} 
+                    className={`task-card ${task.status}`}
                     onClick={(e) => handleCheckboxClick(e, task)}
                   >
-                    {task.status === "done" && "✓"}
-                    {task.status === "doing" && "•"}
-                    {task.status === "cancelled" && "×"}
-                  </div>
+                    {/* Status Indicator Checkbox */}
+                    <div 
+                      className={`checkbox ${task.status}`}
+                      onClick={(e) => handleCheckboxClick(e, task)}
+                    >
+                      {task.status === "done" && "✓"}
+                      {task.status === "doing" && "•"}
+                      {task.status === "cancelled" && "×"}
+                    </div>
 
-                  {/* Task details */}
-                  <div className="task-details">
-                    <div className="task-desc">{task.description}</div>
-                    
-                    {/* Notes block */}
-                    {hasNotes && (
-                      <div className="task-notes">{notes}</div>
-                    )}
+                    {/* Task details */}
+                    <div className="task-details">
+                      <div className="task-desc">{task.description}</div>
+                      
+                      {/* Notes block */}
+                      {hasNotes && (
+                        <div className="task-notes">{notes}</div>
+                      )}
 
-                    {/* Metadata Badges Container */}
-                    <div className="metadata-container">
-                      {task.project && (
-                        <span className="pill project">+{task.project}</span>
-                      )}
-                      {task.due_date && (
-                        <span className="pill due">due:{task.due_date}</span>
-                      )}
-                      {task.s_start && (
-                        <span className="pill scheduled">s:{task.s_start}</span>
-                      )}
-                      {task.duration_secs && (
-                        <span className="pill scheduled">dur:{task.duration_secs / 60}m</span>
-                      )}
+                      {/* Metadata Badges Container */}
+                      <div className="metadata-container">
+                        {task.priority !== null && task.priority !== undefined && (
+                          <span className={`pill priority p-${task.priority}`}>p:{task.priority}</span>
+                        )}
+                        {task.project && (
+                          <span className="pill project">+{task.project}</span>
+                        )}
+                        {task.due_date && (
+                          <span className="pill due">due:{task.due_date}</span>
+                        )}
+                        {task.s_start && (
+                          <span className="pill scheduled">s:{task.s_start}</span>
+                        )}
+                        {task.duration_secs && (
+                          <span className="pill scheduled">dur:{task.duration_secs / 60}m</span>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              });
+            })()}
           </div>
         )}
       </div>

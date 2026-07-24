@@ -12,6 +12,7 @@ export interface Task {
   recurring: string | null;
   when_done: string | null;
   parse_errors: string | null;
+  priority: number | null;
 }
 
 export interface CustomView {

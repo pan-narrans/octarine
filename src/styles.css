@@ -301,6 +301,24 @@ body {
   color: #ddd6fe;
 }
 
+.pill.priority.p-1 {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #f87171;
+}
+
+.pill.priority.p-2 {
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: #fbbf24;
+}
+
+.pill.priority.p-3 {
+  background: rgba(156, 163, 175, 0.15);
+  border: 1px solid rgba(156, 163, 175, 0.35);
+  color: #d1d5db;
+}
+
 /* Multi-line Notes */
 .task-notes {
   font-size: 0.85rem;

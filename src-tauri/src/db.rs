@@ -40,6 +40,7 @@ pub fn initialize_db<P: AsRef<Path>>(db_path: P) -> Result<Connection> {
             recurring TEXT,
             when_done TEXT,
             parse_errors TEXT,
+            priority INTEGER,
             FOREIGN KEY(file_id) REFERENCES files(id) ON DELETE CASCADE
         );
         CREATE INDEX IF NOT EXISTS idx_tasks_hash ON tasks(hash);
@@ -96,6 +97,17 @@ pub fn initialize_db<P: AsRef<Path>>(db_path: P) -> Result<Connection> {
         );
         CREATE INDEX IF NOT EXISTS idx_merge_reviews_timestamp ON merge_reviews(timestamp);
     ")?;
+
+    // Runtime table schema migration for priority column
+    {
+        let mut stmt = conn.prepare("PRAGMA table_info(tasks)")?;
+        let columns: Vec<String> = stmt.query_map([], |row| row.get(1))?
+            .filter_map(|r| r.ok())
+            .collect();
+        if !columns.contains(&"priority".to_string()) {
+            conn.execute("ALTER TABLE tasks ADD COLUMN priority INTEGER", [])?;
+        }
+    }
 
     Ok(conn)
 }
@@ -175,8 +187,8 @@ pub fn index_single_file(conn: &Connection, path: &str) -> Result<(), Box<dyn st
         tx.execute(
             "INSERT INTO tasks (
                 file_id, line_number, raw_markdown, hash, status, type, description,
-                project, due_date, s_start, duration_secs, recurring, when_done, parse_errors
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+                project, due_date, s_start, duration_secs, recurring, when_done, parse_errors, priority
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
             params![
                 file_id,
                 task.line_number,
@@ -191,7 +203,8 @@ pub fn index_single_file(conn: &Connection, path: &str) -> Result<(), Box<dyn st
                 task.duration_secs,
                 task.recurring,
                 task.when_done,
-                task.parse_errors
+                task.parse_errors,
+                task.priority
             ],
         )?;
         let task_id: i64 = tx.last_insert_rowid();
@@ -434,5 +447,44 @@ mod tests {
         // Execute query and assert that BOTH parent and nested child task are returned!
         let matched_tasks: i64 = conn.query_row(&query_str, [], |r| r.get(0)).unwrap();
         assert_eq!(matched_tasks, 2);
+    }
+
+    #[test]
+    fn test_priority_parsing_and_indexing() {
+        let temp_dir = tempdir().unwrap();
+        let db_path = temp_dir.path().join("cache.db");
+        let vault_dir = temp_dir.path().join("vault");
+        fs::create_dir_all(&vault_dir).unwrap();
+
+        let conn = initialize_db(&db_path).unwrap();
+
+        // Write file with multiple task priority profiles (p:1, p:2, no priority)
+        let file_path = vault_dir.join("tasks.md");
+        fs::write(
+            &file_path,
+            r#"- [ ] High priority task p:1
+- [ ] Medium priority task p:2
+- [ ] Default task without priority
+"#,
+        )
+        .unwrap();
+
+        index_single_file(&conn, file_path.to_str().unwrap()).unwrap();
+
+        // Query the database to assert that priority was indexed correctly
+        let mut stmt = conn.prepare("SELECT description, priority FROM tasks ORDER BY CASE WHEN priority IS NULL THEN 9999 ELSE priority END ASC").unwrap();
+        let results: Vec<(String, Option<i32>)> = stmt.query_map([], |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        }).unwrap().filter_map(|r| r.ok()).collect();
+
+        assert_eq!(results.len(), 3);
+        assert_eq!(results[0].0, "High priority task");
+        assert_eq!(results[0].1, Some(1));
+
+        assert_eq!(results[1].0, "Medium priority task");
+        assert_eq!(results[1].1, Some(2));
+
+        assert_eq!(results[2].0, "Default task without priority");
+        assert_eq!(results[2].1, None);
     }
 }

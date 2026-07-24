@@ -142,6 +142,13 @@ fn compile_term(term: &str) -> Result<String, String> {
             "id IN (SELECT task_id FROM task_tags JOIN tags ON tags.id = task_tags.tag_id WHERE tags.name = '{}')",
             tag.replace('\'', "''")
         ))
+    } else if term.starts_with("p:") {
+        // Priority filter: p:1 -> priority = 1
+        let p_val = &term[2..];
+        match p_val.parse::<i32>() {
+            Ok(p_num) => Ok(format!("priority = {}", p_num)),
+            Err(_) => Err(format!("Invalid priority value in query: '{}' (expected an integer)", p_val)),
+        }
     } else {
         // Metadata comparison term, e.g., due<=today, status=todo, type=event
         let comp_re = get_comp_re();
@@ -216,5 +223,13 @@ mod tests {
         let q = "(status = todo OR status = doing) AND +personal";
         let sql = compile_filter_to_sql(q).unwrap();
         assert_eq!(sql, "(status = 'todo' OR status = 'doing') AND (project = 'personal' OR project LIKE 'personal/%')");
+    }
+
+    #[test]
+    fn test_compile_priority() {
+        let q = "+work AND p:1";
+        let sql = compile_filter_to_sql(q).unwrap();
+        assert!(sql.contains("(project = 'work' OR project LIKE 'work/%')"));
+        assert!(sql.contains("priority = 1"));
     }
 }
