@@ -20,7 +20,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
-  FileText,
   BookOpen
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/tauri";
@@ -65,7 +64,6 @@ export function App() {
   // -----------------------------------------------------------------
   // NEW OBSIDIAN-REPLACEMENT NOTES EDITOR STATE
   // -----------------------------------------------------------------
-  const [isEditorMode, setIsEditorMode] = useState<boolean>(false);
   const [dirTree, setDirTree] = useState<FileNode | null>(null);
   const [activeFilePath, setActiveFilePath] = useState<string | null>(null);
   const [activeFileContent, setActiveFileContent] = useState<string | null>(null);
@@ -78,6 +76,8 @@ export function App() {
   const [isEditingJournal, setIsEditingJournal] = useState<boolean>(false);
   const [journalInput, setJournalInput] = useState<string>("");
   const [savingJournal, setSavingJournal] = useState<boolean>(false);
+  const [notesExpanded, setNotesExpanded] = useState<boolean>(true);
+  const [journalsExpanded, setJournalsExpanded] = useState<boolean>(false);
 
   // Initial Boot Fetch & Config Query
   useEffect(() => {
@@ -189,7 +189,8 @@ export function App() {
   });
 
   const handleSidebarItemClick = (section: string, filterStr?: string) => {
-    setIsEditorMode(false); // Smooth pivot back to Task Dashboard!
+    setActiveFilePath(null);
+    setActiveFileContent(null);
     setSelectedSection(section);
     if (section.startsWith("view:") && filterStr) {
       fetchTasks(filterStr);
@@ -255,7 +256,6 @@ export function App() {
       await fetchJournalTree();
       setActiveFilePath(filePath);
       setActiveFileContent(content);
-      setIsEditorMode(true); // Toggle to Notes Editor workspace!
     } catch (e) {
       console.error("Failed to open today's journal note:", e);
       alert(`Error opening journal: ${e}`);
@@ -405,7 +405,7 @@ export function App() {
     return (
       <div key={node.fullPath} style={{ display: "flex", flexDirection: "column" }}>
         <li 
-          className={`sidebar-item ${!isEditorMode && isSelected ? "active" : ""}`}
+          className={`sidebar-item ${activeFilePath === null && isSelected ? "active" : ""}`}
           onClick={() => handleSidebarItemClick(`proj:${node.fullPath}`)}
           style={{ paddingLeft: `${Math.min(level * 10 + 8, 48)}px`, fontSize: "0.82rem" }}
         >
@@ -610,9 +610,8 @@ export function App() {
       setIsEditingVault(false);
       await fetchTasks();
       await fetchCustomViews();
-      if (isEditorMode) {
-        await fetchDirTree();
-      }
+      await fetchDirTree();
+      await fetchJournalTree();
     } catch (e) {
       console.error("Failed to update active vault path:", e);
       alert(`Failed to save: ${e}`);
@@ -633,49 +632,110 @@ export function App() {
           <h4>Smart Views</h4>
           <ul className="sidebar-list">
             <li 
-              className={`sidebar-item ${!isEditorMode && selectedSection === "all" ? "active" : ""}`}
+              className={`sidebar-item ${activeFilePath === null && selectedSection === "all" ? "active" : ""}`}
               onClick={() => handleSidebarItemClick("all")}
             >
               <Inbox size={16} /> All Tasks
             </li>
             <li 
-              className={`sidebar-item ${!isEditorMode && selectedSection === "todo" ? "active" : ""}`}
+              className={`sidebar-item ${activeFilePath === null && selectedSection === "todo" ? "active" : ""}`}
               onClick={() => handleSidebarItemClick("todo")}
             >
               <CheckCircle2 size={16} color="#9ca3af" /> Not Started
             </li>
             <li 
-              className={`sidebar-item ${!isEditorMode && selectedSection === "doing" ? "active" : ""}`}
+              className={`sidebar-item ${activeFilePath === null && selectedSection === "doing" ? "active" : ""}`}
               onClick={() => handleSidebarItemClick("doing")}
             >
               <Loader2 size={16} className="animate-spin" color="#a78bfa" /> In Progress
             </li>
             <li 
-              className={`sidebar-item ${!isEditorMode && selectedSection === "events" ? "active" : ""}`}
+              className={`sidebar-item ${activeFilePath === null && selectedSection === "events" ? "active" : ""}`}
               onClick={() => handleSidebarItemClick("events")}
             >
               <Calendar size={16} color="#818cf8" /> Schedule Events
             </li>
-
-            {/* Obsidian-Replacement Plaintext Note Editor Navigation */}
-            <li 
-              className={`sidebar-item ${isEditorMode && activeFilePath && activeFilePath.startsWith(activeJournalPath) ? "" : isEditorMode ? "active" : ""}`}
-              onClick={() => {
-                setIsEditorMode(true);
-                fetchDirTree();
-              }}
-            >
-              <FileText size={16} color="#34d399" /> Plaintext Vault Notes
-            </li>
-
-            {/* Open Today's Journal Entry Link */}
-            <li 
-              className={`sidebar-item ${isEditorMode && activeFilePath && activeFilePath.startsWith(activeJournalPath) ? "active" : ""}`}
-              onClick={handleOpenTodayJournal}
-            >
-              <BookOpen size={16} color="#fbbf26" /> Daily Journal Note
-            </li>
           </ul>
+        </div>
+
+        {/* Collapsible Vault Notes Explorer Tree */}
+        <div className="sidebar-section">
+          <div 
+            onClick={() => setNotesExpanded(!notesExpanded)}
+            style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", marginBottom: "0.25rem" }}
+          >
+            <h4 style={{ margin: 0 }}>Notes</h4>
+            <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>
+              {notesExpanded ? "Collapse" : "Expand"}
+            </span>
+          </div>
+          {notesExpanded && (
+            <div style={{ marginTop: "0.5rem", maxHeight: "250px", overflowY: "auto", paddingLeft: "0.15rem" }}>
+              {dirTree ? (
+                <FileTree 
+                  node={dirTree}
+                  selectedPath={activeFilePath}
+                  onSelectFile={handleSelectFile}
+                  onCreateFile={handleCreateFile}
+                  onCreateFolder={handleCreateFolder}
+                  onRename={handleRenamePath}
+                  onDelete={handleDeletePath}
+                />
+              ) : (
+                <div style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>
+                  Loading notes...
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Collapsible Journals Virtual Explorer Tree */}
+        <div className="sidebar-section">
+          <div 
+            style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.25rem" }}
+          >
+            <h4 
+              onClick={() => setJournalsExpanded(!journalsExpanded)}
+              style={{ margin: 0, cursor: "pointer", flexGrow: 1 }}
+            >
+              Journals
+            </h4>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleOpenTodayJournal();
+                }}
+                title="Write Today's Entry"
+                style={{ background: "none", border: "none", color: "var(--color-violet)", cursor: "pointer", display: "flex", alignItems: "center", padding: 0 }}
+              >
+                <BookOpen size={14} />
+              </button>
+              <span 
+                onClick={() => setJournalsExpanded(!journalsExpanded)}
+                style={{ fontSize: "0.7rem", color: "var(--text-muted)", cursor: "pointer" }}
+              >
+                {journalsExpanded ? "Collapse" : "Expand"}
+              </span>
+            </div>
+          </div>
+          {journalsExpanded && (
+            <div style={{ marginTop: "0.5rem", maxHeight: "250px", overflowY: "auto", paddingLeft: "0.15rem" }}>
+              {journalTree ? (
+                <FileTree 
+                  node={journalTree}
+                  selectedPath={activeFilePath}
+                  onSelectFile={handleSelectFile}
+                  readOnly={true}
+                />
+              ) : (
+                <div style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>
+                  Loading journals...
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {customViews.length > 0 && (
@@ -690,7 +750,7 @@ export function App() {
                 return (
                   <li 
                     key={`${view.title}-${view.line_number}`}
-                    className={`sidebar-item ${!isEditorMode && selectedSection === `view:${view.title}` ? "active" : ""}`}
+                    className={`sidebar-item ${activeFilePath === null && selectedSection === `view:${view.title}` ? "active" : ""}`}
                     onClick={() => handleSidebarItemClick(`view:${view.title}`, filterStr)}
                   >
                     <Layers size={16} /> {view.title}
@@ -719,7 +779,7 @@ export function App() {
               {contexts.map(c => (
                 <li 
                   key={c}
-                  className={`sidebar-item ${!isEditorMode && selectedSection === `ctx:${c}` ? "active" : ""}`}
+                  className={`sidebar-item ${activeFilePath === null && selectedSection === `ctx:${c}` ? "active" : ""}`}
                   onClick={() => handleSidebarItemClick(`ctx:${c}`)}
                 >
                   <Tag size={16} /> @{c}
@@ -736,7 +796,7 @@ export function App() {
               {tags.map(t => (
                 <li 
                   key={t}
-                  className={`sidebar-item ${!isEditorMode && selectedSection === `tag:${t}` ? "active" : ""}`}
+                  className={`sidebar-item ${activeFilePath === null && selectedSection === `tag:${t}` ? "active" : ""}`}
                   onClick={() => handleSidebarItemClick(`tag:${t}`)}
                 >
                   <Hash size={16} /> #{t}
@@ -870,22 +930,22 @@ export function App() {
         <div className="main-header">
           <div className="main-title">
             <h1>
-              {isEditorMode && "Plaintext Vault Notes"}
-              {!isEditorMode && selectedSection === "all" && "Inbox Dashboard"}
-              {!isEditorMode && selectedSection === "todo" && "Inbox: Todo"}
-              {!isEditorMode && selectedSection === "doing" && "Active Sprints"}
-              {!isEditorMode && selectedSection === "events" && "Calendar Timeline"}
-              {!isEditorMode && selectedSection.startsWith("proj:") && `Project: ${selectedSection.slice(5)}`}
-              {!isEditorMode && selectedSection.startsWith("ctx:") && `Context: @${selectedSection.slice(4)}`}
-              {!isEditorMode && selectedSection.startsWith("tag:") && `Tag: #${selectedSection.slice(4)}`}
-              {!isEditorMode && selectedSection.startsWith("view:") && `Query: ${selectedSection.slice(5)}`}
+              {activeFilePath !== null && "Plaintext Note Editor"}
+              {activeFilePath === null && selectedSection === "all" && "Inbox Dashboard"}
+              {activeFilePath === null && selectedSection === "todo" && "Inbox: Todo"}
+              {activeFilePath === null && selectedSection === "doing" && "Active Sprints"}
+              {activeFilePath === null && selectedSection === "events" && "Calendar Timeline"}
+              {activeFilePath === null && selectedSection.startsWith("proj:") && `Project: ${selectedSection.slice(5)}`}
+              {activeFilePath === null && selectedSection.startsWith("ctx:") && `Context: @${selectedSection.slice(4)}`}
+              {activeFilePath === null && selectedSection.startsWith("tag:") && `Tag: #${selectedSection.slice(4)}`}
+              {activeFilePath === null && selectedSection.startsWith("view:") && `Query: ${selectedSection.slice(5)}`}
             </h1>
-            <p>{isEditorMode ? "Direct Markdown Editor Workspace" : "Sub-millisecond plaintext organization"}</p>
+            <p>{activeFilePath !== null ? "Direct Markdown Editor Workspace" : "Sub-millisecond plaintext organization"}</p>
           </div>
         </div>
 
         {/* Search Inputs (only displayed in dashboard mode) */}
-        {!isEditorMode && (
+        {activeFilePath === null && (
           <div className="search-container">
             <Search size={18} color="#6b7280" />
             <input 
@@ -906,86 +966,18 @@ export function App() {
         )}
 
         {/* Render Notes Editor Mode or Normal Task Dashboard Content */}
-        {isEditorMode ? (
-          <div className="editor-workspace-container">
-            {/* Folder Explorer Column (Notes & Journals Split-Screen) */}
-            <div className="editor-filetree-column" style={{ display: "flex", flexDirection: "column", height: "100%", gap: "1rem" }}>
-              
-              {/* Vault Section */}
-              <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, borderBottom: "1px solid var(--border-card)", paddingBottom: "1rem" }}>
-                <div className="filetree-header" style={{ padding: "0.25rem 0.5rem", marginBottom: "0.25rem" }}>
-                  <h4 style={{ fontSize: "0.8rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", margin: 0 }}>Vault Explorer</h4>
-                </div>
-                <div className="filetree-body" style={{ flex: 1, overflowY: "auto", paddingRight: "0.25rem" }}>
-                  {dirTree ? (
-                    <FileTree 
-                      node={dirTree}
-                      selectedPath={activeFilePath}
-                      onSelectFile={handleSelectFile}
-                      onCreateFile={handleCreateFile}
-                      onCreateFolder={handleCreateFolder}
-                      onRename={handleRenamePath}
-                      onDelete={handleDeletePath}
-                    />
-                  ) : (
-                    <div style={{ color: "var(--text-muted)", fontSize: "0.85rem", padding: "1rem" }}>
-                      Loading file structure...
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Journals Section */}
-              <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
-                <div className="filetree-header" style={{ padding: "0.25rem 0.5rem", marginBottom: "0.25rem", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <h4 style={{ fontSize: "0.8rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", margin: 0 }}>000 - journals</h4>
-                  <button 
-                    onClick={handleOpenTodayJournal}
-                    title="Write Today's Entry"
-                    style={{ background: "none", border: "none", color: "var(--color-violet)", cursor: "pointer", display: "flex", alignItems: "center", padding: 0 }}
-                  >
-                    <BookOpen size={14} />
-                  </button>
-                </div>
-                <div className="filetree-body" style={{ flex: 1, overflowY: "auto", paddingRight: "0.25rem" }}>
-                  {journalTree ? (
-                    <FileTree 
-                      node={journalTree}
-                      selectedPath={activeFilePath}
-                      onSelectFile={handleSelectFile}
-                      readOnly={true} // Safe virtual grouping read-only mode!
-                    />
-                  ) : (
-                    <div style={{ color: "var(--text-muted)", fontSize: "0.85rem", padding: "1rem" }}>
-                      Loading journals...
-                    </div>
-                  )}
-                </div>
-              </div>
-
-            </div>
-
-            {/* CodeMirror Active Canvas Right Column */}
-            <div className="editor-canvas-column">
-              {activeFilePath && activeFileContent !== null ? (
-                <MarkdownEditor 
-                  key={activeFilePath} // Remount when file path changes
-                  filePath={activeFilePath}
-                  initialContent={activeFileContent}
-                  onSave={handleSaveFileContent}
-                  onClose={() => {
-                    setActiveFilePath(null);
-                    setActiveFileContent(null);
-                  }}
-                />
-              ) : (
-                <div className="editor-empty-state">
-                  <FileText size={48} color="var(--border-card)" />
-                  <h3>No Note Selected</h3>
-                  <p>Select a markdown note from the explorer tree or hover folders to create new files.</p>
-                </div>
-              )}
-            </div>
+        {activeFilePath !== null && activeFileContent !== null ? (
+          <div className="editor-canvas-column" style={{ flex: 1, display: "flex", flexDirection: "column", height: "100%" }}>
+            <MarkdownEditor 
+              key={activeFilePath} // Remount when file path changes
+              filePath={activeFilePath}
+              initialContent={activeFileContent}
+              onSave={handleSaveFileContent}
+              onClose={() => {
+                setActiveFilePath(null);
+                setActiveFileContent(null);
+              }}
+            />
           </div>
         ) : !loading && selectedSection === "events" ? (
           <div style={{ display: "flex", flexDirection: "column" }}>
