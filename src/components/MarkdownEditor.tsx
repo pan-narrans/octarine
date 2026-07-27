@@ -4,6 +4,7 @@ import { EditorView, keymap, highlightActiveLine, lineNumbers } from "@codemirro
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
 import { oneDark } from "@codemirror/theme-one-dark";
+import { autocompletion, CompletionContext, CompletionResult } from "@codemirror/autocomplete";
 import { Save, X, Check, Loader2 } from "lucide-react";
 
 interface MarkdownEditorProps {
@@ -11,9 +12,18 @@ interface MarkdownEditorProps {
   initialContent: string;
   onSave: (content: string) => Promise<void>;
   onClose: () => void;
+  projects?: string[];
+  contexts?: string[];
 }
 
-export function MarkdownEditor({ filePath, initialContent, onSave, onClose }: MarkdownEditorProps) {
+export function MarkdownEditor({ 
+  filePath, 
+  initialContent, 
+  onSave, 
+  onClose,
+  projects = [],
+  contexts = []
+}: MarkdownEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   
@@ -23,6 +33,96 @@ export function MarkdownEditor({ filePath, initialContent, onSave, onClose }: Ma
 
   // Parse note title from the full filePath
   const fileName = filePath.split("/").pop() || "Untitled Note";
+
+  const getResolvedDateString = (keyword: string): string => {
+    const today = new Date();
+    if (keyword === "today") {
+      const yyyy = today.getFullYear();
+      const mm = String(today.getMonth() + 1).padStart(2, '0');
+      const dd = String(today.getDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
+    }
+    if (keyword === "tomorrow") {
+      const tomorrow = new Date(today);
+      tomorrow.setDate(today.getDate() + 1);
+      const yyyy = tomorrow.getFullYear();
+      const mm = String(tomorrow.getMonth() + 1).padStart(2, '0');
+      const dd = String(tomorrow.getDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
+    }
+    if (keyword === "monday") {
+      const resultDate = new Date(today);
+      const currentDay = today.getDay();
+      const daysToAdd = currentDay === 1 ? 7 : (1 - currentDay + 7) % 7;
+      resultDate.setDate(today.getDate() + (daysToAdd === 0 ? 7 : daysToAdd));
+      const yyyy = resultDate.getFullYear();
+      const mm = String(resultDate.getMonth() + 1).padStart(2, '0');
+      const dd = String(resultDate.getDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
+    }
+    return "";
+  };
+
+  const customCompletionSource = (context: CompletionContext): CompletionResult | null => {
+    // 1. Projects trigger: +work
+    const projMatch = context.matchBefore(/\+[\w\-/]*/);
+    if (projMatch) {
+      const typed = projMatch.text.slice(1).toLowerCase();
+      const options = projects
+        .filter(p => p.toLowerCase().includes(typed))
+        .map(p => ({
+          label: `+${p}`,
+          type: "keyword",
+          detail: "project"
+        }));
+      return {
+        from: projMatch.from,
+        options
+      };
+    }
+
+    // 2. Contexts trigger: @phone
+    const ctxMatch = context.matchBefore(/@\w*/);
+    if (ctxMatch) {
+      const typed = ctxMatch.text.slice(1).toLowerCase();
+      const options = contexts
+        .filter(c => c.toLowerCase().includes(typed))
+        .map(c => ({
+          label: `@${c}`,
+          type: "keyword",
+          detail: "context"
+        }));
+      return {
+        from: ctxMatch.from,
+        options
+      };
+    }
+
+    // 3. Date helpers triggers: due:today or s:tomorrow
+    const dateMatch = context.matchBefore(/(due:|s:)[\w]*/);
+    if (dateMatch) {
+      const prefix = dateMatch.text.includes("due:") ? "due:" : "s:";
+      const typed = dateMatch.text.slice(prefix.length).toLowerCase();
+      const helpers = [
+        { name: "today", date: getResolvedDateString("today") },
+        { name: "tomorrow", date: getResolvedDateString("tomorrow") },
+        { name: "monday", date: getResolvedDateString("monday") }
+      ];
+      const options = helpers
+        .filter(h => h.name.includes(typed))
+        .map(h => ({
+          label: `${prefix}${h.date}`,
+          displayLabel: `${prefix}${h.name} (${h.date})`,
+          type: "variable",
+          detail: "date helper"
+        }));
+      return {
+        from: dateMatch.from,
+        options
+      };
+    }
+    return null;
+  };
 
   const triggerSave = async () => {
     if (!viewRef.current) return;
@@ -74,6 +174,7 @@ export function MarkdownEditor({ filePath, initialContent, onSave, onClose }: Ma
         history(),
         markdown(),
         oneDark,
+        autocompletion({ override: [customCompletionSource] }),
         changeListener,
         saveKeymap,
         keymap.of([...defaultKeymap, ...historyKeymap]),

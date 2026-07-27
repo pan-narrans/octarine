@@ -1008,6 +1008,8 @@ export function App() {
                 setActiveFilePath(null);
                 setActiveFileContent(null);
               }}
+              projects={projects}
+              contexts={contexts}
             />
           </div>
         ) : !loading && selectedSection === "events" ? (
