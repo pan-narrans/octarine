@@ -114,6 +114,20 @@ fn update_task_status(
 }
 
 #[tauri::command]
+fn update_task_markdown(
+    state: State<'_, AppState>,
+    file_path: String,
+    line_number: usize,
+    hash: String,
+    new_raw_markdown: String,
+) -> Result<(), String> {
+    let conn = state.db.lock().unwrap();
+    octarine::writer::update_task_markdown_in_file(&conn, &file_path, line_number, &hash, &new_raw_markdown)?;
+    index_single_file(&conn, &file_path).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 fn get_vault_config(state: State<'_, AppState>) -> Result<String, String> {
     let vault_dir = state.vault_dir.lock().unwrap();
     Ok(vault_dir.clone())
@@ -384,6 +398,7 @@ fn main() {
         read_journal_tree,
         update_event_schedule,
         update_task_status,
+        update_task_markdown,
         read_dir_tree,
         create_file,
         create_directory,

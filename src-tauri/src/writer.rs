@@ -270,6 +270,58 @@ pub fn update_event_schedule_in_file(
     Ok(())
 }
 
+pub fn update_task_markdown_in_file(
+    db_conn: &Connection,
+    file_path: &str,
+    original_line_number: usize,
+    original_content_hash: &str,
+    new_raw_markdown: &str,
+) -> Result<(), String> {
+    // 1. Read file content on disk
+    let file_content = fs::read_to_string(file_path)
+        .map_err(|e| format!("Failed to read file: {}", e))?;
+    
+    let mut lines: Vec<String> = file_content.split('\n').map(|s| s.to_string()).collect();
+    
+    // 2. Resolve original raw markdown from hash
+    let mut stmt = db_conn
+        .prepare("SELECT raw_markdown FROM tasks WHERE hash = ?")
+        .map_err(|e| e.to_string())?;
+    let original_raw_markdown: String = stmt
+        .query_row(params![original_content_hash], |r| r.get(0))
+        .map_err(|_| "Task hash not found in database cache. Please reload.".to_string())?;
+
+    // 3. Locate and replace
+    let mut replaced = false;
+    let index_0 = original_line_number.saturating_sub(1);
+    
+    // Direct match check
+    if index_0 < lines.len() && lines[index_0].trim() == original_raw_markdown.trim() {
+        lines[index_0] = new_raw_markdown.to_string();
+        replaced = true;
+    } else {
+        // Search surrounding lines
+        for line in lines.iter_mut() {
+            if line.trim() == original_raw_markdown.trim() {
+                *line = new_raw_markdown.to_string();
+                replaced = true;
+                break;
+            }
+        }
+    }
+
+    if !replaced {
+        return Err("Failed to find original task line in file. It may have been edited externally.".to_string());
+    }
+
+    // 4. Write back to disk
+    let updated_content = lines.join("\n");
+    fs::write(file_path, updated_content)
+        .map_err(|e| format!("Failed to write file: {}", e))?;
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -374,5 +426,45 @@ mod tests {
         // Verify the file updated correctly on disk
         let content_after = fs::read_to_string(&file_path).unwrap();
         assert!(content_after.contains("- [<] Project kickoff meeting s:2026-07-23 11:30 dur:90m"));
+    }
+
+    #[test]
+    fn test_update_task_markdown_in_file() {
+        let temp_dir = tempdir().unwrap();
+        let db_path = temp_dir.path().join("cache.db");
+        let file_path = temp_dir.path().join("tasks.md");
+
+        // Write initial file
+        fs::write(
+            &file_path,
+            r#"# My Tasks
+- [ ] Implement inline editing @db
+"#,
+        )
+        .unwrap();
+
+        let conn = initialize_db(&db_path).unwrap();
+        index_single_file(&conn, file_path.to_str().unwrap()).unwrap();
+
+        let hash: String = conn
+            .query_row(
+                "SELECT hash FROM tasks WHERE description = 'Implement inline editing'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+
+        // Update full task raw markdown line
+        update_task_markdown_in_file(
+            &conn,
+            file_path.to_str().unwrap(),
+            2,
+            &hash,
+            "- [ ] Implement inline editing @db p:1 due:2026-07-24",
+        )
+        .unwrap();
+
+        let content_after = fs::read_to_string(&file_path).unwrap();
+        assert!(content_after.contains("- [ ] Implement inline editing @db p:1 due:2026-07-24"));
     }
 }

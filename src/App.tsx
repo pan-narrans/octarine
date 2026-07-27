@@ -78,6 +78,8 @@ export function App() {
   const [savingJournal, setSavingJournal] = useState<boolean>(false);
   const [notesExpanded, setNotesExpanded] = useState<boolean>(false);
   const [journalsExpanded, setJournalsExpanded] = useState<boolean>(false);
+  const [editingTaskHash, setEditingTaskHash] = useState<string | null>(null);
+  const [editingTaskValue, setEditingTaskValue] = useState<string>("");
 
   // Initial Boot Fetch & Config Query
   useEffect(() => {
@@ -153,6 +155,29 @@ export function App() {
       task.hash,
       nextStatus
     );
+  };
+
+  const handleSaveTaskInlineEdit = async (task: Task) => {
+    if (!editingTaskHash) return;
+    const trimmed = editingTaskValue.trim();
+    if (trimmed === task.raw_markdown.trim()) {
+      setEditingTaskHash(null);
+      return;
+    }
+
+    try {
+      await invoke("update_task_markdown", {
+        filePath: (task as any).file_path || "",
+        lineNumber: task.line_number,
+        hash: task.hash,
+        newRawMarkdown: trimmed
+      });
+      setEditingTaskHash(null);
+      await fetchTasks();
+    } catch (e) {
+      console.error("Failed to update task inline:", e);
+      alert(`Error saving task: ${e}`);
+    }
   };
 
   // In-memory filter logic for selected sidebar items and search query
@@ -1210,32 +1235,57 @@ export function App() {
                       const rawLines = task.raw_markdown.split("\n");
                       const hasNotes = rawLines.length > 1;
                       const notes = hasNotes ? rawLines.slice(1).join("\n") : "";
+                      const isEditingThisTask = editingTaskHash === task.hash;
 
                       return (
                         <div 
                           key={task.hash} 
-                          className={`task-card ${task.status}`}
-                          onClick={(e) => handleCheckboxClick(e, task)}
+                          className={`task-card ${task.status} ${isEditingThisTask ? "editing" : ""}`}
+                          onClick={() => {
+                            if (!isEditingThisTask) {
+                              setEditingTaskHash(task.hash);
+                              setEditingTaskValue(task.raw_markdown);
+                            }
+                          }}
                         >
-                          <div 
-                            className={`checkbox ${task.status}`}
-                            onClick={(e) => handleCheckboxClick(e, task)}
-                          >
-                            {task.status === "done" && "✓"}
-                            {task.status === "doing" && "•"}
-                            {task.status === "cancelled" && "×"}
-                          </div>
-                          <div className="task-details">
-                            <div className="task-desc">{renderMarkdownDescription(task.description)}</div>
-                            {hasNotes && <div className="task-notes">{notes}</div>}
-                            <div className="metadata-container">
-                              {task.priority !== null && task.priority !== undefined && (
-                                <span className={`pill priority p-${task.priority}`}>p:{task.priority}</span>
-                              )}
-                              {task.project && <span className="pill project">+{task.project}</span>}
-                              {task.due_date && <span className="pill due">due:{task.due_date}</span>}
-                            </div>
-                          </div>
+                          {isEditingThisTask ? (
+                            <textarea
+                              className="task-inline-editor"
+                              value={editingTaskValue}
+                              onChange={(e) => setEditingTaskValue(e.target.value)}
+                              onBlur={() => handleSaveTaskInlineEdit(task)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Escape") setEditingTaskHash(null);
+                              }}
+                              onClick={(e) => e.stopPropagation()} // Ignore card click triggers
+                              autoFocus
+                            />
+                          ) : (
+                            <>
+                              <div 
+                                className={`checkbox ${task.status}`}
+                                onClick={(e) => {
+                                  e.stopPropagation(); // Stop toggling editor on click!
+                                  handleCheckboxClick(e, task);
+                                }}
+                              >
+                                {task.status === "done" && "✓"}
+                                {task.status === "doing" && "•"}
+                                {task.status === "cancelled" && "×"}
+                              </div>
+                              <div className="task-details">
+                                <div className="task-desc">{renderMarkdownDescription(task.description)}</div>
+                                {hasNotes && <div className="task-notes">{notes}</div>}
+                                <div className="metadata-container">
+                                  {task.priority !== null && task.priority !== undefined && (
+                                    <span className={`pill priority p-${task.priority}`}>p:{task.priority}</span>
+                                  )}
+                                  {task.project && <span className="pill project">+{task.project}</span>}
+                                  {task.due_date && <span className="pill due">due:{task.due_date}</span>}
+                                </div>
+                              </div>
+                            </>
+                          )}
                         </div>
                       );
                     })}
@@ -1263,51 +1313,76 @@ export function App() {
                 const rawLines = task.raw_markdown.split("\n");
                 const hasNotes = rawLines.length > 1;
                 const notes = hasNotes ? rawLines.slice(1).join("\n") : "";
+                const isEditingThisTask = editingTaskHash === task.hash;
 
                 return (
                   <div 
                     key={task.hash} 
-                    className={`task-card ${task.status}`}
-                    onClick={(e) => handleCheckboxClick(e, task)}
+                    className={`task-card ${task.status} ${isEditingThisTask ? "editing" : ""}`}
+                    onClick={() => {
+                      if (!isEditingThisTask) {
+                        setEditingTaskHash(task.hash);
+                        setEditingTaskValue(task.raw_markdown);
+                      }
+                    }}
                   >
-                    {/* Status Indicator Checkbox */}
-                    <div 
-                      className={`checkbox ${task.status}`}
-                      onClick={(e) => handleCheckboxClick(e, task)}
-                    >
-                      {task.status === "done" && "✓"}
-                      {task.status === "doing" && "•"}
-                      {task.status === "cancelled" && "×"}
-                    </div>
+                    {isEditingThisTask ? (
+                      <textarea
+                        className="task-inline-editor"
+                        value={editingTaskValue}
+                        onChange={(e) => setEditingTaskValue(e.target.value)}
+                        onBlur={() => handleSaveTaskInlineEdit(task)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Escape") setEditingTaskHash(null);
+                        }}
+                        onClick={(e) => e.stopPropagation()} // Ignore card click triggers
+                        autoFocus
+                      />
+                    ) : (
+                      <>
+                        {/* Status Indicator Checkbox */}
+                        <div 
+                          className={`checkbox ${task.status}`}
+                          onClick={(e) => {
+                            e.stopPropagation(); // Stop toggling editor on click!
+                            handleCheckboxClick(e, task);
+                          }}
+                        >
+                          {task.status === "done" && "✓"}
+                          {task.status === "doing" && "•"}
+                          {task.status === "cancelled" && "×"}
+                        </div>
 
-                    {/* Task details */}
-                    <div className="task-details">
-                      <div className="task-desc">{renderMarkdownDescription(task.description)}</div>
-                      
-                      {/* Notes block */}
-                      {hasNotes && (
-                        <div className="task-notes">{notes}</div>
-                      )}
+                        {/* Task details */}
+                        <div className="task-details">
+                          <div className="task-desc">{renderMarkdownDescription(task.description)}</div>
+                          
+                          {/* Notes block */}
+                          {hasNotes && (
+                            <div className="task-notes">{notes}</div>
+                          )}
 
-                      {/* Metadata Badges Container */}
-                      <div className="metadata-container">
-                        {task.priority !== null && task.priority !== undefined && (
-                          <span className={`pill priority p-${task.priority}`}>p:{task.priority}</span>
-                        )}
-                        {task.project && (
-                          <span className="pill project">+{task.project}</span>
-                        )}
-                        {task.due_date && (
-                          <span className="pill due">due:{task.due_date}</span>
-                        )}
-                        {task.s_start && (
-                          <span className="pill scheduled">s:{task.s_start}</span>
-                        )}
-                        {task.duration_secs && (
-                          <span className="pill scheduled">dur:{task.duration_secs / 60}m</span>
-                        )}
-                      </div>
-                    </div>
+                          {/* Metadata Badges Container */}
+                          <div className="metadata-container">
+                            {task.priority !== null && task.priority !== undefined && (
+                              <span className={`pill priority p-${task.priority}`}>p:{task.priority}</span>
+                            )}
+                            {task.project && (
+                              <span className="pill project">+{task.project}</span>
+                            )}
+                            {task.due_date && (
+                              <span className="pill due">due:{task.due_date}</span>
+                            )}
+                            {task.s_start && (
+                              <span className="pill scheduled">s:{task.s_start}</span>
+                            )}
+                            {task.duration_secs && (
+                              <span className="pill scheduled">dur:{task.duration_secs / 60}m</span>
+                            )}
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
                 );
               });
