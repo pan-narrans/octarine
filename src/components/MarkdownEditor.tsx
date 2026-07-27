@@ -34,33 +34,114 @@ export function MarkdownEditor({
   // Parse note title from the full filePath
   const fileName = filePath.split("/").pop() || "Untitled Note";
 
-  const getResolvedDateString = (keyword: string): string => {
+  const getPredictiveDates = (typed: string): Array<{ label: string, displayLabel: string, date: string }> => {
+    const clean = typed.trim().toLowerCase();
     const today = new Date();
-    if (keyword === "today") {
-      const yyyy = today.getFullYear();
-      const mm = String(today.getMonth() + 1).padStart(2, '0');
-      const dd = String(today.getDate()).padStart(2, '0');
+
+    const formatDate = (d: Date): string => {
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
       return `${yyyy}-${mm}-${dd}`;
-    }
-    if (keyword === "tomorrow") {
-      const tomorrow = new Date(today);
-      tomorrow.setDate(today.getDate() + 1);
-      const yyyy = tomorrow.getFullYear();
-      const mm = String(tomorrow.getMonth() + 1).padStart(2, '0');
-      const dd = String(tomorrow.getDate()).padStart(2, '0');
-      return `${yyyy}-${mm}-${dd}`;
-    }
-    if (keyword === "monday") {
-      const resultDate = new Date(today);
+    };
+
+    if (!clean) {
+      // Suggest defaults if they just typed s: or due: with nothing else
+      const dTomorrow = new Date(today);
+      dTomorrow.setDate(today.getDate() + 1);
+
+      const dMonday = new Date(today);
       const currentDay = today.getDay();
-      const daysToAdd = currentDay === 1 ? 7 : (1 - currentDay + 7) % 7;
-      resultDate.setDate(today.getDate() + (daysToAdd === 0 ? 7 : daysToAdd));
-      const yyyy = resultDate.getFullYear();
-      const mm = String(resultDate.getMonth() + 1).padStart(2, '0');
-      const dd = String(resultDate.getDate()).padStart(2, '0');
-      return `${yyyy}-${mm}-${dd}`;
+      let daysToAdd = (1 - currentDay + 7) % 7;
+      if (daysToAdd === 0) daysToAdd = 7;
+      dMonday.setDate(today.getDate() + daysToAdd);
+
+      return [
+        { label: "today", displayLabel: `today (${formatDate(today)})`, date: formatDate(today) },
+        { label: "tomorrow", displayLabel: `tomorrow (${formatDate(dTomorrow)})`, date: formatDate(dTomorrow) },
+        { label: "monday", displayLabel: `monday (${formatDate(dMonday)})`, date: formatDate(dMonday) }
+      ];
     }
-    return "";
+
+    const results: Array<{ label: string, displayLabel: string, date: string }> = [];
+
+    // 1. Direct keywords
+    if ("today".startsWith(clean)) {
+      results.push({ label: "today", displayLabel: `today (${formatDate(today)})`, date: formatDate(today) });
+    }
+    if ("tomorrow".startsWith(clean) || "tmr".startsWith(clean)) {
+      const d = new Date(today);
+      d.setDate(today.getDate() + 1);
+      results.push({ label: "tomorrow", displayLabel: `tomorrow (${formatDate(d)})`, date: formatDate(d) });
+    }
+    if ("yesterday".startsWith(clean)) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - 1);
+      results.push({ label: "yesterday", displayLabel: `yesterday (${formatDate(d)})`, date: formatDate(d) });
+    }
+    if ("next week".startsWith(clean)) {
+      const d = new Date(today);
+      d.setDate(today.getDate() + 7);
+      results.push({ label: "next week", displayLabel: `next week (${formatDate(d)})`, date: formatDate(d) });
+    }
+
+    // 2. Predictive Numbers matching: e.g. "in 3", "2", "in 5 days"
+    const numMatch = clean.match(/^(?:in\s+)?(\d+)(?:\s*([dw]?)[\w]*)?$/);
+    if (numMatch) {
+      const num = parseInt(numMatch[1], 10);
+      const unit = numMatch[2] || ""; // "d" or "w" or ""
+      
+      if (unit === "" || unit === "d") {
+        const d = new Date(today);
+        d.setDate(today.getDate() + num);
+        results.push({
+          label: `in ${num} days`,
+          displayLabel: `in ${num} days (${formatDate(d)})`,
+          date: formatDate(d)
+        });
+      }
+      
+      if (unit === "" || unit === "w") {
+        const d = new Date(today);
+        d.setDate(today.getDate() + num * 7);
+        results.push({
+          label: `in ${num} weeks`,
+          displayLabel: `in ${num} weeks (${formatDate(d)})`,
+          date: formatDate(d)
+        });
+      }
+    }
+
+    // 3. Weekdays matching: e.g. "mon", "tue", "next mon"
+    const weekdays = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+    const isNext = clean.startsWith("next ");
+    const dayTyped = isNext ? clean.slice(5) : clean;
+
+    if (dayTyped.length > 0) {
+      weekdays.forEach((dayName, targetDayIndex) => {
+        if (dayName.startsWith(dayTyped)) {
+          const currentDayIndex = today.getDay();
+          let daysToAdd = (targetDayIndex - currentDayIndex + 7) % 7;
+          if (daysToAdd === 0) daysToAdd = 7; // strict future
+          
+          if (isNext) {
+            daysToAdd += 7;
+          }
+
+          const d = new Date(today);
+          d.setDate(today.getDate() + daysToAdd);
+          
+          const labelText = isNext ? `next ${dayName}` : dayName;
+          results.push({
+            label: labelText,
+            displayLabel: `${labelText} (${formatDate(d)})`,
+            date: formatDate(d)
+          });
+        }
+      });
+    }
+
+    return results;
   };
 
   const customCompletionSource = (context: CompletionContext): CompletionResult | null => {
@@ -99,23 +180,18 @@ export function MarkdownEditor({
     }
 
     // 3. Date helpers triggers: due:today or s:tomorrow
-    const dateMatch = context.matchBefore(/(due:|s:)[\w]*/);
+    const dateMatch = context.matchBefore(/(due:|s:)[\w\s]*/);
     if (dateMatch) {
       const prefix = dateMatch.text.includes("due:") ? "due:" : "s:";
-      const typed = dateMatch.text.slice(prefix.length).toLowerCase();
-      const helpers = [
-        { name: "today", date: getResolvedDateString("today") },
-        { name: "tomorrow", date: getResolvedDateString("tomorrow") },
-        { name: "monday", date: getResolvedDateString("monday") }
-      ];
-      const options = helpers
-        .filter(h => h.name.includes(typed))
-        .map(h => ({
-          label: `${prefix}${h.date}`,
-          displayLabel: `${prefix}${h.name} (${h.date})`,
-          type: "variable",
-          detail: "date helper"
-        }));
+      const typed = dateMatch.text.slice(prefix.length);
+      
+      const helpers = getPredictiveDates(typed);
+      const options = helpers.map(h => ({
+        label: `${prefix}${h.date}`,
+        displayLabel: `${prefix}${h.displayLabel}`,
+        type: "variable",
+        detail: "date helper"
+      }));
       return {
         from: dateMatch.from,
         options
