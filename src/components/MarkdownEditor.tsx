@@ -14,6 +14,7 @@ interface MarkdownEditorProps {
   onClose: () => void;
   projects?: string[];
   contexts?: string[];
+  isInline?: boolean;
 }
 
 export function MarkdownEditor({ 
@@ -22,7 +23,8 @@ export function MarkdownEditor({
   onSave, 
   onClose,
   projects = [],
-  contexts = []
+  contexts = [],
+  isInline = false
 }: MarkdownEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -232,6 +234,16 @@ export function MarkdownEditor({
           triggerSave();
           return true;
         }
+      },
+      {
+        key: "Escape",
+        run: () => {
+          if (isInline) {
+            onClose();
+            return true;
+          }
+          return false;
+        }
       }
     ]);
 
@@ -242,20 +254,32 @@ export function MarkdownEditor({
       }
     });
 
+    const extensions = [
+      history(),
+      markdown(),
+      oneDark,
+      autocompletion({ override: [customCompletionSource] }),
+      changeListener,
+      saveKeymap,
+      keymap.of([...defaultKeymap, ...historyKeymap]),
+      EditorView.lineWrapping
+    ];
+
+    if (!isInline) {
+      extensions.unshift(lineNumbers(), highlightActiveLine());
+    } else {
+      extensions.push(
+        EditorView.domEventHandlers({
+          blur: () => {
+            triggerSave();
+          }
+        })
+      );
+    }
+
     const state = EditorState.create({
       doc: initialContent,
-      extensions: [
-        lineNumbers(),
-        highlightActiveLine(),
-        history(),
-        markdown(),
-        oneDark,
-        autocompletion({ override: [customCompletionSource] }),
-        changeListener,
-        saveKeymap,
-        keymap.of([...defaultKeymap, ...historyKeymap]),
-        EditorView.lineWrapping
-      ]
+      extensions
     });
 
     const view = new EditorView({
@@ -274,6 +298,12 @@ export function MarkdownEditor({
       view.destroy();
     };
   }, [filePath, initialContent]);
+
+  if (isInline) {
+    return (
+      <div ref={containerRef} className="editor-canvas inline-mode" />
+    );
+  }
 
   return (
     <div className="editor-workspace">

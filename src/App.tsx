@@ -79,7 +79,6 @@ export function App() {
   const [notesExpanded, setNotesExpanded] = useState<boolean>(false);
   const [journalsExpanded, setJournalsExpanded] = useState<boolean>(false);
   const [editingTaskHash, setEditingTaskHash] = useState<string | null>(null);
-  const [editingTaskValue, setEditingTaskValue] = useState<string>("");
   const [todayJournalContent, setTodayJournalContent] = useState<string | null>(null);
   const [todayJournalPath, setTodayJournalPath] = useState<string>("");
   const [todayJournalLoading, setTodayJournalLoading] = useState<boolean>(true);
@@ -162,9 +161,8 @@ export function App() {
     );
   };
 
-  const handleSaveTaskInlineEdit = async (task: Task) => {
-    if (!editingTaskHash) return;
-    const trimmed = editingTaskValue.trim();
+  const handleSaveTaskInlineEdit = async (task: Task, newContent: string) => {
+    const trimmed = newContent.trim();
     if (trimmed === task.raw_markdown.trim()) {
       setEditingTaskHash(null);
       return;
@@ -1291,23 +1289,29 @@ export function App() {
                             onClick={() => {
                               if (!isEditingThisTask) {
                                 setEditingTaskHash(task.hash);
-                                setEditingTaskValue(task.raw_markdown);
                               }
                             }}
                           >
-                            {isEditingThisTask ? (
-                              <textarea
-                                className="task-inline-editor"
-                                value={editingTaskValue}
-                                onChange={(e) => setEditingTaskValue(e.target.value)}
-                                onBlur={() => handleSaveTaskInlineEdit(task)}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Escape") setEditingTaskHash(null);
+                          {isEditingThisTask ? (
+                            <div 
+                              className="task-inline-editor-container"
+                              style={{ width: "100%" }}
+                              onClick={(e) => e.stopPropagation()} // Ignore click propagation
+                            >
+                              <MarkdownEditor 
+                                key={task.hash}
+                                filePath={(task as any).file_path || ""}
+                                initialContent={task.raw_markdown}
+                                onSave={async (content) => {
+                                  await handleSaveTaskInlineEdit(task, content);
                                 }}
-                                onClick={(e) => e.stopPropagation()} // Ignore card click triggers
-                                autoFocus
+                                onClose={() => setEditingTaskHash(null)}
+                                projects={projects}
+                                contexts={contexts}
+                                isInline={true}
                               />
-                            ) : (
+                            </div>
+                          ) : (
                               <>
                                 <div 
                                   className={`checkbox ${task.status}`}
@@ -1394,22 +1398,28 @@ export function App() {
                     onClick={() => {
                       if (!isEditingThisTask) {
                         setEditingTaskHash(task.hash);
-                        setEditingTaskValue(task.raw_markdown);
                       }
                     }}
                   >
                     {isEditingThisTask ? (
-                      <textarea
-                        className="task-inline-editor"
-                        value={editingTaskValue}
-                        onChange={(e) => setEditingTaskValue(e.target.value)}
-                        onBlur={() => handleSaveTaskInlineEdit(task)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Escape") setEditingTaskHash(null);
-                        }}
-                        onClick={(e) => e.stopPropagation()} // Ignore card click triggers
-                        autoFocus
-                      />
+                      <div 
+                        className="task-inline-editor-container"
+                        style={{ width: "100%" }}
+                        onClick={(e) => e.stopPropagation()} // Ignore click propagation
+                      >
+                        <MarkdownEditor 
+                          key={task.hash}
+                          filePath={(task as any).file_path || ""}
+                          initialContent={task.raw_markdown}
+                          onSave={async (content) => {
+                            await handleSaveTaskInlineEdit(task, content);
+                          }}
+                          onClose={() => setEditingTaskHash(null)}
+                          projects={projects}
+                          contexts={contexts}
+                          isInline={true}
+                        />
+                      </div>
                     ) : (
                       <>
                         {/* Status Indicator Checkbox */}
