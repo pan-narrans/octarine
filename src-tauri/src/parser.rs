@@ -16,15 +16,15 @@ fn get_header_re() -> &'static Regex {
 }
 
 fn get_project_re() -> &'static Regex {
-    PROJECT_RE.get_or_init(|| Regex::new(r"\+([a-zA-Z0-9_\-/]+)").unwrap())
+    PROJECT_RE.get_or_init(|| Regex::new(r"\+([\w\-/]+)").unwrap())
 }
 
 fn get_context_re() -> &'static Regex {
-    CONTEXT_RE.get_or_init(|| Regex::new(r"@([a-zA-Z0-9_\-/]+)").unwrap())
+    CONTEXT_RE.get_or_init(|| Regex::new(r"@([\w\-/]+)").unwrap())
 }
 
 fn get_tag_re() -> &'static Regex {
-    TAG_RE.get_or_init(|| Regex::new(r"#([a-zA-Z0-9_\-/]+)").unwrap())
+    TAG_RE.get_or_init(|| Regex::new(r"#([\w\-/]+)").unwrap())
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
@@ -516,5 +516,18 @@ group_by: "none"
 
         // The raw string remains fully preserved in the description
         assert_eq!(task.description, "Actualizar la página de confluence de [Jerarquía de Productos y Categorías](https://example.atlassian.net/wiki/spaces/TEST/pages/12345/WIP+-+Jerarqu+a+de+Productos+y+Categor+as)");
+    }
+
+    #[test]
+    fn test_parse_accented_unicode_metadata() {
+        let content = "- [ ] Análisis Portugal +work/eglc/estimación @eglc/gestión #urgente/producción";
+        let (tasks, _) = parse_markdown_content("test.md", content);
+        assert_eq!(tasks.len(), 1);
+        let task = &tasks[0];
+
+        // Ensure full accented unicode values are extracted cleanly without cutoffs
+        assert_eq!(task.project.as_deref(), Some("work/eglc/estimación"));
+        assert!(task.contexts.contains(&"eglc/gestión".to_string()));
+        assert!(task.tags.contains(&"urgente/producción".to_string()));
     }
 }

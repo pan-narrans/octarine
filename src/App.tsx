@@ -134,12 +134,12 @@ export function App() {
   const projects = Array.from(new Set(tasks.map(t => t.project).filter((p): p is string => !!p)));
   const contexts = Array.from(new Set(tasks.flatMap(t => {
     const cleanText = t.raw_markdown.replace(/\[[^\]]*\]\([^)]*\)/g, "").replace(/https?:\/\/[^\s]+/g, "");
-    const ctxMatches = cleanText.match(/@([a-zA-Z0-9_\-/]+)/g);
+    const ctxMatches = cleanText.match(/@([\p{L}\p{N}_\-/]+)/gu);
     return ctxMatches ? ctxMatches.map(c => c.slice(1)) : [];
   })));
   const tags = Array.from(new Set(tasks.flatMap(t => {
     const cleanText = t.raw_markdown.replace(/\[[^\]]*\]\([^)]*\)/g, "").replace(/https?:\/\/[^\s]+/g, "");
-    const tagMatches = cleanText.match(/#([a-zA-Z0-9_\-/]+)/g);
+    const tagMatches = cleanText.match(/#([\p{L}\p{N}_\-/]+)/gu);
     return tagMatches ? tagMatches.map(c => c.slice(1)) : [];
   })));
 
