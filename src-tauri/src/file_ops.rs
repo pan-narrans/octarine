@@ -24,27 +24,25 @@ pub fn scan_dir_tree(dir_path: &Path) -> Result<FileNode, String> {
         let entries = fs::read_dir(dir_path)
             .map_err(|e| format!("Failed to read directory {}: {}", path, e))?;
         
-        for entry in entries {
-            if let Ok(entry) = entry {
-                let entry_path = entry.path();
-                let entry_name = entry.file_name().to_string_lossy().to_string();
+        for entry in entries.flatten() {
+            let entry_path = entry.path();
+            let entry_name = entry.file_name().to_string_lossy().to_string();
 
-                // Skip hidden folders/files like .git, .idea, .agent-session, etc.
-                if entry_name.starts_with('.') {
-                    continue;
-                }
+            // Skip hidden folders/files like .git, .idea, .agent-session, etc.
+            if entry_name.starts_with('.') {
+                continue;
+            }
 
-                if entry_path.is_file() {
-                    // Only include markdown (*.md) files in the tree
-                    if entry_path.extension().map_or(false, |ext| ext == "md") {
-                        if let Ok(child_node) = scan_dir_tree(&entry_path) {
-                            node_children.push(child_node);
-                        }
-                    }
-                } else if entry_path.is_dir() {
+            if entry_path.is_file() {
+                // Only include markdown (*.md) files in the tree
+                if entry_path.extension().is_some_and(|ext| ext == "md") {
                     if let Ok(child_node) = scan_dir_tree(&entry_path) {
                         node_children.push(child_node);
                     }
+                }
+            } else if entry_path.is_dir() {
+                if let Ok(child_node) = scan_dir_tree(&entry_path) {
+                    node_children.push(child_node);
                 }
             }
         }
@@ -189,16 +187,14 @@ pub fn build_journal_tree(journal_dir_path: &Path) -> Result<FileNode, String> {
     if journal_dir_path.is_dir() {
         let entries = fs::read_dir(journal_dir_path)
             .map_err(|e| format!("Failed to read journal directory: {}", e))?;
-        for entry in entries {
-            if let Ok(entry) = entry {
-                let entry_path = entry.path();
-                if entry_path.is_file() {
-                    let file_name = entry_path.file_name()
-                        .map(|n| n.to_string_lossy().to_string())
-                        .unwrap_or_default();
-                    if get_journal_regex().is_match(&file_name) {
-                        matching_files.push((file_name, entry_path));
-                    }
+        for entry in entries.flatten() {
+            let entry_path = entry.path();
+            if entry_path.is_file() {
+                let file_name = entry_path.file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                if get_journal_regex().is_match(&file_name) {
+                    matching_files.push((file_name, entry_path));
                 }
             }
         }
@@ -221,9 +217,9 @@ pub fn build_journal_tree(journal_dir_path: &Path) -> Result<FileNode, String> {
                     children: None,
                 };
                 groups.entry(year)
-                    .or_insert_with(BTreeMap::new)
+                    .or_default()
                     .entry(month)
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(node);
             }
         }

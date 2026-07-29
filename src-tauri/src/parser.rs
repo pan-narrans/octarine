@@ -7,6 +7,16 @@ static HEADER_RE: OnceLock<Regex> = OnceLock::new();
 static PROJECT_RE: OnceLock<Regex> = OnceLock::new();
 static CONTEXT_RE: OnceLock<Regex> = OnceLock::new();
 static TAG_RE: OnceLock<Regex> = OnceLock::new();
+static LINK_RE: OnceLock<Regex> = OnceLock::new();
+static URL_RE: OnceLock<Regex> = OnceLock::new();
+static S_RE: OnceLock<Regex> = OnceLock::new();
+static DUE_RE: OnceLock<Regex> = OnceLock::new();
+static DUR_RE: OnceLock<Regex> = OnceLock::new();
+static REC_RE: OnceLock<Regex> = OnceLock::new();
+static WD_RE: OnceLock<Regex> = OnceLock::new();
+static P_RE: OnceLock<Regex> = OnceLock::new();
+static WHITESPACE_RE: OnceLock<Regex> = OnceLock::new();
+static DURATION_RE: OnceLock<Regex> = OnceLock::new();
 
 fn get_header_re() -> &'static Regex {
     HEADER_RE.get_or_init(|| {
@@ -25,6 +35,46 @@ fn get_context_re() -> &'static Regex {
 
 fn get_tag_re() -> &'static Regex {
     TAG_RE.get_or_init(|| Regex::new(r"#([\w\-/]+)").unwrap())
+}
+
+fn get_link_re() -> &'static Regex {
+    LINK_RE.get_or_init(|| Regex::new(r"\[[^\]]*\]\([^)]*\)").unwrap())
+}
+
+fn get_url_re() -> &'static Regex {
+    URL_RE.get_or_init(|| Regex::new(r"https?://[^\s]+").unwrap())
+}
+
+fn get_s_re() -> &'static Regex {
+    S_RE.get_or_init(|| Regex::new(r"\bs:(?:\x22([^\x22]+)\x22|'([^']+)'|(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2})|([^\s]+))").unwrap())
+}
+
+fn get_due_re() -> &'static Regex {
+    DUE_RE.get_or_init(|| Regex::new(r"\bdue:(?:\x22([^\x22]+)\x22|'([^']+)'|([^\s]+))").unwrap())
+}
+
+fn get_dur_re() -> &'static Regex {
+    DUR_RE.get_or_init(|| Regex::new(r"\bdur:(?:\x22([^\x22]+)\x22|'([^']+)'|([^\s]+))").unwrap())
+}
+
+fn get_rec_re() -> &'static Regex {
+    REC_RE.get_or_init(|| Regex::new(r"\brecurring:(?:\x22([^\x22]+)\x22|'([^']+)'|([^\s]+))").unwrap())
+}
+
+fn get_wd_re() -> &'static Regex {
+    WD_RE.get_or_init(|| Regex::new(r"\bwhen_done:(?:\x22([^\x22]+)\x22|'([^']+)'|([^\s]+))").unwrap())
+}
+
+fn get_p_re() -> &'static Regex {
+    P_RE.get_or_init(|| Regex::new(r"\bp:(?:\x22([^\x22]+)\x22|'([^']+)'|([^\s]+))").unwrap())
+}
+
+fn get_whitespace_re() -> &'static Regex {
+    WHITESPACE_RE.get_or_init(|| Regex::new(r"\s+").unwrap())
+}
+
+fn get_duration_re() -> &'static Regex {
+    DURATION_RE.get_or_init(|| Regex::new(r"^(?:(\d+)h)?(?:(\d+)m)?$").unwrap())
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
@@ -75,7 +125,7 @@ fn is_valid_datetime(s: &str) -> bool {
 
 // Parse duration string like "1h30m", "45m", "2h" into seconds
 fn parse_duration(s: &str) -> Result<i32, String> {
-    let re = Regex::new(r"^(?:(\d+)h)?(?:(\d+)m)?$").unwrap();
+    let re = get_duration_re();
     if let Some(caps) = re.captures(s) {
         let h = caps.get(1).map(|m| m.as_str().parse::<i32>().unwrap_or(0)).unwrap_or(0);
         let m = caps.get(2).map(|m| m.as_str().parse::<i32>().unwrap_or(0)).unwrap_or(0);
@@ -140,7 +190,7 @@ pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask
             let rest = caps.get(4).unwrap().as_str();
 
             // Status and Type determination
-            let (status, task_type) = match marker {
+            let (status, mut task_type) = match marker {
                 " " => ("todo".to_string(), "task".to_string()),
                 "/" => ("doing".to_string(), "task".to_string()),
                 "x" | "X" => ("done".to_string(), "task".to_string()),
@@ -184,11 +234,11 @@ pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask
 
             // Now parse metadata elements in the first line
             // 1. Strip standard closed markdown links completely
-            let link_re = Regex::new(r"\[[^\]]*\]\([^)]*\)").unwrap();
+            let link_re = get_link_re();
             let mut metadata_text = link_re.replace_all(rest, "").to_string();
 
             // 2. Strip any raw URLs starting with http/https up to whitespace (handles unclosed links!)
-            let url_re = Regex::new(r"https?://[^\s]+").unwrap();
+            let url_re = get_url_re();
             metadata_text = url_re.replace_all(&metadata_text, "").to_string();
 
             let mut projects = Vec::new();
@@ -211,7 +261,7 @@ pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask
             let mut errors = Vec::new();
 
             // 1. Extract and strip s (scheduled start)
-            let s_re = Regex::new(r"\bs:(?:\x22([^\x22]+)\x22|'([^']+)'|(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2})|([^\s]+))").unwrap();
+            let s_re = get_s_re();
             let s_start = s_re.captures(&metadata_text).map(|caps| {
                 let val = if let Some(m) = caps.get(1) {
                     m.as_str().to_string()
@@ -232,8 +282,12 @@ pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask
                 val
             });
 
+            if s_start.is_some() {
+                task_type = "event".to_string();
+            }
+
             // 2. Extract and strip due date
-            let due_re = Regex::new(r"\bdue:(?:\x22([^\x22]+)\x22|'([^']+)'|([^\s]+))").unwrap();
+            let due_re = get_due_re();
             let due_date = due_re.captures(&metadata_text).map(|caps| {
                 let val = if let Some(m) = caps.get(1) {
                     m.as_str().to_string()
@@ -253,7 +307,7 @@ pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask
             });
 
             // 3. Extract and strip duration
-            let dur_re = Regex::new(r"\bdur:(?:\x22([^\x22]+)\x22|'([^']+)'|([^\s]+))").unwrap();
+            let dur_re = get_dur_re();
             let duration_secs = dur_re.captures(&metadata_text).and_then(|caps| {
                 let val = if let Some(m) = caps.get(1) {
                     m.as_str().to_string()
@@ -276,7 +330,7 @@ pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask
             });
 
             // 4. Extract and strip recurring
-            let rec_re = Regex::new(r"\brecurring:(?:\x22([^\x22]+)\x22|'([^']+)'|([^\s]+))").unwrap();
+            let rec_re = get_rec_re();
             let recurring = rec_re.captures(&metadata_text).map(|caps| {
                 let val = if let Some(m) = caps.get(1) {
                     m.as_str().to_string()
@@ -292,7 +346,7 @@ pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask
             });
 
             // 5. Extract and strip when_done
-            let wd_re = Regex::new(r"\bwhen_done:(?:\x22([^\x22]+)\x22|'([^']+)'|([^\s]+))").unwrap();
+            let wd_re = get_wd_re();
             let when_done = wd_re.captures(&metadata_text).map(|caps| {
                 let val = if let Some(m) = caps.get(1) {
                     m.as_str().to_string()
@@ -312,7 +366,7 @@ pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask
             });
 
             // 6. Extract and strip priority
-            let p_re = Regex::new(r"\bp:(?:\x22([^\x22]+)\x22|'([^']+)'|([^\s]+))").unwrap();
+            let p_re = get_p_re();
             let priority = p_re.captures(&metadata_text).and_then(|caps| {
                 let val = if let Some(m) = caps.get(1) {
                     m.as_str().to_string()
@@ -357,7 +411,7 @@ pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask
             // Cleanup whitespace in description
             let clean_description = clean_description.trim()
                 .replace("  ", " ");
-            let clean_description = Regex::new(r"\s+").unwrap().replace_all(&clean_description, " ").to_string();
+            let clean_description = get_whitespace_re().replace_all(&clean_description, " ").to_string();
 
             let parse_errors = if errors.is_empty() {
                 None
@@ -529,5 +583,20 @@ group_by: "none"
         assert_eq!(task.project.as_deref(), Some("work/eglc/estimación"));
         assert!(task.contexts.contains(&"eglc/gestión".to_string()));
         assert!(task.tags.contains(&"urgente/producción".to_string()));
+    }
+
+    #[test]
+    fn test_scheduled_is_always_an_event() {
+        // A standard task with s_start should be classified as an event
+        let content = "- [ ] Call client s:2026-07-28";
+        let (tasks, _) = parse_markdown_content("test.md", content);
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].task_type, "event");
+
+        // A completed task with s_start should be classified as an event
+        let content_completed = "- [x] Call client s:2026-07-28";
+        let (tasks_completed, _) = parse_markdown_content("test.md", content_completed);
+        assert_eq!(tasks_completed.len(), 1);
+        assert_eq!(tasks_completed[0].task_type, "event");
     }
 }
