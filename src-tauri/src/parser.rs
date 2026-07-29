@@ -190,7 +190,7 @@ pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask
             let rest = caps.get(4).unwrap().as_str();
 
             // Status and Type determination
-            let (status, task_type) = match marker {
+            let (status, mut task_type) = match marker {
                 " " => ("todo".to_string(), "task".to_string()),
                 "/" => ("doing".to_string(), "task".to_string()),
                 "x" | "X" => ("done".to_string(), "task".to_string()),
@@ -281,6 +281,10 @@ pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask
                 }
                 val
             });
+
+            if s_start.is_some() {
+                task_type = "event".to_string();
+            }
 
             // 2. Extract and strip due date
             let due_re = get_due_re();
@@ -579,5 +583,20 @@ group_by: "none"
         assert_eq!(task.project.as_deref(), Some("work/eglc/estimación"));
         assert!(task.contexts.contains(&"eglc/gestión".to_string()));
         assert!(task.tags.contains(&"urgente/producción".to_string()));
+    }
+
+    #[test]
+    fn test_scheduled_is_always_an_event() {
+        // A standard task with s_start should be classified as an event
+        let content = "- [ ] Call client s:2026-07-28";
+        let (tasks, _) = parse_markdown_content("test.md", content);
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].task_type, "event");
+
+        // A completed task with s_start should be classified as an event
+        let content_completed = "- [x] Call client s:2026-07-28";
+        let (tasks_completed, _) = parse_markdown_content("test.md", content_completed);
+        assert_eq!(tasks_completed.len(), 1);
+        assert_eq!(tasks_completed[0].task_type, "event");
     }
 }
