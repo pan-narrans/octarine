@@ -77,19 +77,15 @@ pub fn update_task_status_in_file(
         for offset in 1..=search_radius {
             // Check below
             let scan_idx = start_line + offset;
-            if scan_idx >= 0 && (scan_idx as usize) < lines.len() {
-                if is_match_at_line(&lines, scan_idx as usize, &original_lines) {
-                    found_line = Some(scan_idx as usize);
-                    break;
-                }
+            if scan_idx >= 0 && (scan_idx as usize) < lines.len() && is_match_at_line(&lines, scan_idx as usize, &original_lines) {
+                found_line = Some(scan_idx as usize);
+                break;
             }
             // Check above
             let scan_idx = start_line - offset;
-            if scan_idx >= 0 && (scan_idx as usize) < lines.len() {
-                if is_match_at_line(&lines, scan_idx as usize, &original_lines) {
-                    found_line = Some(scan_idx as usize);
-                    break;
-                }
+            if scan_idx >= 0 && (scan_idx as usize) < lines.len() && is_match_at_line(&lines, scan_idx as usize, &original_lines) {
+                found_line = Some(scan_idx as usize);
+                break;
             }
         }
     }
@@ -212,18 +208,14 @@ pub fn update_event_schedule_in_file(
         let start_line = original_line_number as i32 - 1;
         for offset in 1..=search_radius {
             let scan_idx = start_line + offset;
-            if scan_idx >= 0 && (scan_idx as usize) < lines.len() {
-                if is_match_at_line(&lines, scan_idx as usize, &original_lines) {
-                    found_line = Some(scan_idx as usize);
-                    break;
-                }
+            if scan_idx >= 0 && (scan_idx as usize) < lines.len() && is_match_at_line(&lines, scan_idx as usize, &original_lines) {
+                found_line = Some(scan_idx as usize);
+                break;
             }
             let scan_idx = start_line - offset;
-            if scan_idx >= 0 && (scan_idx as usize) < lines.len() {
-                if is_match_at_line(&lines, scan_idx as usize, &original_lines) {
-                    found_line = Some(scan_idx as usize);
-                    break;
-                }
+            if scan_idx >= 0 && (scan_idx as usize) < lines.len() && is_match_at_line(&lines, scan_idx as usize, &original_lines) {
+                found_line = Some(scan_idx as usize);
+                break;
             }
         }
     }

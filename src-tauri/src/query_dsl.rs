@@ -120,31 +120,27 @@ pub fn compile_filter_to_sql(filter: &str) -> Result<String, String> {
 }
 
 fn compile_term(term: &str) -> Result<String, String> {
-    if term.starts_with('+') {
+    if let Some(proj) = term.strip_prefix('+') {
         // Project filter: +work -> project = 'work' OR project LIKE 'work/%'
-        let proj = &term[1..];
         Ok(format!(
             "(project = '{}' OR project LIKE '{}/%')",
             proj.replace('\'', "''"),
             proj.replace('\'', "''")
         ))
-    } else if term.starts_with('@') {
+    } else if let Some(context) = term.strip_prefix('@') {
         // Context filter: @phone
-        let context = &term[1..];
         Ok(format!(
             "id IN (SELECT task_id FROM task_contexts JOIN contexts ON contexts.id = task_contexts.context_id WHERE contexts.name = '{}')",
             context.replace('\'', "''")
         ))
-    } else if term.starts_with('#') {
+    } else if let Some(tag) = term.strip_prefix('#') {
         // Tag filter: #urgent
-        let tag = &term[1..];
         Ok(format!(
             "id IN (SELECT task_id FROM task_tags JOIN tags ON tags.id = task_tags.tag_id WHERE tags.name = '{}')",
             tag.replace('\'', "''")
         ))
-    } else if term.starts_with("p:") {
+    } else if let Some(p_val) = term.strip_prefix("p:") {
         // Priority filter: p:1 -> priority = 1
-        let p_val = &term[2..];
         match p_val.parse::<i32>() {
             Ok(p_num) => Ok(format!("priority = {}", p_num)),
             Err(_) => Err(format!("Invalid priority value in query: '{}' (expected an integer)", p_val)),

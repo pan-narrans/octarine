@@ -22,25 +22,22 @@ where
             match res {
                 Ok(event) => {
                     // Check if it's a modify, create, or delete event
-                    let should_process = match event.kind {
-                        EventKind::Modify(_) | EventKind::Create(_) | EventKind::Remove(_) => true,
-                        _ => false,
-                    };
+                    let should_process = matches!(event.kind, EventKind::Modify(_) | EventKind::Create(_) | EventKind::Remove(_));
 
                     if should_process {
                         for path in event.paths {
-                            if path.extension().map_or(false, |ext| ext == "md") {
+                            if path.extension().is_some_and(|ext| ext == "md") {
                                 if let Some(path_str) = path.to_str() {
                                     // Re-open DB connection in the watcher thread
                                     if let Ok(conn) = Connection::open(&db_path) {
                                         let _ = conn.execute_batch("PRAGMA foreign_keys = ON;");
                                         let mut changed = false;
                                         if path.exists() {
-                                            if let Ok(_) = crate::db::index_single_file(&conn, path_str) {
+                                            if crate::db::index_single_file(&conn, path_str).is_ok() {
                                                 changed = true;
                                             }
                                         } else {
-                                            if let Ok(_) = crate::db::delete_file(&conn, path_str) {
+                                            if crate::db::delete_file(&conn, path_str).is_ok() {
                                                 changed = true;
                                             }
                                         }

@@ -16,7 +16,7 @@ use rusqlite::Connection;
 
 struct AppState {
     db: Mutex<Connection>,
-    db_path: String,
+    _db_path: String,
     vault_dir: Mutex<String>,
     journal_dir: Mutex<String>,
 }
@@ -383,7 +383,7 @@ fn main() {
     let mut builder = tauri::Builder::default()
         .manage(AppState {
             db: Mutex::new(conn),
-            db_path: db_path.clone(),
+            _db_path: db_path.clone(),
             vault_dir: Mutex::new(vault_dir.clone()),
             journal_dir: Mutex::new(journal_dir.clone()),
         });
