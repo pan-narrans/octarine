@@ -1285,3 +1285,11 @@ body {
   border-radius: 4px !important;
   border: 1px solid rgba(129, 140, 248, 0.15) !important;
 }
+
+/* Inline Editor Overflow Overrides to prevent scrollbars and allow floating dropdown tooltips */
+.task-inline-editor-container,
+.inline-mode,
+.inline-mode .cm-editor,
+.inline-mode .cm-scroller {
+  overflow: visible !important;
+}
