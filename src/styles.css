@@ -301,19 +301,25 @@ body {
   color: #ddd6fe;
 }
 
-.pill.priority.p-1 {
+.pill.priority.p-A {
   background: rgba(239, 68, 68, 0.15);
   border: 1px solid rgba(239, 68, 68, 0.35);
   color: #f87171;
 }
 
-.pill.priority.p-2 {
+.pill.priority.p-B {
   background: rgba(245, 158, 11, 0.15);
   border: 1px solid rgba(245, 158, 11, 0.35);
   color: #fbbf24;
 }
 
-.pill.priority.p-3 {
+.pill.priority.p-C {
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  color: #60a5fa;
+}
+
+.pill.priority.p-D {
   background: rgba(156, 163, 175, 0.15);
   border: 1px solid rgba(156, 163, 175, 0.35);
   color: #d1d5db;

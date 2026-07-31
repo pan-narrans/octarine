@@ -1328,9 +1328,12 @@ export function App() {
                                   <div className="task-desc">{renderMarkdownDescription(task.description)}</div>
                                   {hasNotes && <div className="task-notes">{notes}</div>}
                                   <div className="metadata-container">
-                                    {task.priority !== null && task.priority !== undefined && (
-                                      <span className={`pill priority p-${task.priority}`}>p:{task.priority}</span>
-                                    )}
+                                    {task.priority !== null && task.priority !== undefined && (() => {
+                                      const letter = task.priority === 1 ? "A" : task.priority === 2 ? "B" : task.priority === 3 ? "C" : task.priority === 4 ? "D" : String(task.priority);
+                                      return (
+                                        <span className={`pill priority p-${letter}`}>{letter}</span>
+                                      );
+                                    })()}
                                     {task.project && <span className="pill project">+{task.project}</span>}
                                     {task.due_date && <span className="pill due">due:{task.due_date}</span>}
                                   </div>
@@ -1446,9 +1449,12 @@ export function App() {
 
                           {/* Metadata Badges Container */}
                           <div className="metadata-container">
-                            {task.priority !== null && task.priority !== undefined && (
-                              <span className={`pill priority p-${task.priority}`}>p:{task.priority}</span>
-                            )}
+                            {task.priority !== null && task.priority !== undefined && (() => {
+                              const letter = task.priority === 1 ? "A" : task.priority === 2 ? "B" : task.priority === 3 ? "C" : task.priority === 4 ? "D" : String(task.priority);
+                              return (
+                                <span className={`pill priority p-${letter}`}>{letter}</span>
+                              );
+                            })()}
                             {task.project && (
                               <span className="pill project">+{task.project}</span>
                             )}

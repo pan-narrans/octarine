@@ -452,11 +452,11 @@ mod tests {
             file_path.to_str().unwrap(),
             2,
             &hash,
-            "- [ ] Implement inline editing @db p:1 due:2026-07-24",
+            "- [ ] (A) Implement inline editing @db due:2026-07-24",
         )
         .unwrap();
 
         let content_after = fs::read_to_string(&file_path).unwrap();
-        assert!(content_after.contains("- [ ] Implement inline editing @db p:1 due:2026-07-24"));
+        assert!(content_after.contains("- [ ] (A) Implement inline editing @db due:2026-07-24"));
     }
 }

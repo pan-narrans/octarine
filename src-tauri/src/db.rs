@@ -458,12 +458,12 @@ mod tests {
 
         let conn = initialize_db(&db_path).unwrap();
 
-        // Write file with multiple task priority profiles (p:1, p:2, no priority)
+        // Write file with multiple task priority profiles ((A), (B), no priority)
         let file_path = vault_dir.join("tasks.md");
         fs::write(
             &file_path,
-            r#"- [ ] High priority task p:1
-- [ ] Medium priority task p:2
+            r#"- [ ] (A) High priority task
+- [ ] (B) Medium priority task
 - [ ] Default task without priority
 "#,
         )
