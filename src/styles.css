@@ -1226,3 +1226,76 @@ body {
   font-size: 0.8rem;
   min-height: 40px;
 }
+
+/* --- CodeMirror Autocomplete Body Portal Styles --- */
+.cm-tooltip {
+  background-color: #0b1126 !important; /* Match --bg-sidebar */
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5) !important;
+  z-index: 10000 !important; /* Stack above modals/drawers */
+  font-family: monospace !important;
+  padding: 4px !important;
+}
+
+.cm-tooltip-autocomplete ul {
+  max-height: 250px !important;
+  padding: 2px !important;
+  margin: 0 !important;
+  list-style: none !important;
+}
+
+.cm-tooltip-autocomplete li {
+  padding: 6px 12px !important;
+  border-radius: 6px !important;
+  color: var(--text-secondary) !important;
+  font-size: 0.85rem !important;
+  line-height: 1.4 !important;
+  cursor: pointer !important;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+}
+
+/* Ensure the main completion label is visible and colored correctly */
+.cm-tooltip-autocomplete li .cm-completionLabel {
+  color: var(--text-primary) !important;
+}
+
+/* Hover/Focus list items selection state */
+.cm-tooltip-autocomplete li[aria-selected] {
+  background-color: rgba(167, 139, 250, 0.15) !important; /* Subtle violet translucent bg */
+  color: var(--text-primary) !important;
+}
+
+.cm-tooltip-autocomplete li[aria-selected] .cm-completionLabel {
+  color: var(--text-primary) !important;
+}
+
+/* Matching matched text highlight */
+.cm-tooltip-autocomplete li .cm-completionMatched {
+  text-decoration: none !important;
+  font-weight: bold !important;
+  color: var(--color-violet) !important;
+}
+
+/* Completion metadata tags/details */
+.cm-tooltip-autocomplete li .cm-completionDetail {
+  font-style: normal !important;
+  font-size: 0.75rem !important;
+  opacity: 0.8 !important;
+  color: var(--color-indigo) !important;
+  margin-left: 12px !important;
+  background: rgba(129, 140, 248, 0.1) !important;
+  padding: 0.1rem 0.35rem !important;
+  border-radius: 4px !important;
+  border: 1px solid rgba(129, 140, 248, 0.15) !important;
+}
+
+/* Inline Editor Overflow Overrides to prevent scrollbars and allow floating dropdown tooltips */
+.task-inline-editor-container,
+.inline-mode,
+.inline-mode .cm-editor,
+.inline-mode .cm-scroller {
+  overflow: visible !important;
+}

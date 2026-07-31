@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { EditorState } from "@codemirror/state";
-import { EditorView, keymap, highlightActiveLine, lineNumbers } from "@codemirror/view";
+import { EditorView, keymap, highlightActiveLine, lineNumbers, tooltips } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
 import { oneDark } from "@codemirror/theme-one-dark";
@@ -259,6 +259,7 @@ export function MarkdownEditor({
       markdown(),
       oneDark,
       autocompletion({ override: [customCompletionSource] }),
+      tooltips({ parent: document.body }),
       changeListener,
       saveKeymap,
       keymap.of([...defaultKeymap, ...historyKeymap]),
