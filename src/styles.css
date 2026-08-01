@@ -301,40 +301,125 @@ body {
   color: #ddd6fe;
 }
 
-.pill.priority.p-A {
-  background: rgba(239, 68, 68, 0.15);
-  border: 1px solid rgba(239, 68, 68, 0.35);
-  color: #f87171;
-}
-
-.pill.priority.p-B {
-  background: rgba(245, 158, 11, 0.15);
-  border: 1px solid rgba(245, 158, 11, 0.35);
-  color: #fbbf24;
-}
-
-.pill.priority.p-C {
-  background: rgba(59, 130, 246, 0.15);
-  border: 1px solid rgba(59, 130, 246, 0.35);
-  color: #60a5fa;
-}
-
-.pill.priority.p-D {
-  background: rgba(156, 163, 175, 0.15);
-  border: 1px solid rgba(156, 163, 175, 0.35);
-  color: #d1d5db;
-}
-
-/* Multi-line Notes */
-.task-notes {
+/* Solid square priority badges matching reference image layout */
+.badge-priority {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  font-weight: 700;
   font-size: 0.85rem;
+  color: #ffffff !important;
+  border: none;
+  flex-shrink: 0;
+}
+
+.badge-priority.p-A {
+  background-color: #ef4444; /* Solid Red */
+}
+
+.badge-priority.p-B {
+  background-color: #f59e0b; /* Solid Amber */
+}
+
+.badge-priority.p-C {
+  background-color: #3b82f6; /* Solid Blue */
+}
+
+.badge-priority.p-D {
+  background-color: #4b5563; /* Solid Slate Gray */
+}
+
+/* Multi-line Notes (Clean, unbordered style matching reference image) */
+.task-notes {
+  font-size: 0.88rem;
   color: var(--text-secondary);
   line-height: 1.5;
-  background: rgba(255, 255, 255, 0.015);
-  border-left: 2px solid var(--text-muted);
-  padding-left: 0.75rem;
-  margin-top: 0.25rem;
+  margin-top: 0.4rem;
+  padding-left: 0rem; /* Align perfectly with title, no indent box needed */
+  background: none;
+  border: none;
   white-space: pre-wrap;
+}
+
+/* Subtask layout and nested mini-checkbox styling */
+.subtask-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
+.subtask-row.done .subtask-text {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+.subtask-checkbox {
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--text-muted);
+  border-radius: 3px;
+  display: inline-block;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.subtask-checkbox.done {
+  background-color: var(--color-emerald);
+  border-color: var(--color-emerald);
+}
+
+.subtask-checkbox.done::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 1px;
+  width: 3px;
+  height: 6px;
+  border: solid white;
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+}
+
+/* Header layout for task descriptions and top-right due dates */
+.task-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.task-due-top {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--color-indigo);
+  font-weight: 600;
+  flex-shrink: 0;
+  margin-left: 1rem;
+}
+
+.calendar-icon-top {
+  color: var(--color-indigo);
+}
+
+.metadata-left-badges {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.subtask-counter {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  font-weight: 500;
+  margin-left: auto;
 }
 
 /* Empty Placeholder */
