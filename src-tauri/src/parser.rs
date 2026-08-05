@@ -260,10 +260,6 @@ pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask
                 // Check indentation
                 let next_indent_len = next_line.chars().take_while(|c| c.is_whitespace()).count();
                 if next_indent_len > indent.len() {
-                    // Check if it starts a new task list item
-                    if header_re.is_match(next_line) {
-                        break; // It's a sub-task, handle separately
-                    }
                     raw_markdown_lines.push(next_line.to_string());
                     next_i += 1;
                 } else {
@@ -648,8 +644,8 @@ group_by: "none"
     fn test_parse_priority() {
         let content = r#"- [ ] (A) Call client due:2026-07-25 @phone +work
 - [/] (b) Write design document
-- [ ] Regular task with no priority
-    - [ ] (C) Sub task with priority"#;
+- [ ] (C) Sub task with priority
+- [ ] Regular task with no priority"#;
         let (tasks, _) = parse_markdown_content("test.md", content);
         assert_eq!(tasks.len(), 4);
 
@@ -659,11 +655,29 @@ group_by: "none"
         assert_eq!(tasks[1].priority, Some(2));
         assert_eq!(tasks[1].description, "Write design document");
 
-        assert_eq!(tasks[2].priority, None);
-        assert_eq!(tasks[2].description, "Regular task with no priority");
+        assert_eq!(tasks[2].priority, Some(3));
+        assert_eq!(tasks[2].description, "Sub task with priority");
 
-        assert_eq!(tasks[3].priority, Some(3));
-        assert_eq!(tasks[3].description, "Sub task with priority");
+        assert_eq!(tasks[3].priority, None);
+        assert_eq!(tasks[3].description, "Regular task with no priority");
+    }
+
+    #[test]
+    fn test_parse_subtasks() {
+        let content = r#"- [ ] Parent task
+    - [ ] Nested subtask 1
+    - [/] Nested subtask 2 in progress
+    - [x] Nested subtask 3 completed"#;
+        let (tasks, _) = parse_markdown_content("test.md", content);
+        assert_eq!(tasks.len(), 1);
+        let parent = &tasks[0];
+        assert_eq!(parent.description, "Parent task");
+        
+        let notes = parent.raw_markdown.split('\n').collect::<Vec<&str>>();
+        assert_eq!(notes.len(), 4);
+        assert!(notes[1].contains("- [ ] Nested subtask 1"));
+        assert!(notes[2].contains("- [/] Nested subtask 2 in progress"));
+        assert!(notes[3].contains("- [x] Nested subtask 3 completed"));
     }
 
     #[test]
