@@ -48,7 +48,6 @@ pub fn initialize_db<P: AsRef<Path>>(db_path: P) -> Result<Connection> {
         CREATE INDEX IF NOT EXISTS idx_tasks_due ON tasks(due_date);
         CREATE INDEX IF NOT EXISTS idx_tasks_scheduled ON tasks(s_start);
         CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project);
-        CREATE INDEX IF NOT EXISTS idx_tasks_parent_hash ON tasks(parent_hash);
 
         CREATE TABLE IF NOT EXISTS tags (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -113,6 +112,9 @@ pub fn initialize_db<P: AsRef<Path>>(db_path: P) -> Result<Connection> {
             conn.execute("ALTER TABLE tasks ADD COLUMN parent_hash TEXT", [])?;
         }
     }
+
+    // Ensure index on parent_hash is created after column migration is complete
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_parent_hash ON tasks(parent_hash);", [])?;
 
     Ok(conn)
 }
