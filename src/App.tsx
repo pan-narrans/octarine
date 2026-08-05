@@ -43,18 +43,6 @@ function formatDueDate(dateStr: string): string {
   }
 }
 
-function countSubtasks(notes: string): number {
-  if (!notes) return 0;
-  const lines = notes.split("\n");
-  let count = 0;
-  for (const line of lines) {
-    if (/^\s*-\s*\[[ xX/]\]/.test(line)) {
-      count++;
-    }
-  }
-  return count;
-}
-
 function renderTaskNotesAndSubtasks(notes: string) {
   if (!notes) return null;
   const lines = notes.split("\n");
@@ -276,6 +264,9 @@ export function App() {
       const matchDesc = task.description.toLowerCase().includes(q);
       const matchProj = task.project?.toLowerCase().includes(q) || false;
       if (!matchDesc && !matchProj) return false;
+    } else {
+      // Exclude subtasks from top-level boards/lists when not searching
+      if (task.parent_hash) return false;
     }
 
     // 2. Sidebar Scoped Filter
@@ -1358,7 +1349,7 @@ export function App() {
               <div className="dashboard-column tasks">
                 <h2>Most Pressing Tasks 🚀</h2>
                 {(() => {
-                  const pressingTasks = tasks.filter(t => t.task_type === "task" && (t.status === "todo" || t.status === "doing"))
+                  const pressingTasks = tasks.filter(t => t.task_type === "task" && (t.status === "todo" || t.status === "doing") && !t.parent_hash)
                     .sort((a, b) => {
                       const pA = a.priority === null || a.priority === undefined ? Infinity : a.priority;
                       const pB = b.priority === null || b.priority === undefined ? Infinity : b.priority;
@@ -1429,6 +1420,47 @@ export function App() {
                                     )}
                                   </div>
                                   {hasNotes && renderTaskNotesAndSubtasks(notes)}
+                                  {(() => {
+                                    const subtasks = tasks.filter(t => t.parent_hash === task.hash);
+                                    if (subtasks.length === 0) return null;
+                                    return (
+                                      <div className="task-subtasks-list">
+                                        {subtasks.map(sub => {
+                                          const isEditingThisSub = editingTaskHash === sub.hash;
+                                          return (
+                                            <div 
+                                              key={sub.hash} 
+                                              className={`subtask-item ${sub.status}`}
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (!isEditingThisSub) {
+                                                  setEditingTaskHash(sub.hash);
+                                                }
+                                              }}
+                                            >
+                                              <div 
+                                                className={`subtask-checkbox-clickable ${sub.status}`}
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  const statuses: ("todo" | "doing" | "done" | "cancelled")[] = ["todo", "doing", "done", "cancelled"];
+                                                  const currIdx = statuses.indexOf(sub.status as any);
+                                                  const nextStatus = statuses[(currIdx + 1) % statuses.length];
+                                                  updateTaskStatus((sub as any).file_path || "", sub.line_number, sub.hash, nextStatus);
+                                                }}
+                                              >
+                                                {sub.status === "done" && "✓"}
+                                                {sub.status === "doing" && "•"}
+                                                {sub.status === "cancelled" && "×"}
+                                              </div>
+                                              <div className="subtask-text-content">
+                                                <span className="subtask-title">{renderMarkdownDescription(sub.description)}</span>
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    );
+                                  })()}
                                   <div className="metadata-container">
                                     <div className="metadata-left-badges">
                                       {task.priority !== null && task.priority !== undefined && (() => {
@@ -1439,11 +1471,15 @@ export function App() {
                                       })()}
                                       {task.project && <span className="pill project">+{task.project}</span>}
                                     </div>
-                                    {hasNotes && (
-                                      <span className="subtask-counter">
-                                        {countSubtasks(notes)} {countSubtasks(notes) === 1 ? "subtask" : "subtasks"}
-                                      </span>
-                                    )}
+                                    {(() => {
+                                      const subtasksCount = tasks.filter(t => t.parent_hash === task.hash).length;
+                                      if (subtasksCount === 0 && !hasNotes) return null;
+                                      return (
+                                        <span className="subtask-counter">
+                                          {subtasksCount} {subtasksCount === 1 ? "subtask" : "subtasks"}
+                                        </span>
+                                      );
+                                    })()}
                                   </div>
                                 </div>
                               </>
@@ -1561,6 +1597,49 @@ export function App() {
                           {/* Notes block */}
                           {hasNotes && renderTaskNotesAndSubtasks(notes)}
 
+                          {/* Nested Subtasks List */}
+                          {(() => {
+                            const subtasks = tasks.filter(t => t.parent_hash === task.hash);
+                            if (subtasks.length === 0) return null;
+                            return (
+                              <div className="task-subtasks-list">
+                                {subtasks.map(sub => {
+                                  const isEditingThisSub = editingTaskHash === sub.hash;
+                                  return (
+                                    <div 
+                                      key={sub.hash} 
+                                      className={`subtask-item ${sub.status}`}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (!isEditingThisSub) {
+                                          setEditingTaskHash(sub.hash);
+                                        }
+                                      }}
+                                    >
+                                      <div 
+                                        className={`subtask-checkbox-clickable ${sub.status}`}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          const statuses: ("todo" | "doing" | "done" | "cancelled")[] = ["todo", "doing", "done", "cancelled"];
+                                          const currIdx = statuses.indexOf(sub.status as any);
+                                          const nextStatus = statuses[(currIdx + 1) % statuses.length];
+                                          updateTaskStatus((sub as any).file_path || "", sub.line_number, sub.hash, nextStatus);
+                                        }}
+                                      >
+                                        {sub.status === "done" && "✓"}
+                                        {sub.status === "doing" && "•"}
+                                        {sub.status === "cancelled" && "×"}
+                                      </div>
+                                      <div className="subtask-text-content">
+                                        <span className="subtask-title">{renderMarkdownDescription(sub.description)}</span>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })()}
+
                           {/* Metadata Badges Container */}
                           <div className="metadata-container">
                             <div className="metadata-left-badges">
@@ -1580,11 +1659,15 @@ export function App() {
                                 <span className="pill scheduled">dur:{task.duration_secs / 60}m</span>
                               )}
                             </div>
-                            {hasNotes && (
-                              <span className="subtask-counter">
-                                {countSubtasks(notes)} {countSubtasks(notes) === 1 ? "subtask" : "subtasks"}
-                              </span>
-                            )}
+                            {(() => {
+                              const subtasksCount = tasks.filter(t => t.parent_hash === task.hash).length;
+                              if (subtasksCount === 0 && !hasNotes) return null;
+                              return (
+                                <span className="subtask-counter">
+                                  {subtasksCount} {subtasksCount === 1 ? "subtask" : "subtasks"}
+                                </span>
+                              );
+                            })()}
                           </div>
                         </div>
                       </>

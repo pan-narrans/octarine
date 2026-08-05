@@ -41,12 +41,14 @@ pub fn initialize_db<P: AsRef<Path>>(db_path: P) -> Result<Connection> {
             when_done TEXT,
             parse_errors TEXT,
             priority INTEGER,
+            parent_hash TEXT,
             FOREIGN KEY(file_id) REFERENCES files(id) ON DELETE CASCADE
         );
         CREATE INDEX IF NOT EXISTS idx_tasks_hash ON tasks(hash);
         CREATE INDEX IF NOT EXISTS idx_tasks_due ON tasks(due_date);
         CREATE INDEX IF NOT EXISTS idx_tasks_scheduled ON tasks(s_start);
         CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project);
+        CREATE INDEX IF NOT EXISTS idx_tasks_parent_hash ON tasks(parent_hash);
 
         CREATE TABLE IF NOT EXISTS tags (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -98,7 +100,7 @@ pub fn initialize_db<P: AsRef<Path>>(db_path: P) -> Result<Connection> {
         CREATE INDEX IF NOT EXISTS idx_merge_reviews_timestamp ON merge_reviews(timestamp);
     ")?;
 
-    // Runtime table schema migration for priority column
+    // Runtime table schema migration for priority and parent_hash columns
     {
         let mut stmt = conn.prepare("PRAGMA table_info(tasks)")?;
         let columns: Vec<String> = stmt.query_map([], |row| row.get(1))?
@@ -106,6 +108,9 @@ pub fn initialize_db<P: AsRef<Path>>(db_path: P) -> Result<Connection> {
             .collect();
         if !columns.contains(&"priority".to_string()) {
             conn.execute("ALTER TABLE tasks ADD COLUMN priority INTEGER", [])?;
+        }
+        if !columns.contains(&"parent_hash".to_string()) {
+            conn.execute("ALTER TABLE tasks ADD COLUMN parent_hash TEXT", [])?;
         }
     }
 
@@ -187,8 +192,8 @@ pub fn index_single_file(conn: &Connection, path: &str) -> Result<(), Box<dyn st
         tx.execute(
             "INSERT INTO tasks (
                 file_id, line_number, raw_markdown, hash, status, type, description,
-                project, due_date, s_start, duration_secs, recurring, when_done, parse_errors, priority
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+                project, due_date, s_start, duration_secs, recurring, when_done, parse_errors, priority, parent_hash
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
             params![
                 file_id,
                 task.line_number,
@@ -204,7 +209,8 @@ pub fn index_single_file(conn: &Connection, path: &str) -> Result<(), Box<dyn st
                 task.recurring,
                 task.when_done,
                 task.parse_errors,
-                task.priority
+                task.priority,
+                task.parent_hash
             ],
         )?;
         let task_id: i64 = tx.last_insert_rowid();

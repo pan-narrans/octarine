@@ -13,6 +13,7 @@ export interface Task {
   when_done: string | null;
   parse_errors: string | null;
   priority: number | null;
+  parent_hash: string | null;
 }
 
 export interface CustomView {

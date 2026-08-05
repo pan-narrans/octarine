@@ -96,6 +96,7 @@ pub struct ParsedTask {
     pub contexts: Vec<String>,
     pub parse_errors: Option<String>, // JSON string array of error messages, or None
     pub file_path: Option<String>,
+    pub parent_hash: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
@@ -155,6 +156,7 @@ pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask
     let lines: Vec<&str> = content.lines().collect();
     let mut tasks = Vec::new();
     let mut views = Vec::new();
+    let mut indent_stack: Vec<(usize, String)> = Vec::new();
 
     let header_re = get_header_re();
     let project_re = get_project_re();
@@ -236,6 +238,16 @@ pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask
             let marker = caps.get(3).unwrap().as_str();
             let rest = caps.get(4).unwrap().as_str();
 
+            let current_indent = indent.len();
+            while let Some(&(stack_indent, _)) = indent_stack.last() {
+                if stack_indent >= current_indent {
+                    indent_stack.pop();
+                } else {
+                    break;
+                }
+            }
+            let parent_hash = indent_stack.last().map(|(_, parent_hash)| parent_hash.clone());
+
             // Status and Type determination
             let (status, mut task_type) = match marker {
                 " " => ("todo".to_string(), "task".to_string()),
@@ -260,6 +272,9 @@ pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask
                 // Check indentation
                 let next_indent_len = next_line.chars().take_while(|c| c.is_whitespace()).count();
                 if next_indent_len > indent.len() {
+                    if header_re.is_match(next_line) {
+                        break; // It's a sub-task, handle separately
+                    }
                     raw_markdown_lines.push(next_line.to_string());
                     next_i += 1;
                 } else {
@@ -274,6 +289,7 @@ pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask
 
             let raw_markdown = raw_markdown_lines.join("\n");
             let hash = calculate_hash(file_path, start_line, &raw_markdown);
+            indent_stack.push((current_indent, hash.clone()));
 
             // Now parse metadata elements in the first line
             // 1. Strip standard closed markdown links completely
@@ -477,6 +493,7 @@ pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask
                 contexts,
                 parse_errors,
                 file_path: Some(file_path.to_string()),
+                parent_hash,
             });
 
             // Advance the cursor to consume processed note lines
@@ -669,15 +686,20 @@ group_by: "none"
     - [/] Nested subtask 2 in progress
     - [x] Nested subtask 3 completed"#;
         let (tasks, _) = parse_markdown_content("test.md", content);
-        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks.len(), 4);
+        
         let parent = &tasks[0];
         assert_eq!(parent.description, "Parent task");
-        
-        let notes = parent.raw_markdown.split('\n').collect::<Vec<&str>>();
-        assert_eq!(notes.len(), 4);
-        assert!(notes[1].contains("- [ ] Nested subtask 1"));
-        assert!(notes[2].contains("- [/] Nested subtask 2 in progress"));
-        assert!(notes[3].contains("- [x] Nested subtask 3 completed"));
+        assert_eq!(parent.parent_hash, None);
+
+        assert_eq!(tasks[1].description, "Nested subtask 1");
+        assert_eq!(tasks[1].parent_hash.as_ref(), Some(&parent.hash));
+
+        assert_eq!(tasks[2].description, "Nested subtask 2 in progress");
+        assert_eq!(tasks[2].parent_hash.as_ref(), Some(&parent.hash));
+
+        assert_eq!(tasks[3].description, "Nested subtask 3 completed");
+        assert_eq!(tasks[3].parent_hash.as_ref(), Some(&parent.hash));
     }
 
     #[test]
