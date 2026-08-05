@@ -386,11 +386,27 @@ body {
   transform: rotate(45deg);
 }
 
+.subtask-checkbox.doing {
+  border-color: var(--color-violet);
+  background-color: rgba(139, 92, 246, 0.15);
+}
+
+.subtask-checkbox.doing::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 3px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: var(--color-violet);
+}
+
 /* Header layout for task descriptions and top-right due dates */
 .task-header-row {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   width: 100%;
 }
 
@@ -403,6 +419,7 @@ body {
   font-weight: 600;
   flex-shrink: 0;
   margin-left: 1rem;
+  margin-top: 0.15rem;
 }
 
 .calendar-icon-top {
