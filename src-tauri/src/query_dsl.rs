@@ -140,10 +140,18 @@ fn compile_term(term: &str) -> Result<String, String> {
             tag.replace('\'', "''")
         ))
     } else if let Some(p_val) = term.strip_prefix("p:") {
-        // Priority filter: p:1 -> priority = 1
-        match p_val.parse::<i32>() {
-            Ok(p_num) => Ok(format!("priority = {}", p_num)),
-            Err(_) => Err(format!("Invalid priority value in query: '{}' (expected an integer)", p_val)),
+        // Priority filter: p:A -> priority = 1
+        let val_upper = p_val.to_uppercase();
+        let p_num = match val_upper.as_str() {
+            "A" | "1" => Some(1),
+            "B" | "2" => Some(2),
+            "C" | "3" => Some(3),
+            "D" | "4" => Some(4),
+            _ => p_val.parse::<i32>().ok(),
+        };
+        match p_num {
+            Some(num) => Ok(format!("priority = {}", num)),
+            None => Err(format!("Invalid priority value in query: '{}' (expected A-D or an integer)", p_val)),
         }
     } else {
         // Metadata comparison term, e.g., due<=today, status=todo, type=event
@@ -223,9 +231,13 @@ mod tests {
 
     #[test]
     fn test_compile_priority() {
-        let q = "+work AND p:1";
+        let q = "+work AND p:A";
         let sql = compile_filter_to_sql(q).unwrap();
         assert!(sql.contains("(project = 'work' OR project LIKE 'work/%')"));
         assert!(sql.contains("priority = 1"));
+
+        let q2 = "+work AND p:1";
+        let sql2 = compile_filter_to_sql(q2).unwrap();
+        assert!(sql2.contains("priority = 1"));
     }
 }

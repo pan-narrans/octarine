@@ -26,6 +26,77 @@ import { invoke } from "@tauri-apps/api/tauri";
 import { open } from "@tauri-apps/api/shell";
 import { listen } from "@tauri-apps/api/event";
 
+function formatDueDate(dateStr: string): string {
+  if (!dateStr) return "";
+  try {
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      const year = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      const day = parseInt(parts[2], 10);
+      const d = new Date(year, month, day);
+      return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    }
+    return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  } catch {
+    return dateStr;
+  }
+}
+
+function countSubtasks(notes: string): number {
+  if (!notes) return 0;
+  const lines = notes.split("\n");
+  let count = 0;
+  for (const line of lines) {
+    if (/^\s*-\s*\[[ xX/]\]/.test(line)) {
+      count++;
+    }
+  }
+  return count;
+}
+
+function renderTaskNotesAndSubtasks(notes: string) {
+  if (!notes) return null;
+  const lines = notes.split("\n");
+  
+  return (
+    <div className="task-notes">
+      {lines.map((line, idx) => {
+        const subtaskMatch = line.match(/^(\s*)-\s*\[([ xX/])\]\s*(.*)$/);
+        if (subtaskMatch) {
+          const indent = subtaskMatch[1].length;
+          const statusChar = subtaskMatch[2];
+          const text = subtaskMatch[3];
+          
+          let statusClass = "todo";
+          if (statusChar === "x" || statusChar === "X") {
+            statusClass = "done";
+          } else if (statusChar === "/") {
+            statusClass = "doing";
+          }
+          
+          return (
+            <div 
+              key={idx} 
+              className={`subtask-row ${statusClass}`}
+              style={{ paddingLeft: `${indent * 8}px` }}
+            >
+              <span className={`subtask-checkbox ${statusClass}`} />
+              <span className="subtask-text">{text}</span>
+            </div>
+          );
+        } else {
+          return (
+            <div key={idx} className="note-text-line">
+              {line}
+            </div>
+          );
+        }
+      })}
+    </div>
+  );
+}
+
 export function App() {
   // Activate live Tauri event listener for real-time background watcher sync
   useTauriEvents();
@@ -1325,14 +1396,31 @@ export function App() {
                                   {task.status === "cancelled" && "×"}
                                 </div>
                                 <div className="task-details">
-                                  <div className="task-desc">{renderMarkdownDescription(task.description)}</div>
-                                  {hasNotes && <div className="task-notes">{notes}</div>}
-                                  <div className="metadata-container">
-                                    {task.priority !== null && task.priority !== undefined && (
-                                      <span className={`pill priority p-${task.priority}`}>p:{task.priority}</span>
+                                  <div className="task-header-row">
+                                    <div className="task-desc">{renderMarkdownDescription(task.description)}</div>
+                                    {task.due_date && (
+                                      <div className="task-due-top">
+                                        <Calendar size={14} className="calendar-icon-top" />
+                                        <span>{formatDueDate(task.due_date)}</span>
+                                      </div>
                                     )}
-                                    {task.project && <span className="pill project">+{task.project}</span>}
-                                    {task.due_date && <span className="pill due">due:{task.due_date}</span>}
+                                  </div>
+                                  {hasNotes && renderTaskNotesAndSubtasks(notes)}
+                                  <div className="metadata-container">
+                                    <div className="metadata-left-badges">
+                                      {task.priority !== null && task.priority !== undefined && (() => {
+                                        const letter = task.priority === 1 ? "A" : task.priority === 2 ? "B" : task.priority === 3 ? "C" : task.priority === 4 ? "D" : String(task.priority);
+                                        return (
+                                          <span className={`badge-priority p-${letter}`}>{letter}</span>
+                                        );
+                                      })()}
+                                      {task.project && <span className="pill project">+{task.project}</span>}
+                                    </div>
+                                    {hasNotes && (
+                                      <span className="subtask-counter">
+                                        {countSubtasks(notes)} {countSubtasks(notes) === 1 ? "subtask" : "subtasks"}
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
                               </>
@@ -1437,29 +1525,42 @@ export function App() {
 
                         {/* Task details */}
                         <div className="task-details">
-                          <div className="task-desc">{renderMarkdownDescription(task.description)}</div>
+                          <div className="task-header-row">
+                            <div className="task-desc">{renderMarkdownDescription(task.description)}</div>
+                            {task.due_date && (
+                              <div className="task-due-top">
+                                <Calendar size={14} className="calendar-icon-top" />
+                                <span>{formatDueDate(task.due_date)}</span>
+                              </div>
+                            )}
+                          </div>
                           
                           {/* Notes block */}
-                          {hasNotes && (
-                            <div className="task-notes">{notes}</div>
-                          )}
+                          {hasNotes && renderTaskNotesAndSubtasks(notes)}
 
                           {/* Metadata Badges Container */}
                           <div className="metadata-container">
-                            {task.priority !== null && task.priority !== undefined && (
-                              <span className={`pill priority p-${task.priority}`}>p:{task.priority}</span>
-                            )}
-                            {task.project && (
-                              <span className="pill project">+{task.project}</span>
-                            )}
-                            {task.due_date && (
-                              <span className="pill due">due:{task.due_date}</span>
-                            )}
-                            {task.s_start && (
-                              <span className="pill scheduled">s:{task.s_start}</span>
-                            )}
-                            {task.duration_secs && (
-                              <span className="pill scheduled">dur:{task.duration_secs / 60}m</span>
+                            <div className="metadata-left-badges">
+                              {task.priority !== null && task.priority !== undefined && (() => {
+                                const letter = task.priority === 1 ? "A" : task.priority === 2 ? "B" : task.priority === 3 ? "C" : task.priority === 4 ? "D" : String(task.priority);
+                                return (
+                                  <span className={`badge-priority p-${letter}`}>{letter}</span>
+                                );
+                              })()}
+                              {task.project && (
+                                <span className="pill project">+{task.project}</span>
+                              )}
+                              {task.s_start && (
+                                <span className="pill scheduled">s:{task.s_start}</span>
+                              )}
+                              {task.duration_secs && (
+                                <span className="pill scheduled">dur:{task.duration_secs / 60}m</span>
+                              )}
+                            </div>
+                            {hasNotes && (
+                              <span className="subtask-counter">
+                                {countSubtasks(notes)} {countSubtasks(notes) === 1 ? "subtask" : "subtasks"}
+                              </span>
                             )}
                           </div>
                         </div>

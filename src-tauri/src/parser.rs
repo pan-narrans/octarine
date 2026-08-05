@@ -66,7 +66,7 @@ fn get_wd_re() -> &'static Regex {
 }
 
 fn get_p_re() -> &'static Regex {
-    P_RE.get_or_init(|| Regex::new(r"\bp:(?:\x22([^\x22]+)\x22|'([^']+)'|([^\s]+))").unwrap())
+    P_RE.get_or_init(|| Regex::new(r"\(([A-Da-d])\)").unwrap())
 }
 
 fn get_whitespace_re() -> &'static Regex {
@@ -368,21 +368,18 @@ pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask
             // 6. Extract and strip priority
             let p_re = get_p_re();
             let priority = p_re.captures(&metadata_text).and_then(|caps| {
-                let val = if let Some(m) = caps.get(1) {
-                    m.as_str().to_string()
-                } else if let Some(m) = caps.get(2) {
-                    m.as_str().to_string()
-                } else {
-                    caps.get(3).unwrap().as_str().to_string()
-                };
+                let val = caps.get(1).unwrap().as_str().to_uppercase();
                 if let Some(m) = caps.get(0) {
                     clean_description = clean_description.replace(m.as_str(), "");
                 }
                 
-                match val.parse::<i32>() {
-                    Ok(p_num) => Some(p_num),
-                    Err(_) => {
-                        errors.push(format!("Invalid priority format: '{}' (expected an integer, e.g. p:1)", val));
+                match val.as_str() {
+                    "A" => Some(1),
+                    "B" => Some(2),
+                    "C" => Some(3),
+                    "D" => Some(4),
+                    _ => {
+                        errors.push(format!("Invalid priority format: '{}' (expected A, B, C, or D)", val));
                         None
                     }
                 }
@@ -598,5 +595,27 @@ group_by: "none"
         let (tasks_completed, _) = parse_markdown_content("test.md", content_completed);
         assert_eq!(tasks_completed.len(), 1);
         assert_eq!(tasks_completed[0].task_type, "event");
+    }
+
+    #[test]
+    fn test_parse_priority() {
+        let content = r#"- [ ] (A) Call client due:2026-07-25 @phone +work
+- [/] (b) Write design document
+- [ ] Regular task with no priority
+    - [ ] (C) Sub task with priority"#;
+        let (tasks, _) = parse_markdown_content("test.md", content);
+        assert_eq!(tasks.len(), 4);
+
+        assert_eq!(tasks[0].priority, Some(1));
+        assert_eq!(tasks[0].description, "Call client");
+
+        assert_eq!(tasks[1].priority, Some(2));
+        assert_eq!(tasks[1].description, "Write design document");
+
+        assert_eq!(tasks[2].priority, None);
+        assert_eq!(tasks[2].description, "Regular task with no priority");
+
+        assert_eq!(tasks[3].priority, Some(3));
+        assert_eq!(tasks[3].description, "Sub task with priority");
     }
 }
