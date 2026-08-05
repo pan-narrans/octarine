@@ -86,9 +86,23 @@ function renderTaskNotesAndSubtasks(notes: string) {
             </div>
           );
         } else {
+          let cleanLine = line.trim();
+          if (cleanLine.startsWith("- ")) {
+            cleanLine = cleanLine.slice(2);
+          } else if (cleanLine.startsWith("-")) {
+            cleanLine = cleanLine.slice(1);
+          } else if (cleanLine.startsWith("* ")) {
+            cleanLine = cleanLine.slice(2);
+          } else if (cleanLine.startsWith("*")) {
+            cleanLine = cleanLine.slice(1);
+          }
+          cleanLine = cleanLine.trim();
+
+          if (!cleanLine) return null;
+
           return (
             <div key={idx} className="note-text-line">
-              {line}
+              {cleanLine}
             </div>
           );
         }
