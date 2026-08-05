@@ -138,6 +138,19 @@ fn parse_duration(s: &str) -> Result<i32, String> {
     }
 }
 
+fn strip_inline_comments(text: &str) -> String {
+    let mut result = String::new();
+    let parts = text.split("%%");
+    let mut is_comment = false;
+    for part in parts {
+        if !is_comment {
+            result.push_str(part);
+        }
+        is_comment = !is_comment;
+    }
+    result
+}
+
 pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask>, Vec<ParsedCustomView>) {
     let lines: Vec<&str> = content.lines().collect();
     let mut tasks = Vec::new();
@@ -149,40 +162,74 @@ pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask
     let tag_re = get_tag_re();
 
     let mut i = 0;
+    let mut inside_codeblock = false;
+    let mut inside_comment = false;
+
     while i < lines.len() {
-        let line = lines[i];
+        let original_line = lines[i];
+        let trimmed = original_line.trim();
 
-        // 1. Parse tasks-query codeblocks
-        if line.trim().starts_with("```tasks-query") {
-            let start_line = i + 1;
-            let mut query_lines = Vec::new();
-            i += 1;
-            while i < lines.len() && !lines[i].trim().starts_with("```") {
-                query_lines.push(lines[i]);
-                i += 1;
-            }
-            let query_raw = query_lines.join("\n");
-            
-            // Extract title from query_raw
-            let mut title = format!("Custom View @ Line {}", start_line);
-            for q_line in &query_lines {
-                if q_line.trim().starts_with("title:") {
-                    let t_val = q_line.trim()["title:".len()..].trim();
-                    title = t_val.trim_matches(|c| c == '"' || c == '\'').to_string();
-                    break;
-                }
-            }
-
-            views.push(ParsedCustomView {
-                line_number: start_line,
-                title,
-                query_raw,
-            });
+        // 1. Check for block comment toggles
+        if !inside_codeblock && trimmed == "%%" {
+            inside_comment = !inside_comment;
             i += 1;
             continue;
         }
 
-        // 2. Parse Checklist Tasks/Events
+        if inside_comment {
+            if trimmed == "%%" {
+                inside_comment = false;
+            }
+            i += 1;
+            continue;
+        }
+
+        // 2. Check for fenced codeblocks
+        if trimmed.starts_with("```") {
+            if trimmed.starts_with("```tasks-query") {
+                let start_line = i + 1;
+                let mut query_lines = Vec::new();
+                i += 1;
+                while i < lines.len() && !lines[i].trim().starts_with("```") {
+                    query_lines.push(lines[i]);
+                    i += 1;
+                }
+                let query_raw = query_lines.join("\n");
+                
+                // Extract title from query_raw
+                let mut title = format!("Custom View @ Line {}", start_line);
+                for q_line in &query_lines {
+                    if q_line.trim().starts_with("title:") {
+                        let t_val = q_line.trim()["title:".len()..].trim();
+                        title = t_val.trim_matches(|c| c == '"' || c == '\'').to_string();
+                        break;
+                    }
+                }
+
+                views.push(ParsedCustomView {
+                    line_number: start_line,
+                    title,
+                    query_raw,
+                });
+                i += 1;
+                continue;
+            } else {
+                inside_codeblock = !inside_codeblock;
+                i += 1;
+                continue;
+            }
+        }
+
+        if inside_codeblock {
+            i += 1;
+            continue;
+        }
+
+        // 3. Strip inline comments from description & metadata
+        let line_string = strip_inline_comments(original_line);
+        let line = &line_string;
+
+        // 4. Parse Checklist Tasks/Events
         if let Some(caps) = header_re.captures(line) {
             let start_line = i + 1;
             let indent = caps.get(1).unwrap().as_str();
@@ -199,8 +246,8 @@ pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask
                 _ => ("todo".to_string(), "task".to_string()),
             };
 
-            // Gather indented multiline notes
-            let mut raw_markdown_lines = vec![line.to_string()];
+            // Gather indented multiline notes using the original line
+            let mut raw_markdown_lines = vec![original_line.to_string()];
             let mut next_i = i + 1;
             while next_i < lines.len() {
                 let next_line = lines[next_i];
@@ -617,5 +664,36 @@ group_by: "none"
 
         assert_eq!(tasks[3].priority, Some(3));
         assert_eq!(tasks[3].description, "Sub task with priority");
+    }
+
+    #[test]
+    fn test_ignore_tasks_in_codeblocks_and_comments() {
+        let content = r#"- [ ] Valid task outside
+```rust
+- [ ] Task inside rust codeblock
+- [ ] Another task inside codeblock
+```
+- [ ] Another valid task
+%%
+- [ ] Task inside block comment
+- [ ] Another task inside block comment
+%%
+- [ ] Buy milk %% inline comment here %% +work @phone
+- [ ] Valid task s:2026-07-28 %% unclosed inline comment"#;
+
+        let (tasks, _) = parse_markdown_content("test.md", content);
+        assert_eq!(tasks.len(), 4);
+
+        assert_eq!(tasks[0].description, "Valid task outside");
+        assert_eq!(tasks[1].description, "Another valid task");
+        
+        // Check inline comment stripping
+        assert_eq!(tasks[2].description, "Buy milk");
+        assert_eq!(tasks[2].project.as_deref(), Some("work"));
+        assert!(tasks[2].contexts.contains(&"phone".to_string()));
+
+        // Check unclosed inline comment stripping
+        assert_eq!(tasks[3].description, "Valid task");
+        assert_eq!(tasks[3].s_start.as_deref(), Some("2026-07-28"));
     }
 }
