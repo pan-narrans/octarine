@@ -471,16 +471,25 @@ export function App() {
   };
 
   const renderMarkdownDescription = (text: string) => {
+    if (!text) return "";
+    let cleanedText = text.trim();
+    if (cleanedText.startsWith("- ")) {
+      cleanedText = cleanedText.slice(2);
+    } else if (cleanedText.startsWith("-")) {
+      cleanedText = cleanedText.slice(1);
+    }
+    cleanedText = cleanedText.trim();
+
     const linkRegex = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
     const parts = [];
     let lastIndex = 0;
     let match;
 
     linkRegex.lastIndex = 0;
-    while ((match = linkRegex.exec(text)) !== null) {
+    while ((match = linkRegex.exec(cleanedText)) !== null) {
       const matchIndex = match.index;
       if (matchIndex > lastIndex) {
-        parts.push(text.slice(lastIndex, matchIndex));
+        parts.push(cleanedText.slice(lastIndex, matchIndex));
       }
       const anchor = match[1];
       const url = match[2];
@@ -501,11 +510,11 @@ export function App() {
       lastIndex = linkRegex.lastIndex;
     }
 
-    if (lastIndex < text.length) {
-      parts.push(text.slice(lastIndex));
+    if (lastIndex < cleanedText.length) {
+      parts.push(cleanedText.slice(lastIndex));
     }
 
-    return parts.length > 0 ? parts : text;
+    return parts.length > 0 ? parts : cleanedText;
   };
 
   // -------------------------------------------------------------
