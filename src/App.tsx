@@ -57,6 +57,13 @@ function getTaskTags(rawMarkdown: string): string[] {
   return tagMatches ? tagMatches.map(c => c.slice(1)) : [];
 }
 
+function getTaskDoneDate(rawMarkdown: string): string | null {
+  if (!rawMarkdown) return null;
+  const firstLine = rawMarkdown.split("\n")[0];
+  const match = firstLine.match(/\bdone:(\d{4}-\d{2}-\d{2})\b/);
+  return match ? match[1] : null;
+}
+
 function renderTaskNotesAndSubtasks(notes: string) {
   if (!notes) return null;
   const lines = notes.split("\n");
@@ -1426,12 +1433,26 @@ export function App() {
                                 <div className="task-details">
                                   <div className="task-header-row">
                                     <div className="task-desc">{renderMarkdownDescription(task.description)}</div>
-                                    {task.due_date && (
-                                      <div className="task-due-top">
-                                        <Calendar size={14} className="calendar-icon-top" />
-                                        <span>{formatDueDate(task.due_date)}</span>
-                                      </div>
-                                    )}
+                                    {(() => {
+                                      const doneDate = getTaskDoneDate(task.raw_markdown);
+                                      if (!task.due_date && !doneDate) return null;
+                                      return (
+                                        <div className="task-dates-container">
+                                          {task.due_date && (
+                                            <div className="task-due-top">
+                                              <Calendar size={14} className="calendar-icon-top" />
+                                              <span>{formatDueDate(task.due_date)}</span>
+                                            </div>
+                                          )}
+                                          {doneDate && (
+                                            <div className="task-done-top">
+                                              <CheckCircle2 size={14} className="done-icon-top" />
+                                              <span>Done {formatDueDate(doneDate)}</span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })()}
                                   </div>
                                   {hasNotes && renderTaskNotesAndSubtasks(notes)}
                                   {(() => {
@@ -1606,12 +1627,26 @@ export function App() {
                         <div className="task-details">
                           <div className="task-header-row">
                             <div className="task-desc">{renderMarkdownDescription(task.description)}</div>
-                            {task.due_date && (
-                              <div className="task-due-top">
-                                <Calendar size={14} className="calendar-icon-top" />
-                                <span>{formatDueDate(task.due_date)}</span>
-                              </div>
-                            )}
+                            {(() => {
+                              const doneDate = getTaskDoneDate(task.raw_markdown);
+                              if (!task.due_date && !doneDate) return null;
+                              return (
+                                <div className="task-dates-container">
+                                  {task.due_date && (
+                                    <div className="task-due-top">
+                                      <Calendar size={14} className="calendar-icon-top" />
+                                      <span>{formatDueDate(task.due_date)}</span>
+                                    </div>
+                                  )}
+                                  {doneDate && (
+                                    <div className="task-done-top">
+                                      <CheckCircle2 size={14} className="done-icon-top" />
+                                      <span>Done {formatDueDate(doneDate)}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </div>
                           
                           {/* Notes block */}
