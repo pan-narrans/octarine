@@ -16,6 +16,7 @@ static DUR_RE: OnceLock<Regex> = OnceLock::new();
 static REC_RE: OnceLock<Regex> = OnceLock::new();
 static WD_RE: OnceLock<Regex> = OnceLock::new();
 static P_RE: OnceLock<Regex> = OnceLock::new();
+static DONE_RE: OnceLock<Regex> = OnceLock::new();
 static WHITESPACE_RE: OnceLock<Regex> = OnceLock::new();
 static DURATION_RE: OnceLock<Regex> = OnceLock::new();
 
@@ -72,6 +73,10 @@ fn get_wd_re() -> &'static Regex {
 
 fn get_p_re() -> &'static Regex {
     P_RE.get_or_init(|| Regex::new(r"\(([A-Da-d])\)").unwrap())
+}
+
+fn get_done_re() -> &'static Regex {
+    DONE_RE.get_or_init(|| Regex::new(r"\bdone:(?:\x22([^\x22]+)\x22|'([^']+)'|([^\s]+))").unwrap())
 }
 
 fn get_whitespace_re() -> &'static Regex {
@@ -451,6 +456,22 @@ pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask
                         None
                     }
                 }
+            });
+
+            // 7. Extract and strip done completion date
+            let done_re = get_done_re();
+            let _done_date = done_re.captures(&metadata_text).map(|caps| {
+                let val = if let Some(m) = caps.get(1) {
+                    m.as_str().to_string()
+                } else if let Some(m) = caps.get(2) {
+                    m.as_str().to_string()
+                } else {
+                    caps.get(3).unwrap().as_str().to_string()
+                };
+                if let Some(m) = caps.get(0) {
+                    clean_description = clean_description.replace(m.as_str(), "");
+                }
+                val
             });
 
             // Strip project, context, tag markers from the description
