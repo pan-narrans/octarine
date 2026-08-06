@@ -9,6 +9,7 @@ static CONTEXT_RE: OnceLock<Regex> = OnceLock::new();
 static TAG_RE: OnceLock<Regex> = OnceLock::new();
 static LINK_RE: OnceLock<Regex> = OnceLock::new();
 static URL_RE: OnceLock<Regex> = OnceLock::new();
+static CODE_RE: OnceLock<Regex> = OnceLock::new();
 static S_RE: OnceLock<Regex> = OnceLock::new();
 static DUE_RE: OnceLock<Regex> = OnceLock::new();
 static DUR_RE: OnceLock<Regex> = OnceLock::new();
@@ -43,6 +44,10 @@ fn get_link_re() -> &'static Regex {
 
 fn get_url_re() -> &'static Regex {
     URL_RE.get_or_init(|| Regex::new(r"https?://[^\s]+").unwrap())
+}
+
+fn get_code_re() -> &'static Regex {
+    CODE_RE.get_or_init(|| Regex::new(r"``[^`]+``|`[^`]+`").unwrap())
 }
 
 fn get_s_re() -> &'static Regex {
@@ -287,6 +292,10 @@ pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask
             // 2. Strip any raw URLs starting with http/https up to whitespace (handles unclosed links!)
             let url_re = get_url_re();
             metadata_text = url_re.replace_all(&metadata_text, "").to_string();
+
+            // 3. Strip inline code backticks to ignore any metadata inside them
+            let code_re = get_code_re();
+            metadata_text = code_re.replace_all(&metadata_text, "").to_string();
 
             let mut projects = Vec::new();
             for p_cap in project_re.captures_iter(&metadata_text) {
@@ -695,5 +704,22 @@ group_by: "none"
         // Check unclosed inline comment stripping
         assert_eq!(tasks[3].description, "Valid task");
         assert_eq!(tasks[3].s_start.as_deref(), Some("2026-07-28"));
+    }
+
+    #[test]
+    fn test_ignore_tags_inside_inline_code() {
+        let content = "- [ ] Call `Controller#getOrderConfigurator` and fix `+bug-spec` with `@client` #urgent";
+        let (tasks, _) = parse_markdown_content("test.md", content);
+        assert_eq!(tasks.len(), 1);
+        let task = &tasks[0];
+
+        // Metadata inside inline code backticks must be completely ignored
+        assert_eq!(task.project, None);
+        assert_eq!(task.contexts.len(), 0);
+        assert_eq!(task.tags.len(), 1);
+        assert!(task.tags.contains(&"urgent".to_string()));
+
+        // The backticks and their content must remain fully preserved in the final task description!
+        assert_eq!(task.description, "Call `Controller#getOrderConfigurator` and fix `+bug-spec` with `@client`");
     }
 }
