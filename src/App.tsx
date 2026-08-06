@@ -43,6 +43,20 @@ function formatDueDate(dateStr: string): string {
   }
 }
 
+function getTaskContexts(rawMarkdown: string): string[] {
+  if (!rawMarkdown) return [];
+  const cleanText = rawMarkdown.replace(/\[[^\]]*\]\([^)]*\)/g, "").replace(/https?:\/\/[^\s]+/g, "");
+  const ctxMatches = cleanText.match(/@([\p{L}\p{N}_\-/]+)/gu);
+  return ctxMatches ? ctxMatches.map(c => c.slice(1)) : [];
+}
+
+function getTaskTags(rawMarkdown: string): string[] {
+  if (!rawMarkdown) return [];
+  const cleanText = rawMarkdown.replace(/\[[^\]]*\]\([^)]*\)/g, "").replace(/https?:\/\/[^\s]+/g, "");
+  const tagMatches = cleanText.match(/#([\p{L}\p{N}_\-/]+)/gu);
+  return tagMatches ? tagMatches.map(c => c.slice(1)) : [];
+}
+
 function renderTaskNotesAndSubtasks(notes: string) {
   if (!notes) return null;
   const lines = notes.split("\n");
@@ -1470,6 +1484,12 @@ export function App() {
                                         );
                                       })()}
                                       {task.project && <span className="pill project">+{task.project}</span>}
+                                      {getTaskContexts(task.raw_markdown).map(ctx => (
+                                        <span key={ctx} className="pill context">@{ctx}</span>
+                                      ))}
+                                      {getTaskTags(task.raw_markdown).map(tag => (
+                                        <span key={tag} className="pill tag">#{tag}</span>
+                                      ))}
                                     </div>
                                     {(() => {
                                       const subtasksCount = tasks.filter(t => t.parent_hash === task.hash).length;
@@ -1652,6 +1672,12 @@ export function App() {
                               {task.project && (
                                 <span className="pill project">+{task.project}</span>
                               )}
+                              {getTaskContexts(task.raw_markdown).map(ctx => (
+                                <span key={ctx} className="pill context">@{ctx}</span>
+                              ))}
+                              {getTaskTags(task.raw_markdown).map(tag => (
+                                <span key={tag} className="pill tag">#{tag}</span>
+                              ))}
                               {task.s_start && (
                                 <span className="pill scheduled">s:{task.s_start}</span>
                               )}
