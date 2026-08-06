@@ -1401,3 +1401,70 @@ body {
 .inline-mode .cm-scroller {
   overflow: visible !important;
 }
+
+/* Nested subtasks container inside parent task cards */
+.task-subtasks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+  padding-left: 0.15rem;
+}
+
+.subtask-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.2rem 0;
+  border-radius: 4px;
+}
+
+.subtask-checkbox-clickable {
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--text-muted);
+  border-radius: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: transparent;
+  transition: all 0.15s ease;
+  position: relative;
+}
+
+.subtask-checkbox-clickable:hover {
+  border-color: var(--color-violet);
+  background-color: rgba(167, 139, 250, 0.05);
+}
+
+.subtask-checkbox-clickable.done {
+  background-color: var(--color-emerald);
+  border-color: var(--color-emerald);
+  color: white;
+}
+
+.subtask-checkbox-clickable.doing {
+  border-color: var(--color-violet);
+  background-color: rgba(139, 92, 246, 0.15);
+  color: var(--color-violet);
+}
+
+.subtask-checkbox-clickable.cancelled {
+  border-color: var(--text-muted);
+  color: var(--text-muted);
+}
+
+.subtask-item.done .subtask-title {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+.subtask-title {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}

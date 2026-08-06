@@ -30,7 +30,7 @@ fn get_tasks(state: State<'_, AppState>, filter: Option<String>) -> Result<Vec<P
     };
 
     let query_str = format!(
-        "SELECT tasks.line_number, tasks.raw_markdown, tasks.hash, tasks.status, tasks.type, tasks.description, tasks.project, tasks.due_date, tasks.s_start, tasks.duration_secs, tasks.recurring, tasks.when_done, tasks.parse_errors, tasks.priority, files.path FROM tasks JOIN files ON files.id = tasks.file_id WHERE {}",
+        "SELECT tasks.line_number, tasks.raw_markdown, tasks.hash, tasks.status, tasks.type, tasks.description, tasks.project, tasks.due_date, tasks.s_start, tasks.duration_secs, tasks.recurring, tasks.when_done, tasks.parse_errors, tasks.priority, files.path, tasks.parent_hash FROM tasks JOIN files ON files.id = tasks.file_id WHERE {}",
         where_clause
     );
 
@@ -51,6 +51,7 @@ fn get_tasks(state: State<'_, AppState>, filter: Option<String>) -> Result<Vec<P
         let parse_errors: Option<String> = row.get(12)?;
         let priority: Option<i32> = row.get(13)?;
         let file_path: String = row.get(14)?;
+        let parent_hash: Option<String> = row.get(15)?;
 
         Ok(ParsedTask {
             line_number,
@@ -70,6 +71,7 @@ fn get_tasks(state: State<'_, AppState>, filter: Option<String>) -> Result<Vec<P
             contexts: vec![],
             parse_errors,
             file_path: Some(file_path),
+            parent_hash,
         })
     }).map_err(|e| e.to_string())?;
 
