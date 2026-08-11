@@ -1402,6 +1402,12 @@ body {
   overflow: visible !important;
 }
 
+.inline-mode {
+  min-height: 40px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9rem;
+}
+
 /* Nested subtasks container inside parent task cards */
 .task-subtasks-list {
   display: flex;
