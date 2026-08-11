@@ -283,30 +283,50 @@ pub fn update_task_markdown_in_file(
         .query_row(params![original_content_hash], |r| r.get(0))
         .map_err(|_| "Task hash not found in database cache. Please reload.".to_string())?;
 
-    // 3. Locate and replace
-    let mut replaced = false;
+    let original_block_lines: Vec<&str> = original_raw_markdown.lines().collect();
+    if original_block_lines.is_empty() {
+        return Err("Original raw markdown is empty.".to_string());
+    }
+
+    // 3. Locate the original block
+    let mut found_start_idx: Option<usize> = None;
     let index_0 = original_line_number.saturating_sub(1);
     
-    // Direct match check
-    if index_0 < lines.len() && lines[index_0].trim() == original_raw_markdown.trim() {
-        lines[index_0] = new_raw_markdown.to_string();
-        replaced = true;
-    } else {
-        // Search surrounding lines
-        for line in lines.iter_mut() {
-            if line.trim() == original_raw_markdown.trim() {
-                *line = new_raw_markdown.to_string();
-                replaced = true;
+    // Direct match check (Phase 1)
+    if is_match_at_line(&lines, index_0, &original_block_lines) {
+        found_start_idx = Some(index_0);
+    }
+    
+    // Fallback search check (Phase 2)
+    if found_start_idx.is_none() {
+        let search_radius = 15;
+        let start_line = original_line_number as i32 - 1;
+        for offset in 1..=search_radius {
+            let scan_idx = start_line + offset;
+            if scan_idx >= 0 && (scan_idx as usize) < lines.len() && is_match_at_line(&lines, scan_idx as usize, &original_block_lines) {
+                found_start_idx = Some(scan_idx as usize);
+                break;
+            }
+            let scan_idx = start_line - offset;
+            if scan_idx >= 0 && (scan_idx as usize) < lines.len() && is_match_at_line(&lines, scan_idx as usize, &original_block_lines) {
+                found_start_idx = Some(scan_idx as usize);
                 break;
             }
         }
     }
 
-    if !replaced {
-        return Err("Failed to find original task line in file. It may have been edited externally.".to_string());
-    }
+    let start_idx = match found_start_idx {
+        Some(idx) => idx,
+        None => return Err("Concurrency Collision: The task block could not be located in the file. It may have been edited or moved externally. Please refresh.".to_string()),
+    };
 
-    // 4. Write back to disk
+    let end_idx = start_idx + original_block_lines.len();
+
+    // 4. Splice the new lines into the vector
+    let new_block_lines: Vec<String> = new_raw_markdown.split('\n').map(|s| s.to_string()).collect();
+    lines.splice(start_idx..end_idx, new_block_lines);
+
+    // 5. Write back to disk
     let updated_content = lines.join("\n");
     fs::write(file_path, updated_content)
         .map_err(|e| format!("Failed to write file: {}", e))?;
