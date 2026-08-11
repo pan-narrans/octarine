@@ -24,6 +24,7 @@ fn get_strip_checkbox_re() -> &'static Regex {
 
 static RE_S: OnceLock<Regex> = OnceLock::new();
 static RE_DUR: OnceLock<Regex> = OnceLock::new();
+static RE_DONE: OnceLock<Regex> = OnceLock::new();
 
 fn get_re_s() -> &'static Regex {
     RE_S.get_or_init(|| Regex::new(r"\s+s:\d{4}-\d{2}-\d{2}(\s+\d{2}:\d{2})?").unwrap())
@@ -31,6 +32,10 @@ fn get_re_s() -> &'static Regex {
 
 fn get_re_dur() -> &'static Regex {
     RE_DUR.get_or_init(|| Regex::new(r"\s+dur:\d+[a-zA-Z\d]*").unwrap())
+}
+
+fn get_re_done() -> &'static Regex {
+    RE_DONE.get_or_init(|| Regex::new(r"\s+done:\d{4}-\d{2}-\d{2}").unwrap())
 }
 
 pub fn update_task_status_in_file(
@@ -116,8 +121,18 @@ pub fn update_task_status_in_file(
     if let Some(caps) = re.captures(target_line) {
         let prefix = caps.get(1).unwrap().as_str();
         let suffix = caps.get(3).unwrap().as_str();
-        let rest = caps.get(4).unwrap().as_str();
+        let mut rest = caps.get(4).unwrap().as_str().to_string();
         
+        // Clean out any pre-existing done:YYYY-MM-DD tags first
+        let re_done = get_re_done();
+        rest = re_done.replace_all(&rest, "").to_string();
+
+        // If newly marked as completed, append local system date
+        if new_status == "done" {
+            let local_date = chrono::Local::now().format("%Y-%m-%d").to_string();
+            rest.push_str(&format!(" done:{}", local_date));
+        }
+
         let new_line = format!("{}{}{}{}", prefix, status_char, suffix, rest);
         edited_lines[line_idx] = new_line;
     } else {
@@ -478,5 +493,58 @@ mod tests {
 
         let content_after = fs::read_to_string(&file_path).unwrap();
         assert!(content_after.contains("- [ ] (A) Implement inline editing @db due:2026-07-24"));
+    }
+
+    #[test]
+    fn test_update_task_completion_date() {
+        let temp_dir = tempdir().unwrap();
+        let db_path = temp_dir.path().join("cache.db");
+        let file_path = temp_dir.path().join("tasks.md");
+
+        fs::write(
+            &file_path,
+            r#"# My Tasks
+- [ ] Implement completion date @db
+"#,
+        )
+        .unwrap();
+
+        let conn = initialize_db(&db_path).unwrap();
+        index_single_file(&conn, file_path.to_str().unwrap()).unwrap();
+
+        let hash: String = conn
+            .query_row(
+                "SELECT hash FROM tasks WHERE description = 'Implement completion date'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+
+        // Mark as done
+        update_task_status_in_file(&conn, file_path.to_str().unwrap(), 2, &hash, "done").unwrap();
+
+        // Verify done:YYYY-MM-DD tag is appended
+        let content_done = fs::read_to_string(&file_path).unwrap();
+        let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+        assert!(content_done.contains(&format!("- [x] Implement completion date @db done:{}", today)));
+
+        // Re-index file to update SQLite cache with the new hash
+        index_single_file(&conn, file_path.to_str().unwrap()).unwrap();
+
+        let new_hash: String = conn
+            .query_row(
+                "SELECT hash FROM tasks WHERE description = 'Implement completion date'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+
+        // Revert back to doing
+        update_task_status_in_file(&conn, file_path.to_str().unwrap(), 2, &new_hash, "doing").unwrap();
+
+        // Verify done:YYYY-MM-DD tag is stripped
+        let content_doing = fs::read_to_string(&file_path).unwrap();
+        assert!(content_doing.contains("- [/] Implement completion date @db"));
+        assert!(!content_doing.contains("done:"));
     }
 }
