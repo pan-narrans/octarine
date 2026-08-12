@@ -4,6 +4,7 @@ import { useTauriEvents } from "./hooks/use-tauri-events";
 import { Task, FileNode } from "./types";
 import { FileTree } from "./components/FileTree";
 import { MarkdownEditor } from "./components/MarkdownEditor";
+import { EditTaskModal } from "./components/EditTaskModal";
 import { 
   Inbox, 
   Calendar, 
@@ -20,7 +21,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
-  BookOpen
+  BookOpen,
+  Pencil
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/tauri";
 import { open } from "@tauri-apps/api/shell";
@@ -173,6 +175,7 @@ export function App() {
   const [notesExpanded, setNotesExpanded] = useState<boolean>(false);
   const [journalsExpanded, setJournalsExpanded] = useState<boolean>(false);
   const [editingTaskHash, setEditingTaskHash] = useState<string | null>(null);
+  const [modalTask, setModalTask] = useState<Task | null>(null);
   const [todayJournalContent, setTodayJournalContent] = useState<string | null>(null);
   const [todayJournalPath, setTodayJournalPath] = useState<string>("");
   const [todayJournalLoading, setTodayJournalLoading] = useState<boolean>(true);
@@ -1106,6 +1109,29 @@ export function App() {
 
       {/* 2. MAIN WORKSPACE PANEL */}
       <div className="main-content">
+        {modalTask && (
+          <EditTaskModal 
+            task={modalTask}
+            onClose={() => setModalTask(null)}
+            onSave={async (newRawMarkdown) => {
+              try {
+                await invoke("update_task_markdown", {
+                  filePath: (modalTask as any).file_path || "",
+                  lineNumber: modalTask.line_number,
+                  hash: modalTask.hash,
+                  newRawMarkdown: newRawMarkdown.trim()
+                });
+                await fetchTasks();
+              } catch (e) {
+                console.error("Failed to save full task modal:", e);
+                alert(`Error saving task: ${e}`);
+              }
+            }}
+            projects={projects}
+            contexts={contexts}
+          />
+        )}
+
         <div className="main-header">
           <div className="main-title">
             <h1>
@@ -1453,6 +1479,16 @@ export function App() {
                                         </div>
                                       );
                                     })()}
+                                    <button 
+                                      className="edit-modal-btn" 
+                                      title="Edit Details"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setModalTask(task);
+                                      }}
+                                    >
+                                      <Pencil size={14} />
+                                    </button>
                                   </div>
                                   {hasNotes && renderTaskNotesAndSubtasks(notes)}
                                   {(() => {
@@ -1647,6 +1683,16 @@ export function App() {
                                 </div>
                               );
                             })()}
+                            <button 
+                              className="edit-modal-btn" 
+                              title="Edit Details"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setModalTask(task);
+                              }}
+                            >
+                              <Pencil size={14} />
+                            </button>
                           </div>
                           
                           {/* Notes block */}
