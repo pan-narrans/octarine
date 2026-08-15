@@ -29,7 +29,7 @@ Markdown is durable user data. SQLite is a derived cache.
 
 The React frontend lives in `src/`. `App.tsx` currently coordinates most navigation, filtering, calendar, note, journal, and configuration behavior. Zustand stores task and custom-view state, while several components manage file-tree and editor presentation.
 
-The frontend calls Tauri commands with `invoke` and listens for `vault-changed` events. Some command payloads are manually typed and some metadata is reparsed from raw Markdown in the frontend. Generated contracts and Rust-owned metadata are planned corrections.
+The frontend calls Tauri commands with `invoke` and listens for `vault-changed` events. Rust returns normalized task metadata, including tags, contexts, and source file paths, so the frontend does not reinterpret raw Markdown. Command payloads are still manually typed; generated contracts are a planned correction.
 
 ## Tauri Command Boundary
 
@@ -48,6 +48,8 @@ The canonical implemented syntax is documented in `specifications/task-syntax.md
 ## SQLite Index
 
 `src-tauri/src/db.rs` initializes SQLite in WAL mode with foreign keys enabled. It stores files, tasks, tags, contexts, and custom views. File content and timestamps support change detection.
+
+Task queries join the normalized tag and context associations and return them with each task, together with the source file path.
 
 The application currently clears core index tables at every launch before sweeping the vault. As a result, incremental startup caching is not yet active despite support in the indexer. The planned correction introduces schema and index-format versions and rebuilds only when required.
 

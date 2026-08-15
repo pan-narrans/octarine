@@ -156,6 +156,72 @@ pub fn delete_file(conn: &Connection, path: &str) -> Result<()> {
     Ok(())
 }
 
+pub fn query_tasks(conn: &Connection, where_clause: &str) -> Result<Vec<parser::ParsedTask>> {
+    let query = format!(
+        "SELECT
+            tasks.line_number,
+            tasks.raw_markdown,
+            tasks.hash,
+            tasks.status,
+            tasks.type,
+            tasks.description,
+            tasks.project,
+            tasks.due_date,
+            tasks.s_start,
+            tasks.duration_secs,
+            tasks.recurring,
+            tasks.when_done,
+            tasks.parse_errors,
+            tasks.priority,
+            files.path,
+            tasks.parent_hash,
+            COALESCE((
+                SELECT json_group_array(tags.name)
+                FROM task_tags
+                JOIN tags ON tags.id = task_tags.tag_id
+                WHERE task_tags.task_id = tasks.id
+            ), '[]'),
+            COALESCE((
+                SELECT json_group_array(contexts.name)
+                FROM task_contexts
+                JOIN contexts ON contexts.id = task_contexts.context_id
+                WHERE task_contexts.task_id = tasks.id
+            ), '[]')
+         FROM tasks
+         JOIN files ON files.id = tasks.file_id
+         WHERE {where_clause}"
+    );
+
+    let mut stmt = conn.prepare(&query)?;
+    let rows = stmt.query_map([], |row| {
+        let tags_json: String = row.get(16)?;
+        let contexts_json: String = row.get(17)?;
+
+        Ok(parser::ParsedTask {
+            line_number: row.get(0)?,
+            raw_markdown: row.get(1)?,
+            hash: row.get(2)?,
+            status: row.get(3)?,
+            task_type: row.get(4)?,
+            description: row.get(5)?,
+            project: row.get(6)?,
+            due_date: row.get(7)?,
+            s_start: row.get(8)?,
+            duration_secs: row.get(9)?,
+            recurring: row.get(10)?,
+            when_done: row.get(11)?,
+            parse_errors: row.get(12)?,
+            priority: row.get(13)?,
+            file_path: Some(row.get(14)?),
+            parent_hash: row.get(15)?,
+            tags: serde_json::from_str(&tags_json).unwrap_or_default(),
+            contexts: serde_json::from_str(&contexts_json).unwrap_or_default(),
+        })
+    })?;
+
+    rows.collect()
+}
+
 pub fn index_single_file(conn: &Connection, path: &str) -> Result<(), Box<dyn std::error::Error>> {
     let path_buf = fs::canonicalize(path)?;
     let canonical_path = path_buf.to_string_lossy().to_string();
@@ -423,6 +489,20 @@ mod tests {
             .filter_map(|r| r.ok())
             .collect();
         assert!(contexts.contains(&"db".to_string()));
+
+        let indexed_tasks = query_tasks(&conn, "1 = 1").unwrap();
+        let design_task = indexed_tasks
+            .iter()
+            .find(|task| task.description == "Design SQLite schema")
+            .unwrap();
+        assert_eq!(design_task.tags, vec!["high-priority"]);
+        assert_eq!(design_task.contexts, vec!["db"]);
+        assert_eq!(
+            Path::new(design_task.file_path.as_deref().unwrap())
+                .canonicalize()
+                .unwrap(),
+            file_path.canonicalize().unwrap()
+        );
 
         // Delete the file and re-sweep
         fs::remove_file(&file_path).unwrap();

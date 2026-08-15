@@ -15,6 +15,8 @@ export interface Task {
   priority: number | null;
   parent_hash: string | null;
   file_path: string | null;
+  tags: string[];
+  contexts: string[];
 }
 
 export interface CustomView {
@@ -37,7 +39,11 @@ export function isTask(payload: unknown): payload is Task {
       p.status === "cancelled") &&
     (p.task_type === "task" || p.task_type === "event") &&
     typeof p.description === "string" &&
-    (typeof p.file_path === "string" || p.file_path === null)
+    (typeof p.file_path === "string" || p.file_path === null) &&
+    Array.isArray(p.tags) &&
+    p.tags.every((tag) => typeof tag === "string") &&
+    Array.isArray(p.contexts) &&
+    p.contexts.every((context) => typeof context === "string")
   );
 }
 

@@ -3,7 +3,7 @@
     windows_subsystem = "windows"
 )]
 
-use octarine::db::{boot_sweep, delete_file, index_single_file, initialize_db};
+use octarine::db::{boot_sweep, delete_file, index_single_file, initialize_db, query_tasks};
 use octarine::file_ops::{
     create_directory_on_disk, create_file_on_disk, delete_path_on_disk, read_file_content_on_disk,
     rename_path_on_disk, scan_dir_tree, write_file_content_on_disk, FileNode,
@@ -35,59 +35,7 @@ fn get_tasks(
         _ => "1 = 1".to_string(),
     };
 
-    let query_str = format!(
-        "SELECT tasks.line_number, tasks.raw_markdown, tasks.hash, tasks.status, tasks.type, tasks.description, tasks.project, tasks.due_date, tasks.s_start, tasks.duration_secs, tasks.recurring, tasks.when_done, tasks.parse_errors, tasks.priority, files.path, tasks.parent_hash FROM tasks JOIN files ON files.id = tasks.file_id WHERE {}",
-        where_clause
-    );
-
-    let mut stmt = conn.prepare(&query_str).map_err(|e| e.to_string())?;
-    let rows = stmt
-        .query_map([], |row| {
-            let line_number: usize = row.get(0)?;
-            let raw_markdown: String = row.get(1)?;
-            let hash: String = row.get(2)?;
-            let status: String = row.get(3)?;
-            let task_type: String = row.get(4)?;
-            let description: String = row.get(5)?;
-            let project: Option<String> = row.get(6)?;
-            let due_date: Option<String> = row.get(7)?;
-            let s_start: Option<String> = row.get(8)?;
-            let duration_secs: Option<i32> = row.get(9)?;
-            let recurring: Option<String> = row.get(10)?;
-            let when_done: Option<String> = row.get(11)?;
-            let parse_errors: Option<String> = row.get(12)?;
-            let priority: Option<i32> = row.get(13)?;
-            let file_path: String = row.get(14)?;
-            let parent_hash: Option<String> = row.get(15)?;
-
-            Ok(ParsedTask {
-                line_number,
-                raw_markdown,
-                hash,
-                status,
-                task_type,
-                description,
-                project,
-                due_date,
-                s_start,
-                duration_secs,
-                recurring,
-                when_done,
-                priority,
-                tags: vec![],
-                contexts: vec![],
-                parse_errors,
-                file_path: Some(file_path),
-                parent_hash,
-            })
-        })
-        .map_err(|e| e.to_string())?;
-
-    let mut tasks = Vec::new();
-    for row in rows {
-        tasks.push(row.map_err(|e| e.to_string())?);
-    }
-    Ok(tasks)
+    query_tasks(&conn, &where_clause).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

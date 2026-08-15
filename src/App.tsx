@@ -55,26 +55,6 @@ function formatDueDate(dateStr: string): string {
   }
 }
 
-function getTaskContexts(rawMarkdown: string): string[] {
-  if (!rawMarkdown) return [];
-  const cleanText = rawMarkdown
-    .replace(/`[^`]*`/g, "")
-    .replace(/\[[^\]]*\]\([^)]*\)/g, "")
-    .replace(/https?:\/\/[^\s]+/g, "");
-  const ctxMatches = cleanText.match(/@([\p{L}\p{N}_\-/]+)/gu);
-  return ctxMatches ? ctxMatches.map((c) => c.slice(1)) : [];
-}
-
-function getTaskTags(rawMarkdown: string): string[] {
-  if (!rawMarkdown) return [];
-  const cleanText = rawMarkdown
-    .replace(/`[^`]*`/g, "")
-    .replace(/\[[^\]]*\]\([^)]*\)/g, "")
-    .replace(/https?:\/\/[^\s]+/g, "");
-  const tagMatches = cleanText.match(/#([\p{L}\p{N}_\-/]+)/gu);
-  return tagMatches ? tagMatches.map((c) => c.slice(1)) : [];
-}
-
 function getTaskDoneDate(rawMarkdown: string): string | null {
   if (!rawMarkdown) return null;
   const firstLine = rawMarkdown.split("\n")[0];
@@ -240,30 +220,8 @@ export function App() {
 
   // Aggregate unique projects, contexts, and tags dynamically from loaded tasks
   const projects = Array.from(new Set(tasks.map((t) => t.project).filter((p): p is string => !!p)));
-  const contexts = Array.from(
-    new Set(
-      tasks.flatMap((t) => {
-        const cleanText = t.raw_markdown
-          .replace(/`[^`]*`/g, "")
-          .replace(/\[[^\]]*\]\([^)]*\)/g, "")
-          .replace(/https?:\/\/[^\s]+/g, "");
-        const ctxMatches = cleanText.match(/@([\p{L}\p{N}_\-/]+)/gu);
-        return ctxMatches ? ctxMatches.map((c) => c.slice(1)) : [];
-      }),
-    ),
-  );
-  const tags = Array.from(
-    new Set(
-      tasks.flatMap((t) => {
-        const cleanText = t.raw_markdown
-          .replace(/`[^`]*`/g, "")
-          .replace(/\[[^\]]*\]\([^)]*\)/g, "")
-          .replace(/https?:\/\/[^\s]+/g, "");
-        const tagMatches = cleanText.match(/#([\p{L}\p{N}_\-/]+)/gu);
-        return tagMatches ? tagMatches.map((c) => c.slice(1)) : [];
-      }),
-    ),
-  );
+  const contexts = Array.from(new Set(tasks.flatMap((task) => task.contexts)));
+  const tags = Array.from(new Set(tasks.flatMap((task) => task.tags)));
 
   // Cyclic checklist status toggler: todo -> doing -> done -> cancelled -> todo
   const handleCheckboxClick = async (e: React.MouseEvent, task: Task) => {
@@ -329,11 +287,11 @@ export function App() {
     }
     if (selectedSection.startsWith("ctx:")) {
       const ctx = selectedSection.slice("ctx:".length);
-      return task.raw_markdown.includes(`@${ctx}`);
+      return task.contexts.includes(ctx);
     }
     if (selectedSection.startsWith("tag:")) {
       const tag = selectedSection.slice("tag:".length);
-      return task.raw_markdown.includes(`#${tag}`);
+      return task.tags.includes(tag);
     }
 
     return true;
@@ -1829,12 +1787,12 @@ export function App() {
                                       {task.project && (
                                         <span className="pill project">+{task.project}</span>
                                       )}
-                                      {getTaskContexts(task.raw_markdown).map((ctx) => (
+                                      {task.contexts.map((ctx) => (
                                         <span key={ctx} className="pill context">
                                           @{ctx}
                                         </span>
                                       ))}
-                                      {getTaskTags(task.raw_markdown).map((tag) => (
+                                      {task.tags.map((tag) => (
                                         <span key={tag} className="pill tag">
                                           #{tag}
                                         </span>
@@ -2093,12 +2051,12 @@ export function App() {
                               {task.project && (
                                 <span className="pill project">+{task.project}</span>
                               )}
-                              {getTaskContexts(task.raw_markdown).map((ctx) => (
+                              {task.contexts.map((ctx) => (
                                 <span key={ctx} className="pill context">
                                   @{ctx}
                                 </span>
                               ))}
-                              {getTaskTags(task.raw_markdown).map((tag) => (
+                              {task.tags.map((tag) => (
                                 <span key={tag} className="pill tag">
                                   #{tag}
                                 </span>
