@@ -46,4 +46,4 @@ Parser changes must cover:
 
 ## Safe-Write Boundary
 
-The writer receives the original raw block with each edit, uses the expected location, and falls back to a nearby source search after line shifts. Writes are independent of the SQLite cache and replace files atomically. Ambiguous fallback detection and structured conflicts remain planned hardening; see `architecture.md` and `roadmap.md`.
+The writer receives the original raw block with each edit, uses the expected location, and falls back to a nearby source search after line shifts. A fallback succeeds only when exactly one nearby block matches. Writes are independent of the SQLite cache and replace files atomically. Structured conflict responses remain planned hardening; see `architecture.md` and `roadmap.md`.

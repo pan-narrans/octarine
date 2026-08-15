@@ -61,9 +61,9 @@ The watcher is currently leaked to keep it alive, is not replaced when the confi
 
 ## Source Writes
 
-`src-tauri/src/writer.rs` supports task status, schedule, and raw-block updates. Each command supplies the original source block, so mutation does not depend on SQLite cache timing. The writer checks the expected location and searches nearby after line shifts. Task and full-file edits use a temporary file in the source directory, preserve permissions, flush its contents, and atomically replace the original.
+`src-tauri/src/writer.rs` supports task status, schedule, and raw-block updates. Each command supplies the original source block, so mutation does not depend on SQLite cache timing. The writer checks the expected location and searches nearby after line shifts, rejecting a fallback when multiple nearby blocks match. Task and full-file edits use a temporary file in the source directory, preserve permissions, flush its contents, and atomically replace the original.
 
-The remaining safe-write hardening is to detect and reject ambiguous fallback matches rather than accepting the first nearby match.
+Structured conflict responses remain planned so the frontend can distinguish missing, changed, and ambiguous source failures without interpreting error text.
 
 ## Query Language
 

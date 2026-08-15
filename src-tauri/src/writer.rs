@@ -55,49 +55,7 @@ pub fn update_task_status_in_file(
         return Err("Original raw markdown is empty.".to_string());
     }
 
-    let mut found_line: Option<usize> = None;
-
-    // Phase 1: Direct Match
-    if original_line_number <= lines.len() {
-        let start_idx = original_line_number - 1;
-        if is_match_at_line(&lines, start_idx, &original_lines) {
-            found_line = Some(start_idx);
-        }
-    }
-
-    // Phase 2: Nearby Search Fallback (up to 15 lines in both directions)
-    if found_line.is_none() {
-        let search_radius = 15;
-        let start_line = original_line_number as i32 - 1;
-        for offset in 1..=search_radius {
-            // Check below
-            let scan_idx = start_line + offset;
-            if scan_idx >= 0
-                && (scan_idx as usize) < lines.len()
-                && is_match_at_line(&lines, scan_idx as usize, &original_lines)
-            {
-                found_line = Some(scan_idx as usize);
-                break;
-            }
-            // Check above
-            let scan_idx = start_line - offset;
-            if scan_idx >= 0
-                && (scan_idx as usize) < lines.len()
-                && is_match_at_line(&lines, scan_idx as usize, &original_lines)
-            {
-                found_line = Some(scan_idx as usize);
-                break;
-            }
-        }
-    }
-
-    // Phase 3: Conflict Resolution
-    let line_idx = match found_line {
-        Some(idx) => idx,
-        None => {
-            return Err("Concurrency Collision: The task could not be located in the file. It may have been edited or moved externally. Please refresh.".to_string());
-        }
-    };
+    let line_idx = locate_source_block(&lines, original_line_number, &original_lines, "task")?;
 
     let mut edited_lines = lines;
     let target_line = &edited_lines[line_idx];
@@ -173,6 +131,42 @@ fn is_match_at_line(file_lines: &[String], start_idx: usize, original_lines: &[&
     true
 }
 
+fn locate_source_block(
+    file_lines: &[String],
+    original_line_number: usize,
+    original_lines: &[&str],
+    source_kind: &str,
+) -> Result<usize, String> {
+    const SEARCH_RADIUS: usize = 15;
+
+    let expected_idx = original_line_number.checked_sub(1);
+    if let Some(idx) = expected_idx {
+        if idx < file_lines.len() && is_match_at_line(file_lines, idx, original_lines) {
+            return Ok(idx);
+        }
+    }
+
+    let center = expected_idx.unwrap_or(0);
+    let search_start = center.saturating_sub(SEARCH_RADIUS);
+    let search_end = center
+        .saturating_add(SEARCH_RADIUS)
+        .min(file_lines.len().saturating_sub(1));
+    let matches: Vec<usize> = (search_start..=search_end)
+        .filter(|idx| Some(*idx) != expected_idx)
+        .filter(|idx| is_match_at_line(file_lines, *idx, original_lines))
+        .collect();
+
+    match matches.as_slice() {
+        [idx] => Ok(*idx),
+        [] => Err(format!(
+            "Concurrency Collision: The {source_kind} could not be located in the file. It may have been edited or moved externally. Please refresh."
+        )),
+        _ => Err(format!(
+            "Concurrency Collision: Multiple matching {source_kind} blocks were found near the expected location. No file changes were made. Please refresh."
+        )),
+    }
+}
+
 pub fn update_event_schedule_in_file(
     file_path: &str,
     original_line_number: usize,
@@ -191,46 +185,7 @@ pub fn update_event_schedule_in_file(
         return Err("Original raw markdown is empty.".to_string());
     }
 
-    let mut found_line: Option<usize> = None;
-
-    // Direct match check (Phase 1)
-    if original_line_number <= lines.len() {
-        let start_idx = original_line_number - 1;
-        if is_match_at_line(&lines, start_idx, &original_lines) {
-            found_line = Some(start_idx);
-        }
-    }
-
-    // Fallback search check (Phase 2)
-    if found_line.is_none() {
-        let search_radius = 15;
-        let start_line = original_line_number as i32 - 1;
-        for offset in 1..=search_radius {
-            let scan_idx = start_line + offset;
-            if scan_idx >= 0
-                && (scan_idx as usize) < lines.len()
-                && is_match_at_line(&lines, scan_idx as usize, &original_lines)
-            {
-                found_line = Some(scan_idx as usize);
-                break;
-            }
-            let scan_idx = start_line - offset;
-            if scan_idx >= 0
-                && (scan_idx as usize) < lines.len()
-                && is_match_at_line(&lines, scan_idx as usize, &original_lines)
-            {
-                found_line = Some(scan_idx as usize);
-                break;
-            }
-        }
-    }
-
-    let line_idx = match found_line {
-        Some(idx) => idx,
-        None => {
-            return Err("Concurrency Collision: The event could not be located in the file. It may have been edited or moved externally. Please refresh.".to_string());
-        }
-    };
+    let line_idx = locate_source_block(&lines, original_line_number, &original_lines, "event")?;
 
     let mut edited_lines = lines;
     let target_line = &edited_lines[line_idx];
@@ -283,43 +238,8 @@ pub fn update_task_markdown_in_file(
         return Err("Original raw markdown is empty.".to_string());
     }
 
-    // 3. Locate the original block
-    let mut found_start_idx: Option<usize> = None;
-    let index_0 = original_line_number.saturating_sub(1);
-
-    // Direct match check (Phase 1)
-    if is_match_at_line(&lines, index_0, &original_block_lines) {
-        found_start_idx = Some(index_0);
-    }
-
-    // Fallback search check (Phase 2)
-    if found_start_idx.is_none() {
-        let search_radius = 15;
-        let start_line = original_line_number as i32 - 1;
-        for offset in 1..=search_radius {
-            let scan_idx = start_line + offset;
-            if scan_idx >= 0
-                && (scan_idx as usize) < lines.len()
-                && is_match_at_line(&lines, scan_idx as usize, &original_block_lines)
-            {
-                found_start_idx = Some(scan_idx as usize);
-                break;
-            }
-            let scan_idx = start_line - offset;
-            if scan_idx >= 0
-                && (scan_idx as usize) < lines.len()
-                && is_match_at_line(&lines, scan_idx as usize, &original_block_lines)
-            {
-                found_start_idx = Some(scan_idx as usize);
-                break;
-            }
-        }
-    }
-
-    let start_idx = match found_start_idx {
-        Some(idx) => idx,
-        None => return Err("Concurrency Collision: The task block could not be located in the file. It may have been edited or moved externally. Please refresh.".to_string()),
-    };
+    let start_idx =
+        locate_source_block(&lines, original_line_number, &original_block_lines, "task")?;
 
     let end_idx = start_idx + original_block_lines.len();
 
@@ -412,6 +332,49 @@ mod tests {
         let content_after_shift = fs::read_to_string(&file_path).unwrap();
         assert!(content_after_shift.contains("- [x] Implement safe writer @db"));
         assert!(content_after_shift.ends_with('\n'));
+    }
+
+    #[test]
+    fn test_safe_writer_rejects_ambiguous_nearby_matches() {
+        let temp_dir = tempdir().unwrap();
+        let file_path = temp_dir.path().join("tasks.md");
+        let content = "# Tasks\n- [ ] Duplicate task\n\n- [ ] Duplicate task\n";
+        fs::write(&file_path, content).unwrap();
+
+        let error = update_task_status_in_file(
+            file_path.to_str().unwrap(),
+            3,
+            "- [ ] Duplicate task",
+            "done",
+        )
+        .unwrap_err();
+
+        assert!(error.contains("Multiple matching task blocks"));
+        assert_eq!(fs::read_to_string(&file_path).unwrap(), content);
+    }
+
+    #[test]
+    fn test_safe_writer_prefers_exact_location_for_duplicate_content() {
+        let temp_dir = tempdir().unwrap();
+        let file_path = temp_dir.path().join("tasks.md");
+        fs::write(
+            &file_path,
+            "# Tasks\n- [ ] Duplicate task\n\n- [ ] Duplicate task\n",
+        )
+        .unwrap();
+
+        update_task_status_in_file(
+            file_path.to_str().unwrap(),
+            4,
+            "- [ ] Duplicate task",
+            "doing",
+        )
+        .unwrap();
+
+        assert_eq!(
+            fs::read_to_string(&file_path).unwrap(),
+            "# Tasks\n- [ ] Duplicate task\n\n- [/] Duplicate task\n"
+        );
     }
 
     #[test]

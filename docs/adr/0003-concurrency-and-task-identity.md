@@ -6,7 +6,7 @@ Approved
 
 ## Implementation Status
 
-Partial. Commands provide the original source block, location/content hashes and nearby source matching exist, and file replacement is atomic. The writer does not yet reject ambiguous nearby matches or return structured conflict data.
+Partial. Commands provide the original source block, location/content hashes and ambiguity-aware nearby source matching exist, and file replacement is atomic. The writer does not yet return structured conflict data.
 
 ## Context
 
