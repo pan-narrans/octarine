@@ -14,6 +14,7 @@ export interface Task {
   parse_errors: string | null;
   priority: number | null;
   parent_hash: string | null;
+  file_path: string | null;
 }
 
 export interface CustomView {
@@ -30,9 +31,13 @@ export function isTask(payload: unknown): payload is Task {
     typeof p.line_number === "number" &&
     typeof p.raw_markdown === "string" &&
     typeof p.hash === "string" &&
-    (p.status === "todo" || p.status === "doing" || p.status === "done" || p.status === "cancelled") &&
+    (p.status === "todo" ||
+      p.status === "doing" ||
+      p.status === "done" ||
+      p.status === "cancelled") &&
     (p.task_type === "task" || p.task_type === "event") &&
-    typeof p.description === "string"
+    typeof p.description === "string" &&
+    (typeof p.file_path === "string" || p.file_path === null)
   );
 }
 

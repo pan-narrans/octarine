@@ -57,10 +57,12 @@ The directory containing this README is the effective project root. If the repos
 
 ## Development
 
-The tested toolchain will be pinned during the quality-baseline change. With Node.js, Rust, and the platform-specific Tauri prerequisites available:
+Use the Node version in `.node-version` and the Rust version in `rust-toolchain.toml`. With the platform-specific Tauri prerequisites available:
 
 ```bash
 npm ci
+npm run format:check
+npm run lint
 npm run build
 ```
 
@@ -70,12 +72,12 @@ Run the desktop application with the Tauri CLI:
 npx tauri dev
 ```
 
-Backend tests run from `src-tauri/`:
+Backend checks run from `src-tauri/`:
 
 ```bash
+cargo fmt --all -- --check
+cargo clippy --all-targets -- -D warnings
 cargo test
 ```
-
-One watcher timing test is known to be unreliable in the current baseline. Do not treat that failure as acceptable after the quality-baseline change stabilizes it.
 
 Read `CONTRIBUTING.md` before making changes. Product purpose is documented in `docs/vision.md`; current internals are documented in `docs/architecture.md`.

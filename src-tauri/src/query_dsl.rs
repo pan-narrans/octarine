@@ -70,17 +70,21 @@ fn tokenize(query: &str) -> Vec<Token> {
                     if let Some(caps) = op_re.captures(trimmed) {
                         let op = caps.get(1).unwrap().as_str();
                         let op_len = op.len();
-                        
+
                         // Move cursor past the operator and find the value
                         let val_part = &trimmed[op_len..].trim_start();
-                        let val_end = val_part.find(|c: char| c.is_whitespace() || c == '(' || c == ')').unwrap_or(val_part.len());
+                        let val_end = val_part
+                            .find(|c: char| c.is_whitespace() || c == '(' || c == ')')
+                            .unwrap_or(val_part.len());
                         let val_word = &val_part[..val_end];
                         let term_expr = format!("{}{}{}", word, op, val_word);
-                        
+
                         // Advance general index `i` past this expression
-                        let consumed = chars.len() - rest.len() + rest.find(val_word).unwrap() + val_word.len();
+                        let consumed = chars.len() - rest.len()
+                            + rest.find(val_word).unwrap()
+                            + val_word.len();
                         i = consumed;
-                        
+
                         tokens.push(Token::Term(term_expr));
                         continue;
                     }
@@ -151,7 +155,10 @@ fn compile_term(term: &str) -> Result<String, String> {
         };
         match p_num {
             Some(num) => Ok(format!("priority = {}", num)),
-            None => Err(format!("Invalid priority value in query: '{}' (expected A-D or an integer)", p_val)),
+            None => Err(format!(
+                "Invalid priority value in query: '{}' (expected A-D or an integer)",
+                p_val
+            )),
         }
     } else {
         // Metadata comparison term, e.g., due<=today, status=todo, type=event
@@ -159,29 +166,39 @@ fn compile_term(term: &str) -> Result<String, String> {
         if let Some(caps) = comp_re.captures(term) {
             let field = caps.get(1).unwrap().as_str();
             let op = caps.get(2).unwrap().as_str();
-            let val = caps.get(3).unwrap().as_str().trim_matches(|c| c == '"' || c == '\'');
+            let val = caps
+                .get(3)
+                .unwrap()
+                .as_str()
+                .trim_matches(|c| c == '"' || c == '\'');
 
             match field {
                 "due" => {
                     if val == "today" {
-                        Ok(format!("(due_date IS NOT NULL AND due_date {} date('now'))", op))
+                        Ok(format!(
+                            "(due_date IS NOT NULL AND due_date {} date('now'))",
+                            op
+                        ))
                     } else if val == "tomorrow" {
-                        Ok(format!("(due_date IS NOT NULL AND due_date {} date('now', '+1 day'))", op))
+                        Ok(format!(
+                            "(due_date IS NOT NULL AND due_date {} date('now', '+1 day'))",
+                            op
+                        ))
                     } else {
                         // Check if it's a valid date
                         if chrono::NaiveDate::parse_from_str(val, "%Y-%m-%d").is_ok() {
-                            Ok(format!("(due_date IS NOT NULL AND due_date {} '{}')", op, val.replace('\'', "''")))
+                            Ok(format!(
+                                "(due_date IS NOT NULL AND due_date {} '{}')",
+                                op,
+                                val.replace('\'', "''")
+                            ))
                         } else {
                             Err(format!("Invalid date literal in query: '{}'", val))
                         }
                     }
                 }
-                "status" => {
-                    Ok(format!("status {} '{}'", op, val.replace('\'', "''")))
-                }
-                "type" => {
-                    Ok(format!("type {} '{}'", op, val.replace('\'', "''")))
-                }
+                "status" => Ok(format!("status {} '{}'", op, val.replace('\'', "''"))),
+                "type" => Ok(format!("type {} '{}'", op, val.replace('\'', "''"))),
                 _ => Err(format!("Unsupported query field: '{}'", field)),
             }
         } else {

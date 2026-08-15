@@ -5,16 +5,16 @@ import { Task, FileNode } from "./types";
 import { FileTree } from "./components/FileTree";
 import { MarkdownEditor } from "./components/MarkdownEditor";
 import { EditTaskModal } from "./components/EditTaskModal";
-import { 
-  Inbox, 
-  Calendar, 
-  Layers, 
-  Tag, 
-  Hash, 
-  CheckCircle2, 
-  Loader2, 
-  AlertCircle, 
-  Search, 
+import {
+  Inbox,
+  Calendar,
+  Layers,
+  Tag,
+  Hash,
+  CheckCircle2,
+  Loader2,
+  AlertCircle,
+  Search,
   Edit2,
   Check,
   X,
@@ -22,16 +22,22 @@ import {
   ChevronRight,
   Clock,
   BookOpen,
-  Pencil
+  Pencil,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/tauri";
 import { open } from "@tauri-apps/api/shell";
 import { listen } from "@tauri-apps/api/event";
 
+interface ProjectNode {
+  name: string;
+  fullPath: string;
+  children: Record<string, ProjectNode>;
+}
+
 function formatDueDate(dateStr: string): string {
   if (!dateStr) return "";
   try {
-    const parts = dateStr.split('-');
+    const parts = dateStr.split("-");
     if (parts.length === 3) {
       const year = parseInt(parts[0], 10);
       const month = parseInt(parts[1], 10) - 1;
@@ -39,7 +45,11 @@ function formatDueDate(dateStr: string): string {
       const d = new Date(year, month, day);
       return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
     }
-    return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    return new Date(dateStr).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
   } catch {
     return dateStr;
   }
@@ -47,16 +57,22 @@ function formatDueDate(dateStr: string): string {
 
 function getTaskContexts(rawMarkdown: string): string[] {
   if (!rawMarkdown) return [];
-  const cleanText = rawMarkdown.replace(/`[^`]*`/g, "").replace(/\[[^\]]*\]\([^)]*\)/g, "").replace(/https?:\/\/[^\s]+/g, "");
+  const cleanText = rawMarkdown
+    .replace(/`[^`]*`/g, "")
+    .replace(/\[[^\]]*\]\([^)]*\)/g, "")
+    .replace(/https?:\/\/[^\s]+/g, "");
   const ctxMatches = cleanText.match(/@([\p{L}\p{N}_\-/]+)/gu);
-  return ctxMatches ? ctxMatches.map(c => c.slice(1)) : [];
+  return ctxMatches ? ctxMatches.map((c) => c.slice(1)) : [];
 }
 
 function getTaskTags(rawMarkdown: string): string[] {
   if (!rawMarkdown) return [];
-  const cleanText = rawMarkdown.replace(/`[^`]*`/g, "").replace(/\[[^\]]*\]\([^)]*\)/g, "").replace(/https?:\/\/[^\s]+/g, "");
+  const cleanText = rawMarkdown
+    .replace(/`[^`]*`/g, "")
+    .replace(/\[[^\]]*\]\([^)]*\)/g, "")
+    .replace(/https?:\/\/[^\s]+/g, "");
   const tagMatches = cleanText.match(/#([\p{L}\p{N}_\-/]+)/gu);
-  return tagMatches ? tagMatches.map(c => c.slice(1)) : [];
+  return tagMatches ? tagMatches.map((c) => c.slice(1)) : [];
 }
 
 function getTaskDoneDate(rawMarkdown: string): string | null {
@@ -69,7 +85,7 @@ function getTaskDoneDate(rawMarkdown: string): string | null {
 function renderTaskNotesAndSubtasks(notes: string) {
   if (!notes) return null;
   const lines = notes.split("\n");
-  
+
   return (
     <div className="task-notes">
       {lines.map((line, idx) => {
@@ -78,17 +94,17 @@ function renderTaskNotesAndSubtasks(notes: string) {
           const indent = subtaskMatch[1].length;
           const statusChar = subtaskMatch[2];
           const text = subtaskMatch[3];
-          
+
           let statusClass = "todo";
           if (statusChar === "x" || statusChar === "X") {
             statusClass = "done";
           } else if (statusChar === "/") {
             statusClass = "doing";
           }
-          
+
           return (
-            <div 
-              key={idx} 
+            <div
+              key={idx}
               className={`subtask-row ${statusClass}`}
               style={{ paddingLeft: `${indent * 8}px` }}
             >
@@ -126,19 +142,13 @@ export function App() {
   // Activate live Tauri event listener for real-time background watcher sync
   useTauriEvents();
 
-  const { 
-    tasks, 
-    customViews, 
-    loading, 
-    fetchTasks, 
-    fetchCustomViews, 
-    updateTaskStatus 
-  } = useTaskStore();
+  const { tasks, customViews, loading, fetchTasks, fetchCustomViews, updateTaskStatus } =
+    useTaskStore();
 
   const [selectedSection, setSelectedSection] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [activeVaultPath, setActiveVaultPath] = useState<string>("Loading...");
-  
+
   // Vault Path Inline Editor state
   const [isEditingVault, setIsEditingVault] = useState<boolean>(false);
   const [vaultInput, setVaultInput] = useState<string>("");
@@ -186,23 +196,23 @@ export function App() {
     fetchCustomViews();
     fetchDirTree();
     fetchJournalTree();
-    
+
     // Fetch active vault path dynamically from Tauri state
     invoke<string>("get_vault_config")
-      .then(path => {
+      .then((path) => {
         setActiveVaultPath(path);
         setVaultInput(path);
       })
-      .catch(err => console.error("Failed to query active vault path:", err));
+      .catch((err) => console.error("Failed to query active vault path:", err));
 
     // Fetch active journal path dynamically from Tauri state
     invoke<string>("get_journal_config")
-      .then(path => {
+      .then((path) => {
         setActiveJournalPath(path);
         setJournalInput(path);
         fetchTodayJournal(path);
       })
-      .catch(err => console.error("Failed to query active journal path:", err));
+      .catch((err) => console.error("Failed to query active journal path:", err));
   }, [fetchTasks, fetchCustomViews]);
 
   // Listen to background watcher change events to update directories dynamically
@@ -211,7 +221,9 @@ export function App() {
     const setup = async () => {
       try {
         unlistenFn = await listen("vault-changed", () => {
-          console.log("Vault change event detected on frontend! Refreshing trees and today's journal...");
+          console.log(
+            "Vault change event detected on frontend! Refreshing trees and today's journal...",
+          );
           fetchDirTree();
           fetchJournalTree();
           fetchTodayJournal(activeJournalPath);
@@ -227,17 +239,31 @@ export function App() {
   }, [activeJournalPath]);
 
   // Aggregate unique projects, contexts, and tags dynamically from loaded tasks
-  const projects = Array.from(new Set(tasks.map(t => t.project).filter((p): p is string => !!p)));
-  const contexts = Array.from(new Set(tasks.flatMap(t => {
-    const cleanText = t.raw_markdown.replace(/`[^`]*`/g, "").replace(/\[[^\]]*\]\([^)]*\)/g, "").replace(/https?:\/\/[^\s]+/g, "");
-    const ctxMatches = cleanText.match(/@([\p{L}\p{N}_\-/]+)/gu);
-    return ctxMatches ? ctxMatches.map(c => c.slice(1)) : [];
-  })));
-  const tags = Array.from(new Set(tasks.flatMap(t => {
-    const cleanText = t.raw_markdown.replace(/`[^`]*`/g, "").replace(/\[[^\]]*\]\([^)]*\)/g, "").replace(/https?:\/\/[^\s]+/g, "");
-    const tagMatches = cleanText.match(/#([\p{L}\p{N}_\-/]+)/gu);
-    return tagMatches ? tagMatches.map(c => c.slice(1)) : [];
-  })));
+  const projects = Array.from(new Set(tasks.map((t) => t.project).filter((p): p is string => !!p)));
+  const contexts = Array.from(
+    new Set(
+      tasks.flatMap((t) => {
+        const cleanText = t.raw_markdown
+          .replace(/`[^`]*`/g, "")
+          .replace(/\[[^\]]*\]\([^)]*\)/g, "")
+          .replace(/https?:\/\/[^\s]+/g, "");
+        const ctxMatches = cleanText.match(/@([\p{L}\p{N}_\-/]+)/gu);
+        return ctxMatches ? ctxMatches.map((c) => c.slice(1)) : [];
+      }),
+    ),
+  );
+  const tags = Array.from(
+    new Set(
+      tasks.flatMap((t) => {
+        const cleanText = t.raw_markdown
+          .replace(/`[^`]*`/g, "")
+          .replace(/\[[^\]]*\]\([^)]*\)/g, "")
+          .replace(/https?:\/\/[^\s]+/g, "");
+        const tagMatches = cleanText.match(/#([\p{L}\p{N}_\-/]+)/gu);
+        return tagMatches ? tagMatches.map((c) => c.slice(1)) : [];
+      }),
+    ),
+  );
 
   // Cyclic checklist status toggler: todo -> doing -> done -> cancelled -> todo
   const handleCheckboxClick = async (e: React.MouseEvent, task: Task) => {
@@ -246,16 +272,11 @@ export function App() {
       todo: "doing",
       doing: "done",
       done: "cancelled",
-      cancelled: "todo"
+      cancelled: "todo",
     };
     const nextStatus = nextStatusMap[task.status] || "todo";
-    
-    await updateTaskStatus(
-      (task as any).file_path || "",
-      task.line_number,
-      task.hash,
-      nextStatus
-    );
+
+    await updateTaskStatus(task.file_path || "", task.line_number, task.hash, nextStatus);
   };
 
   const handleSaveTaskInlineEdit = async (task: Task, newContent: string) => {
@@ -267,10 +288,10 @@ export function App() {
 
     try {
       await invoke("update_task_markdown", {
-        filePath: (task as any).file_path || "",
+        filePath: task.file_path || "",
         lineNumber: task.line_number,
         hash: task.hash,
-        newRawMarkdown: trimmed
+        newRawMarkdown: trimmed,
       });
       setEditingTaskHash(null);
       await fetchTasks();
@@ -281,7 +302,7 @@ export function App() {
   };
 
   // In-memory filter logic for selected sidebar items and search query
-  const filteredTasks = tasks.filter(task => {
+  const filteredTasks = tasks.filter((task) => {
     // 1. Search Query Filter
     if (searchQuery.trim() !== "") {
       const q = searchQuery.toLowerCase();
@@ -299,10 +320,12 @@ export function App() {
     if (selectedSection === "doing") return task.status === "doing";
     if (selectedSection === "done") return task.status === "done";
     if (selectedSection === "events") return task.task_type === "event";
-    
+
     if (selectedSection.startsWith("proj:")) {
       const proj = selectedSection.slice("proj:".length);
-      return task.project === proj || (task.project !== null && task.project.startsWith(proj + "/"));
+      return (
+        task.project === proj || (task.project !== null && task.project.startsWith(proj + "/"))
+      );
     }
     if (selectedSection.startsWith("ctx:")) {
       const ctx = selectedSection.slice("ctx:".length);
@@ -368,17 +391,20 @@ export function App() {
     try {
       const today = new Date();
       const yyyy = today.getFullYear();
-      const mm = String(today.getMonth() + 1).padStart(2, '0');
-      const dd = String(today.getDate()).padStart(2, '0');
+      const mm = String(today.getMonth() + 1).padStart(2, "0");
+      const dd = String(today.getDate()).padStart(2, "0");
       const todayStr = `${yyyy}-${mm}-${dd}`;
       const filePath = `${activeJournalPath}/${todayStr}.md`;
 
       let content = "";
       try {
         content = await invoke("read_file_content", { path: filePath });
-      } catch (_) {
+      } catch {
         // File does not exist yet, write empty string to scaffold it!
-        await invoke("write_file_content", { path: filePath, content: `# 📓 Journal Entry: ${todayStr}\n\n` });
+        await invoke("write_file_content", {
+          path: filePath,
+          content: `# 📓 Journal Entry: ${todayStr}\n\n`,
+        });
         content = `# 📓 Journal Entry: ${todayStr}\n\n`;
       }
       await fetchJournalTree();
@@ -396,17 +422,20 @@ export function App() {
       setTodayJournalLoading(true);
       const today = new Date();
       const yyyy = today.getFullYear();
-      const mm = String(today.getMonth() + 1).padStart(2, '0');
-      const dd = String(today.getDate()).padStart(2, '0');
+      const mm = String(today.getMonth() + 1).padStart(2, "0");
+      const dd = String(today.getDate()).padStart(2, "0");
       const todayStr = `${yyyy}-${mm}-${dd}`;
       const filePath = `${journalPath}/${todayStr}.md`;
 
       let content = "";
       try {
         content = await invoke("read_file_content", { path: filePath });
-      } catch (_) {
+      } catch {
         // Silently scaffold today's journal note
-        await invoke("write_file_content", { path: filePath, content: `# 📓 Journal Entry: ${todayStr}\n\n` });
+        await invoke("write_file_content", {
+          path: filePath,
+          content: `# 📓 Journal Entry: ${todayStr}\n\n`,
+        });
         content = `# 📓 Journal Entry: ${todayStr}\n\n`;
       }
       setTodayJournalPath(filePath);
@@ -523,18 +552,18 @@ export function App() {
       const anchor = match[1];
       const url = match[2];
       parts.push(
-        <a 
+        <a
           key={matchIndex}
-          href={url} 
+          href={url}
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            open(url).catch(err => console.error("Failed to open URL:", err));
+            open(url).catch((err) => console.error("Failed to open URL:", err));
           }}
           className="task-inline-link"
         >
           {anchor}
-        </a>
+        </a>,
       );
       lastIndex = linkRegex.lastIndex;
     }
@@ -550,7 +579,7 @@ export function App() {
   // HIERARCHICAL PROJECTS COMPILER & RENDERER
   // -------------------------------------------------------------
   const buildProjectTree = (flatProjects: string[]) => {
-    const root: Record<string, any> = {};
+    const root: Record<string, ProjectNode> = {};
 
     for (const path of flatProjects) {
       const parts = path.split("/");
@@ -564,7 +593,7 @@ export function App() {
           current[part] = {
             name: part,
             fullPath: currentPath,
-            children: {}
+            children: {},
           };
         }
         current = current[part].children;
@@ -573,22 +602,31 @@ export function App() {
     return root;
   };
 
-  const renderProjectNode = (node: any, level: number = 0) => {
+  const renderProjectNode = (node: ProjectNode, level: number = 0) => {
     const isSelected = selectedSection === `proj:${node.fullPath}`;
     const childKeys = Object.keys(node.children);
     const hasChildren = childKeys.length > 0;
 
     return (
       <div key={node.fullPath} style={{ display: "flex", flexDirection: "column" }}>
-        <li 
+        <li
           className={`sidebar-item ${activeFilePath === null && isSelected ? "active" : ""}`}
           onClick={() => handleSidebarItemClick(`proj:${node.fullPath}`)}
           style={{ paddingLeft: `${Math.min(level * 10 + 8, 48)}px`, fontSize: "0.82rem" }}
         >
-          <span style={{ marginRight: "0.4rem", opacity: 0.6, fontSize: "0.75rem", fontFamily: "monospace" }}>+</span>
+          <span
+            style={{
+              marginRight: "0.4rem",
+              opacity: 0.6,
+              fontSize: "0.75rem",
+              fontFamily: "monospace",
+            }}
+          >
+            +
+          </span>
           <span>{node.name}</span>
         </li>
-        {hasChildren && childKeys.map(key => renderProjectNode(node.children[key], level + 1))}
+        {hasChildren && childKeys.map((key) => renderProjectNode(node.children[key], level + 1))}
       </div>
     );
   };
@@ -602,8 +640,8 @@ export function App() {
     const year = date.getFullYear();
     const month = date.getMonth();
     const firstDayOfMonth = new Date(year, month, 1);
-    let startDayOfWeek = firstDayOfMonth.getDay(); // 0 = Sunday, 1 = Monday...
-    let startOffset = startDayOfWeek === 0 ? 6 : startDayOfWeek - 1;
+    const startDayOfWeek = firstDayOfMonth.getDay(); // 0 = Sunday, 1 = Monday...
+    const startOffset = startDayOfWeek === 0 ? 6 : startDayOfWeek - 1;
 
     const startCellDate = new Date(firstDayOfMonth);
     startCellDate.setDate(firstDayOfMonth.getDate() - startOffset);
@@ -620,7 +658,7 @@ export function App() {
   // Calculates 7 weekly cells centered around the currentDate
   const getDaysInWeekView = (date: Date) => {
     const day = date.getDay();
-    let diff = date.getDate() - day + (day === 0 ? -6 : 1);
+    const diff = date.getDate() - day + (day === 0 ? -6 : 1);
     const monday = new Date(date);
     monday.setDate(diff);
 
@@ -679,7 +717,7 @@ export function App() {
   // Retrieves all literal + recurring events matching a calendar day
   const getEventsForDay = (date: Date) => {
     const isoDate = getISODateString(date);
-    return tasks.filter(t => {
+    return tasks.filter((t) => {
       if (t.task_type !== "event") return false;
       const startsOnDay = t.s_start && t.s_start.startsWith(isoDate);
       if (startsOnDay) return true;
@@ -729,7 +767,11 @@ export function App() {
     } else {
       const days = getDaysInWeekView(currentDate);
       const startStr = days[0].toLocaleDateString("en-US", { month: "short", day: "numeric" });
-      const endStr = days[6].toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+      const endStr = days[6].toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      });
       return `${startStr} - ${endStr}`;
     }
   };
@@ -761,11 +803,11 @@ export function App() {
       const new_duration_secs = editDurationInput * 60;
 
       await invoke("update_event_schedule", {
-        filePath: (event as any).file_path || "",
+        filePath: event.file_path || "",
         lineNumber: event.line_number,
         hash: event.hash,
         newSStart: new_s_start,
-        newDurationSecs: new_duration_secs
+        newDurationSecs: new_duration_secs,
       });
 
       setEditingEventHash(null);
@@ -807,25 +849,25 @@ export function App() {
         <div className="sidebar-section">
           <h4>Smart Views</h4>
           <ul className="sidebar-list">
-            <li 
+            <li
               className={`sidebar-item ${activeFilePath === null && selectedSection === "all" ? "active" : ""}`}
               onClick={() => handleSidebarItemClick("all")}
             >
               <Inbox size={16} /> All Tasks
             </li>
-            <li 
+            <li
               className={`sidebar-item ${activeFilePath === null && selectedSection === "todo" ? "active" : ""}`}
               onClick={() => handleSidebarItemClick("todo")}
             >
               <CheckCircle2 size={16} color="#9ca3af" /> Not Started
             </li>
-            <li 
+            <li
               className={`sidebar-item ${activeFilePath === null && selectedSection === "doing" ? "active" : ""}`}
               onClick={() => handleSidebarItemClick("doing")}
             >
               <Loader2 size={16} className="animate-spin" color="#a78bfa" /> In Progress
             </li>
-            <li 
+            <li
               className={`sidebar-item ${activeFilePath === null && selectedSection === "events" ? "active" : ""}`}
               onClick={() => handleSidebarItemClick("events")}
             >
@@ -836,27 +878,40 @@ export function App() {
 
         {/* Collapsible Journals Virtual Explorer Tree (Swapped to First!) */}
         <div className="sidebar-section">
-          <div 
-            style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.25rem" }}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: "0.25rem",
+            }}
           >
-            <h4 
+            <h4
               onClick={() => setJournalsExpanded(!journalsExpanded)}
               style={{ margin: 0, cursor: "pointer", flexGrow: 1 }}
             >
               Journals
             </h4>
             <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              <button 
+              <button
                 onClick={(e) => {
                   e.stopPropagation();
                   handleOpenTodayJournal();
                 }}
                 title="Write Today's Entry"
-                style={{ background: "none", border: "none", color: "var(--color-violet)", cursor: "pointer", display: "flex", alignItems: "center", padding: 0 }}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "var(--color-violet)",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  padding: 0,
+                }}
               >
                 <BookOpen size={14} />
               </button>
-              <span 
+              <span
                 onClick={() => setJournalsExpanded(!journalsExpanded)}
                 style={{ fontSize: "0.7rem", color: "var(--text-muted)", cursor: "pointer" }}
               >
@@ -865,10 +920,17 @@ export function App() {
             </div>
           </div>
           {journalsExpanded && (
-            <div style={{ marginTop: "0.5rem", maxHeight: "250px", overflowY: "auto", paddingLeft: "0.15rem" }}>
+            <div
+              style={{
+                marginTop: "0.5rem",
+                maxHeight: "250px",
+                overflowY: "auto",
+                paddingLeft: "0.15rem",
+              }}
+            >
               {journalTree && journalTree.children ? (
                 journalTree.children.map((child, index) => (
-                  <FileTree 
+                  <FileTree
                     key={`${child.path}-${index}`}
                     node={child}
                     selectedPath={activeFilePath}
@@ -887,9 +949,15 @@ export function App() {
 
         {/* Collapsible Vault Notes Explorer Tree (Swapped to Second!) */}
         <div className="sidebar-section">
-          <div 
+          <div
             onClick={() => setNotesExpanded(!notesExpanded)}
-            style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", marginBottom: "0.25rem" }}
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              cursor: "pointer",
+              marginBottom: "0.25rem",
+            }}
           >
             <h4 style={{ margin: 0 }}>Notes</h4>
             <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>
@@ -897,10 +965,17 @@ export function App() {
             </span>
           </div>
           {notesExpanded && (
-            <div style={{ marginTop: "0.5rem", maxHeight: "250px", overflowY: "auto", paddingLeft: "0.15rem" }}>
+            <div
+              style={{
+                marginTop: "0.5rem",
+                maxHeight: "250px",
+                overflowY: "auto",
+                paddingLeft: "0.15rem",
+              }}
+            >
               {dirTree && dirTree.children ? (
                 dirTree.children.map((child, index) => (
-                  <FileTree 
+                  <FileTree
                     key={`${child.path}-${index}`}
                     node={child}
                     selectedPath={activeFilePath}
@@ -924,13 +999,15 @@ export function App() {
           <div className="sidebar-section">
             <h4>Custom Query Dashboards</h4>
             <ul className="sidebar-list">
-              {customViews.map(view => {
+              {customViews.map((view) => {
                 const lines = view.query_raw.split("\n");
-                const filterLine = lines.find(l => l.trim().startsWith("filter:"));
-                const filterStr = filterLine ? filterLine.trim().slice("filter:".length).trim().replace(/"/g, "") : "";
+                const filterLine = lines.find((l) => l.trim().startsWith("filter:"));
+                const filterStr = filterLine
+                  ? filterLine.trim().slice("filter:".length).trim().replace(/"/g, "")
+                  : "";
 
                 return (
-                  <li 
+                  <li
                     key={`${view.title}-${view.line_number}`}
                     className={`sidebar-item ${activeFilePath === null && selectedSection === `view:${view.title}` ? "active" : ""}`}
                     onClick={() => handleSidebarItemClick(`view:${view.title}`, filterStr)}
@@ -947,8 +1024,8 @@ export function App() {
           <div className="sidebar-section">
             <h4>Projects</h4>
             <ul className="sidebar-list">
-              {Object.keys(buildProjectTree(projects)).map(key => 
-                renderProjectNode(buildProjectTree(projects)[key])
+              {Object.keys(buildProjectTree(projects)).map((key) =>
+                renderProjectNode(buildProjectTree(projects)[key]),
               )}
             </ul>
           </div>
@@ -958,8 +1035,8 @@ export function App() {
           <div className="sidebar-section">
             <h4>Contexts</h4>
             <ul className="sidebar-list">
-              {contexts.map(c => (
-                <li 
+              {contexts.map((c) => (
+                <li
                   key={c}
                   className={`sidebar-item ${activeFilePath === null && selectedSection === `ctx:${c}` ? "active" : ""}`}
                   onClick={() => handleSidebarItemClick(`ctx:${c}`)}
@@ -975,8 +1052,8 @@ export function App() {
           <div className="sidebar-section">
             <h4>Tags</h4>
             <ul className="sidebar-list">
-              {tags.map(t => (
-                <li 
+              {tags.map((t) => (
+                <li
                   key={t}
                   className={`sidebar-item ${activeFilePath === null && selectedSection === `tag:${t}` ? "active" : ""}`}
                   onClick={() => handleSidebarItemClick(`tag:${t}`)}
@@ -989,118 +1066,248 @@ export function App() {
         )}
 
         {/* Active Vault Location indicator with Inline Editor */}
-        <div style={{ marginTop: "auto", borderTop: "1px solid var(--border-card)", paddingTop: "1.5rem" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
-            <span style={{ fontSize: "0.75rem", textTransform: "uppercase", color: "var(--text-muted)", fontWeight: 600, letterSpacing: "0.05em" }}>
+        <div
+          style={{
+            marginTop: "auto",
+            borderTop: "1px solid var(--border-card)",
+            paddingTop: "1.5rem",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: "0.5rem",
+            }}
+          >
+            <span
+              style={{
+                fontSize: "0.75rem",
+                textTransform: "uppercase",
+                color: "var(--text-muted)",
+                fontWeight: 600,
+                letterSpacing: "0.05em",
+              }}
+            >
               Active Vault Path
             </span>
             {!isEditingVault && (
-              <button 
+              <button
                 onClick={() => setIsEditingVault(true)}
-                style={{ background: "none", border: "none", color: "var(--color-violet)", cursor: "pointer", display: "flex", alignItems: "center", padding: 0 }}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "var(--color-violet)",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  padding: 0,
+                }}
               >
                 <Edit2 size={12} />
               </button>
             )}
           </div>
-          
+
           {isEditingVault ? (
             <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-              <input 
+              <input
                 type="text"
                 value={vaultInput}
                 onChange={(e) => setVaultInput(e.target.value)}
-                style={{ 
-                  width: "100%", 
-                  background: "rgba(255, 255, 255, 0.05)", 
-                  border: "1px solid var(--border-card)", 
-                  borderRadius: "6px", 
-                  color: "var(--text-primary)", 
-                  padding: "0.4rem 0.6rem", 
+                style={{
+                  width: "100%",
+                  background: "rgba(255, 255, 255, 0.05)",
+                  border: "1px solid var(--border-card)",
+                  borderRadius: "6px",
+                  color: "var(--text-primary)",
+                  padding: "0.4rem 0.6rem",
                   fontSize: "0.8rem",
-                  fontFamily: "monospace"
+                  fontFamily: "monospace",
                 }}
                 placeholder="~/octarine_vault"
                 disabled={savingVault}
               />
               <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
-                <button 
+                <button
                   onClick={() => setIsEditingVault(false)}
-                  style={{ background: "rgba(255, 255, 255, 0.05)", border: "1px solid var(--border-card)", color: "var(--text-muted)", padding: "0.25rem 0.5rem", borderRadius: "4px", cursor: "pointer", fontSize: "0.75rem", display: "flex", alignItems: "center", gap: "0.25rem" }}
+                  style={{
+                    background: "rgba(255, 255, 255, 0.05)",
+                    border: "1px solid var(--border-card)",
+                    color: "var(--text-muted)",
+                    padding: "0.25rem 0.5rem",
+                    borderRadius: "4px",
+                    cursor: "pointer",
+                    fontSize: "0.75rem",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.25rem",
+                  }}
                   disabled={savingVault}
                 >
                   <X size={10} /> Cancel
                 </button>
-                <button 
+                <button
                   onClick={handleSaveVault}
-                  style={{ background: "var(--color-violet)", border: "none", color: "white", padding: "0.25rem 0.5rem", borderRadius: "4px", cursor: "pointer", fontSize: "0.75rem", fontWeight: 600, display: "flex", alignItems: "center", gap: "0.25rem" }}
+                  style={{
+                    background: "var(--color-violet)",
+                    border: "none",
+                    color: "white",
+                    padding: "0.25rem 0.5rem",
+                    borderRadius: "4px",
+                    cursor: "pointer",
+                    fontSize: "0.75rem",
+                    fontWeight: 600,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.25rem",
+                  }}
                   disabled={savingVault}
                 >
-                  {savingVault ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />} Save
+                  {savingVault ? (
+                    <Loader2 size={10} className="animate-spin" />
+                  ) : (
+                    <Check size={10} />
+                  )}{" "}
+                  Save
                 </button>
               </div>
             </div>
           ) : (
-            <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)", wordBreak: "break-all", fontStyle: "italic", lineHeight: 1.4 }}>
+            <div
+              style={{
+                fontSize: "0.8rem",
+                color: "var(--text-secondary)",
+                wordBreak: "break-all",
+                fontStyle: "italic",
+                lineHeight: 1.4,
+              }}
+            >
               {activeVaultPath}
             </div>
           )}
         </div>
 
         {/* Active Journal Location indicator with Inline Editor */}
-        <div style={{ marginTop: "1rem", borderTop: "1px solid rgba(255,255,255,0.03)", paddingTop: "1rem" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
-            <span style={{ fontSize: "0.75rem", textTransform: "uppercase", color: "var(--text-muted)", fontWeight: 600, letterSpacing: "0.05em" }}>
+        <div
+          style={{
+            marginTop: "1rem",
+            borderTop: "1px solid rgba(255,255,255,0.03)",
+            paddingTop: "1rem",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: "0.5rem",
+            }}
+          >
+            <span
+              style={{
+                fontSize: "0.75rem",
+                textTransform: "uppercase",
+                color: "var(--text-muted)",
+                fontWeight: 600,
+                letterSpacing: "0.05em",
+              }}
+            >
               Active Journal Path
             </span>
             {!isEditingJournal && (
-              <button 
+              <button
                 onClick={() => setIsEditingJournal(true)}
-                style={{ background: "none", border: "none", color: "var(--color-violet)", cursor: "pointer", display: "flex", alignItems: "center", padding: 0 }}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "var(--color-violet)",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  padding: 0,
+                }}
               >
                 <Edit2 size={12} />
               </button>
             )}
           </div>
-          
+
           {isEditingJournal ? (
             <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-              <input 
+              <input
                 type="text"
                 value={journalInput}
                 onChange={(e) => setJournalInput(e.target.value)}
-                style={{ 
-                  width: "100%", 
-                  background: "rgba(255, 255, 255, 0.05)", 
-                  border: "1px solid var(--border-card)", 
-                  borderRadius: "6px", 
-                  color: "var(--text-primary)", 
-                  padding: "0.4rem 0.6rem", 
+                style={{
+                  width: "100%",
+                  background: "rgba(255, 255, 255, 0.05)",
+                  border: "1px solid var(--border-card)",
+                  borderRadius: "6px",
+                  color: "var(--text-primary)",
+                  padding: "0.4rem 0.6rem",
                   fontSize: "0.8rem",
-                  fontFamily: "monospace"
+                  fontFamily: "monospace",
                 }}
                 placeholder="~/octarine_journal"
                 disabled={savingJournal}
               />
               <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
-                <button 
+                <button
                   onClick={() => setIsEditingJournal(false)}
-                  style={{ background: "rgba(255, 255, 255, 0.05)", border: "1px solid var(--border-card)", color: "var(--text-muted)", padding: "0.25rem 0.5rem", borderRadius: "4px", cursor: "pointer", fontSize: "0.75rem", display: "flex", alignItems: "center", gap: "0.25rem" }}
+                  style={{
+                    background: "rgba(255, 255, 255, 0.05)",
+                    border: "1px solid var(--border-card)",
+                    color: "var(--text-muted)",
+                    padding: "0.25rem 0.5rem",
+                    borderRadius: "4px",
+                    cursor: "pointer",
+                    fontSize: "0.75rem",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.25rem",
+                  }}
                   disabled={savingJournal}
                 >
                   <X size={10} /> Cancel
                 </button>
-                <button 
+                <button
                   onClick={handleSaveJournal}
-                  style={{ background: "var(--color-violet)", border: "none", color: "white", padding: "0.25rem 0.5rem", borderRadius: "4px", cursor: "pointer", fontSize: "0.75rem", fontWeight: 600, display: "flex", alignItems: "center", gap: "0.25rem" }}
+                  style={{
+                    background: "var(--color-violet)",
+                    border: "none",
+                    color: "white",
+                    padding: "0.25rem 0.5rem",
+                    borderRadius: "4px",
+                    cursor: "pointer",
+                    fontSize: "0.75rem",
+                    fontWeight: 600,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.25rem",
+                  }}
                   disabled={savingJournal}
                 >
-                  {savingJournal ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />} Save
+                  {savingJournal ? (
+                    <Loader2 size={10} className="animate-spin" />
+                  ) : (
+                    <Check size={10} />
+                  )}{" "}
+                  Save
                 </button>
               </div>
             </div>
           ) : (
-            <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)", wordBreak: "break-all", fontStyle: "italic", lineHeight: 1.4 }}>
+            <div
+              style={{
+                fontSize: "0.8rem",
+                color: "var(--text-secondary)",
+                wordBreak: "break-all",
+                fontStyle: "italic",
+                lineHeight: 1.4,
+              }}
+            >
               {activeJournalPath}
             </div>
           )}
@@ -1110,16 +1317,16 @@ export function App() {
       {/* 2. MAIN WORKSPACE PANEL */}
       <div className="main-content">
         {modalTask && (
-          <EditTaskModal 
+          <EditTaskModal
             task={modalTask}
             onClose={() => setModalTask(null)}
             onSave={async (newRawMarkdown) => {
               try {
                 await invoke("update_task_markdown", {
-                  filePath: (modalTask as any).file_path || "",
+                  filePath: modalTask.file_path || "",
                   lineNumber: modalTask.line_number,
                   hash: modalTask.hash,
-                  newRawMarkdown: newRawMarkdown.trim()
+                  newRawMarkdown: newRawMarkdown.trim(),
                 });
                 await fetchTasks();
               } catch (e) {
@@ -1140,12 +1347,24 @@ export function App() {
               {activeFilePath === null && selectedSection === "todo" && "Inbox: Todo"}
               {activeFilePath === null && selectedSection === "doing" && "Active Sprints"}
               {activeFilePath === null && selectedSection === "events" && "Calendar Timeline"}
-              {activeFilePath === null && selectedSection.startsWith("proj:") && `Project: ${selectedSection.slice(5)}`}
-              {activeFilePath === null && selectedSection.startsWith("ctx:") && `Context: @${selectedSection.slice(4)}`}
-              {activeFilePath === null && selectedSection.startsWith("tag:") && `Tag: #${selectedSection.slice(4)}`}
-              {activeFilePath === null && selectedSection.startsWith("view:") && `Query: ${selectedSection.slice(5)}`}
+              {activeFilePath === null &&
+                selectedSection.startsWith("proj:") &&
+                `Project: ${selectedSection.slice(5)}`}
+              {activeFilePath === null &&
+                selectedSection.startsWith("ctx:") &&
+                `Context: @${selectedSection.slice(4)}`}
+              {activeFilePath === null &&
+                selectedSection.startsWith("tag:") &&
+                `Tag: #${selectedSection.slice(4)}`}
+              {activeFilePath === null &&
+                selectedSection.startsWith("view:") &&
+                `Query: ${selectedSection.slice(5)}`}
             </h1>
-            <p>{activeFilePath !== null ? "Direct Markdown Editor Workspace" : "Sub-millisecond plaintext organization"}</p>
+            <p>
+              {activeFilePath !== null
+                ? "Direct Markdown Editor Workspace"
+                : "Sub-millisecond plaintext organization"}
+            </p>
           </div>
         </div>
 
@@ -1153,8 +1372,8 @@ export function App() {
         {activeFilePath === null && (
           <div className="search-container">
             <Search size={18} color="#6b7280" />
-            <input 
-              type="text" 
+            <input
+              type="text"
               placeholder="Search tasks, descriptions or projects..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -1172,8 +1391,11 @@ export function App() {
 
         {/* Render Notes Editor Mode or Normal Task Dashboard Content */}
         {activeFilePath !== null && activeFileContent !== null ? (
-          <div className="editor-canvas-column" style={{ flex: 1, display: "flex", flexDirection: "column", height: "100%" }}>
-            <MarkdownEditor 
+          <div
+            className="editor-canvas-column"
+            style={{ flex: 1, display: "flex", flexDirection: "column", height: "100%" }}
+          >
+            <MarkdownEditor
               key={activeFilePath} // Remount when file path changes
               filePath={activeFilePath}
               initialContent={activeFileContent}
@@ -1188,19 +1410,17 @@ export function App() {
           </div>
         ) : !loading && selectedSection === "events" ? (
           <div style={{ display: "flex", flexDirection: "column" }}>
-            
             {/* Calendar Controls Panel */}
             <div className="calendar-controls">
-              
               {/* Tab Toggles */}
               <div className="calendar-tabs">
-                <button 
+                <button
                   className={`calendar-tab-btn ${calendarViewMode === "week" ? "active" : ""}`}
                   onClick={() => setCalendarViewMode("week")}
                 >
                   Week Grid
                 </button>
-                <button 
+                <button
                   className={`calendar-tab-btn ${calendarViewMode === "month" ? "active" : ""}`}
                   onClick={() => setCalendarViewMode("month")}
                 >
@@ -1213,9 +1433,7 @@ export function App() {
                 <button className="calendar-nav-btn" onClick={handlePrev}>
                   <ChevronLeft size={16} />
                 </button>
-                <div className="calendar-current-label">
-                  {getCalendarHeaderLabel()}
-                </div>
+                <div className="calendar-current-label">{getCalendarHeaderLabel()}</div>
                 <button className="calendar-nav-btn" onClick={handleNext}>
                   <ChevronRight size={16} />
                 </button>
@@ -1223,8 +1441,8 @@ export function App() {
 
               {/* Recurrence Toggle */}
               <div className="calendar-toggle-section">
-                <input 
-                  type="checkbox" 
+                <input
+                  type="checkbox"
                   id="show-recurrence-cb"
                   className="calendar-toggle-checkbox"
                   checked={showFutureRepetitions}
@@ -1237,13 +1455,13 @@ export function App() {
             {/* Rendering active grid mode */}
             {calendarViewMode === "week" ? (
               <div className="calendar-grid">
-                {getDaysInWeekView(currentDate).map(day => {
+                {getDaysInWeekView(currentDate).map((day) => {
                   const isoDate = getISODateString(day);
                   const dayEvents = getSortedEventsForDay(day);
 
                   return (
-                    <div 
-                      key={isoDate} 
+                    <div
+                      key={isoDate}
                       className={`calendar-column ${isToday(day) ? "today" : ""}`}
                       onClick={() => handleDayCellClick(day)}
                     >
@@ -1253,16 +1471,27 @@ export function App() {
                       </div>
                       <div className="calendar-events-list">
                         {dayEvents.length === 0 ? (
-                          <div style={{ color: "var(--text-muted)", fontSize: "0.8rem", textAlign: "center", marginTop: "1rem" }}>
+                          <div
+                            style={{
+                              color: "var(--text-muted)",
+                              fontSize: "0.8rem",
+                              textAlign: "center",
+                              marginTop: "1rem",
+                            }}
+                          >
                             No events
                           </div>
                         ) : (
-                          dayEvents.map(event => {
-                            const timePart = event.s_start && event.s_start.length > 10 ? event.s_start.slice(11) : "All Day";
-                            const isRecurrent = !!event.recurring && !event.s_start?.startsWith(isoDate);
+                          dayEvents.map((event) => {
+                            const timePart =
+                              event.s_start && event.s_start.length > 10
+                                ? event.s_start.slice(11)
+                                : "All Day";
+                            const isRecurrent =
+                              !!event.recurring && !event.s_start?.startsWith(isoDate);
                             return (
-                              <div 
-                                key={`${event.hash}-${isoDate}`} 
+                              <div
+                                key={`${event.hash}-${isoDate}`}
                                 className={`calendar-event-card ${isRecurrent ? "recurrent" : ""}`}
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -1270,7 +1499,8 @@ export function App() {
                                 }}
                               >
                                 <div className="calendar-event-time">
-                                  {timePart} {event.duration_secs ? `(${event.duration_secs / 60}m)` : ""}
+                                  {timePart}{" "}
+                                  {event.duration_secs ? `(${event.duration_secs / 60}m)` : ""}
                                   {isRecurrent && " 🔁"}
                                 </div>
                                 <div className="calendar-event-title">{event.description}</div>
@@ -1289,28 +1519,32 @@ export function App() {
                   const isoDate = getISODateString(day);
                   const dayEvents = getSortedEventsForDay(day);
                   const isCurrentMonth = day.getMonth() === currentDate.getMonth();
-                  
+
                   // Smart Overflow limit of 2 items
                   const visibleEvents = dayEvents.slice(0, 2);
                   const overflowCount = dayEvents.length - visibleEvents.length;
 
                   return (
-                    <div 
-                      key={`${isoDate}-${idx}`} 
+                    <div
+                      key={`${isoDate}-${idx}`}
                       className={`month-cell ${isToday(day) ? "today" : ""} ${!isCurrentMonth ? "other-month" : ""}`}
                       onClick={() => handleDayCellClick(day)}
                     >
                       <div className="month-cell-header">
                         <span className="month-cell-number">{day.getDate()}</span>
                       </div>
-                      
+
                       <div className="month-cell-events">
-                        {visibleEvents.map(event => {
-                          const timePart = event.s_start && event.s_start.length > 10 ? event.s_start.slice(11, 16) : "All Day";
-                          const isRecurrent = !!event.recurring && !event.s_start?.startsWith(isoDate);
+                        {visibleEvents.map((event) => {
+                          const timePart =
+                            event.s_start && event.s_start.length > 10
+                              ? event.s_start.slice(11, 16)
+                              : "All Day";
+                          const isRecurrent =
+                            !!event.recurring && !event.s_start?.startsWith(isoDate);
                           return (
-                            <div 
-                              key={`${event.hash}-${isoDate}`} 
+                            <div
+                              key={`${event.hash}-${isoDate}`}
                               className={`month-mini-event ${isRecurrent ? "recurrent" : ""}`}
                               title={event.description}
                             >
@@ -1319,9 +1553,7 @@ export function App() {
                           );
                         })}
                         {overflowCount > 0 && (
-                          <div className="month-cell-more">
-                            +{overflowCount} more
-                          </div>
+                          <div className="month-cell-more">+{overflowCount} more</div>
                         )}
                       </div>
                     </div>
@@ -1331,12 +1563,21 @@ export function App() {
             )}
           </div>
         ) : !loading && selectedSection === "all" ? (
-          <div className="unified-dashboard" style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
-            <div className="dashboard-grid-row" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem" }}>
+          <div
+            className="unified-dashboard"
+            style={{ display: "flex", flexDirection: "column", gap: "2rem" }}
+          >
+            <div
+              className="dashboard-grid-row"
+              style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem" }}
+            >
               {/* Left Column: Events (Today's Events & Future Events) */}
-              <div className="dashboard-column events" style={{ display: "flex", flexDirection: "column" }}>
+              <div
+                className="dashboard-column events"
+                style={{ display: "flex", flexDirection: "column" }}
+              >
                 <h2>Events Timeline 📅</h2>
-                
+
                 {/* Today's Events */}
                 <div className="events-sub-section">
                   <h3>Today's Schedule</h3>
@@ -1348,8 +1589,11 @@ export function App() {
                     }
                     return (
                       <div className="events-vertical-list">
-                        {todayEvents.map(event => {
-                          const timePart = event.s_start && event.s_start.length > 10 ? event.s_start.slice(11) : "All Day";
+                        {todayEvents.map((event) => {
+                          const timePart =
+                            event.s_start && event.s_start.length > 10
+                              ? event.s_start.slice(11)
+                              : "All Day";
                           return (
                             <div key={event.hash} className="dashboard-event-card">
                               <span className="event-time">{timePart}</span>
@@ -1367,17 +1611,24 @@ export function App() {
                   <h3>Upcoming Events</h3>
                   {(() => {
                     const todayStr = getISODateString(new Date());
-                    const futureEvents = tasks.filter(t => t.task_type === "event" && t.s_start && t.s_start.slice(0, 10) > todayStr)
+                    const futureEvents = tasks
+                      .filter(
+                        (t) =>
+                          t.task_type === "event" && t.s_start && t.s_start.slice(0, 10) > todayStr,
+                      )
                       .sort((a, b) => (a.s_start || "").localeCompare(b.s_start || ""));
-                    
+
                     if (futureEvents.length === 0) {
                       return <p className="no-items">No upcoming future events.</p>;
                     }
                     return (
                       <div className="events-vertical-list">
-                        {futureEvents.slice(0, 5).map(event => {
+                        {futureEvents.slice(0, 5).map((event) => {
                           const datePart = event.s_start ? event.s_start.slice(5, 10) : "";
-                          const timePart = event.s_start && event.s_start.length > 10 ? event.s_start.slice(11) : "All Day";
+                          const timePart =
+                            event.s_start && event.s_start.length > 10
+                              ? event.s_start.slice(11)
+                              : "All Day";
                           return (
                             <div key={event.hash} className="dashboard-event-card upcoming">
                               <span className="event-date">{datePart}</span>
@@ -1396,10 +1647,18 @@ export function App() {
               <div className="dashboard-column tasks">
                 <h2>Most Pressing Tasks 🚀</h2>
                 {(() => {
-                  const pressingTasks = tasks.filter(t => t.task_type === "task" && (t.status === "todo" || t.status === "doing") && !t.parent_hash)
+                  const pressingTasks = tasks
+                    .filter(
+                      (t) =>
+                        t.task_type === "task" &&
+                        (t.status === "todo" || t.status === "doing") &&
+                        !t.parent_hash,
+                    )
                     .sort((a, b) => {
-                      const pA = a.priority === null || a.priority === undefined ? Infinity : a.priority;
-                      const pB = b.priority === null || b.priority === undefined ? Infinity : b.priority;
+                      const pA =
+                        a.priority === null || a.priority === undefined ? Infinity : a.priority;
+                      const pB =
+                        b.priority === null || b.priority === undefined ? Infinity : b.priority;
                       return pA - pB;
                     });
 
@@ -1408,15 +1667,15 @@ export function App() {
                   }
                   return (
                     <div className="task-list condensed">
-                      {pressingTasks.slice(0, 8).map(task => {
+                      {pressingTasks.slice(0, 8).map((task) => {
                         const rawLines = task.raw_markdown.split("\n");
                         const hasNotes = rawLines.length > 1;
                         const notes = hasNotes ? rawLines.slice(1).join("\n") : "";
                         const isEditingThisTask = editingTaskHash === task.hash;
 
                         return (
-                          <div 
-                            key={task.hash} 
+                          <div
+                            key={task.hash}
                             className={`task-card ${task.status} ${isEditingThisTask ? "editing" : ""}`}
                             onClick={() => {
                               if (!isEditingThisTask) {
@@ -1424,28 +1683,28 @@ export function App() {
                               }
                             }}
                           >
-                          {isEditingThisTask ? (
-                            <div 
-                              className="task-inline-editor-container"
-                              style={{ width: "100%" }}
-                              onClick={(e) => e.stopPropagation()} // Ignore click propagation
-                            >
-                              <MarkdownEditor 
-                                key={task.hash}
-                                filePath={(task as any).file_path || ""}
-                                initialContent={task.raw_markdown}
-                                onSave={async (content) => {
-                                  await handleSaveTaskInlineEdit(task, content);
-                                }}
-                                onClose={() => setEditingTaskHash(null)}
-                                projects={projects}
-                                contexts={contexts}
-                                isInline={true}
-                              />
-                            </div>
-                          ) : (
+                            {isEditingThisTask ? (
+                              <div
+                                className="task-inline-editor-container"
+                                style={{ width: "100%" }}
+                                onClick={(e) => e.stopPropagation()} // Ignore click propagation
+                              >
+                                <MarkdownEditor
+                                  key={task.hash}
+                                  filePath={task.file_path || ""}
+                                  initialContent={task.raw_markdown}
+                                  onSave={async (content) => {
+                                    await handleSaveTaskInlineEdit(task, content);
+                                  }}
+                                  onClose={() => setEditingTaskHash(null)}
+                                  projects={projects}
+                                  contexts={contexts}
+                                  isInline={true}
+                                />
+                              </div>
+                            ) : (
                               <>
-                                <div 
+                                <div
                                   className={`checkbox ${task.status}`}
                                   onClick={(e) => {
                                     e.stopPropagation(); // Stop toggling editor on click!
@@ -1458,7 +1717,9 @@ export function App() {
                                 </div>
                                 <div className="task-details">
                                   <div className="task-header-row">
-                                    <div className="task-desc">{renderMarkdownDescription(task.description)}</div>
+                                    <div className="task-desc">
+                                      {renderMarkdownDescription(task.description)}
+                                    </div>
                                     {(() => {
                                       const doneDate = getTaskDoneDate(task.raw_markdown);
                                       if (!task.due_date && !doneDate) return null;
@@ -1479,8 +1740,8 @@ export function App() {
                                         </div>
                                       );
                                     })()}
-                                    <button 
-                                      className="edit-modal-btn" 
+                                    <button
+                                      className="edit-modal-btn"
                                       title="Edit Details"
                                       onClick={(e) => {
                                         e.stopPropagation();
@@ -1492,15 +1753,17 @@ export function App() {
                                   </div>
                                   {hasNotes && renderTaskNotesAndSubtasks(notes)}
                                   {(() => {
-                                    const subtasks = tasks.filter(t => t.parent_hash === task.hash);
+                                    const subtasks = tasks.filter(
+                                      (t) => t.parent_hash === task.hash,
+                                    );
                                     if (subtasks.length === 0) return null;
                                     return (
                                       <div className="task-subtasks-list">
-                                        {subtasks.map(sub => {
+                                        {subtasks.map((sub) => {
                                           const isEditingThisSub = editingTaskHash === sub.hash;
                                           return (
-                                            <div 
-                                              key={sub.hash} 
+                                            <div
+                                              key={sub.hash}
                                               className={`subtask-item ${sub.status}`}
                                               onClick={(e) => {
                                                 e.stopPropagation();
@@ -1509,14 +1772,22 @@ export function App() {
                                                 }
                                               }}
                                             >
-                                              <div 
+                                              <div
                                                 className={`subtask-checkbox-clickable ${sub.status}`}
                                                 onClick={(e) => {
                                                   e.stopPropagation();
-                                                  const statuses: ("todo" | "doing" | "done" | "cancelled")[] = ["todo", "doing", "done", "cancelled"];
-                                                  const currIdx = statuses.indexOf(sub.status as any);
-                                                  const nextStatus = statuses[(currIdx + 1) % statuses.length];
-                                                  updateTaskStatus((sub as any).file_path || "", sub.line_number, sub.hash, nextStatus);
+                                                  const statuses: (
+                                                    "todo" | "doing" | "done" | "cancelled"
+                                                  )[] = ["todo", "doing", "done", "cancelled"];
+                                                  const currIdx = statuses.indexOf(sub.status);
+                                                  const nextStatus =
+                                                    statuses[(currIdx + 1) % statuses.length];
+                                                  updateTaskStatus(
+                                                    sub.file_path || "",
+                                                    sub.line_number,
+                                                    sub.hash,
+                                                    nextStatus,
+                                                  );
                                                 }}
                                               >
                                                 {sub.status === "done" && "✓"}
@@ -1524,7 +1795,9 @@ export function App() {
                                                 {sub.status === "cancelled" && "×"}
                                               </div>
                                               <div className="subtask-text-content">
-                                                <span className="subtask-title">{renderMarkdownDescription(sub.description)}</span>
+                                                <span className="subtask-title">
+                                                  {renderMarkdownDescription(sub.description)}
+                                                </span>
                                               </div>
                                             </div>
                                           );
@@ -1534,26 +1807,48 @@ export function App() {
                                   })()}
                                   <div className="metadata-container">
                                     <div className="metadata-left-badges">
-                                      {task.priority !== null && task.priority !== undefined && (() => {
-                                        const letter = task.priority === 1 ? "A" : task.priority === 2 ? "B" : task.priority === 3 ? "C" : task.priority === 4 ? "D" : String(task.priority);
-                                        return (
-                                          <span className={`badge-priority p-${letter}`}>{letter}</span>
-                                        );
-                                      })()}
-                                      {task.project && <span className="pill project">+{task.project}</span>}
-                                      {getTaskContexts(task.raw_markdown).map(ctx => (
-                                        <span key={ctx} className="pill context">@{ctx}</span>
+                                      {task.priority !== null &&
+                                        task.priority !== undefined &&
+                                        (() => {
+                                          const letter =
+                                            task.priority === 1
+                                              ? "A"
+                                              : task.priority === 2
+                                                ? "B"
+                                                : task.priority === 3
+                                                  ? "C"
+                                                  : task.priority === 4
+                                                    ? "D"
+                                                    : String(task.priority);
+                                          return (
+                                            <span className={`badge-priority p-${letter}`}>
+                                              {letter}
+                                            </span>
+                                          );
+                                        })()}
+                                      {task.project && (
+                                        <span className="pill project">+{task.project}</span>
+                                      )}
+                                      {getTaskContexts(task.raw_markdown).map((ctx) => (
+                                        <span key={ctx} className="pill context">
+                                          @{ctx}
+                                        </span>
                                       ))}
-                                      {getTaskTags(task.raw_markdown).map(tag => (
-                                        <span key={tag} className="pill tag">#{tag}</span>
+                                      {getTaskTags(task.raw_markdown).map((tag) => (
+                                        <span key={tag} className="pill tag">
+                                          #{tag}
+                                        </span>
                                       ))}
                                     </div>
                                     {(() => {
-                                      const subtasksCount = tasks.filter(t => t.parent_hash === task.hash).length;
+                                      const subtasksCount = tasks.filter(
+                                        (t) => t.parent_hash === task.hash,
+                                      ).length;
                                       if (subtasksCount === 0 && !hasNotes) return null;
                                       return (
                                         <span className="subtask-counter">
-                                          {subtasksCount} {subtasksCount === 1 ? "subtask" : "subtasks"}
+                                          {subtasksCount}{" "}
+                                          {subtasksCount === 1 ? "subtask" : "subtasks"}
                                         </span>
                                       );
                                     })()}
@@ -1571,13 +1866,33 @@ export function App() {
             </div>
 
             {/* Bottom Panel: Today's Daily Note Editor */}
-            <div className="dashboard-daily-note-section" style={{ display: "flex", flexDirection: "column" }}>
-              <h2 style={{ fontSize: "1.15rem", color: "var(--text-primary)", marginBottom: "1rem", fontWeight: 700, borderBottom: "1px solid var(--border-card)", paddingBottom: "0.5rem" }}>
+            <div
+              className="dashboard-daily-note-section"
+              style={{ display: "flex", flexDirection: "column" }}
+            >
+              <h2
+                style={{
+                  fontSize: "1.15rem",
+                  color: "var(--text-primary)",
+                  marginBottom: "1rem",
+                  fontWeight: 700,
+                  borderBottom: "1px solid var(--border-card)",
+                  paddingBottom: "0.5rem",
+                }}
+              >
                 📓 Today's Daily Journal Note
               </h2>
               {!todayJournalLoading && todayJournalContent !== null ? (
-                <div style={{ background: "var(--bg-card)", border: "1px solid var(--border-card)", borderRadius: "8px", overflow: "hidden", minHeight: "220px" }}>
-                  <MarkdownEditor 
+                <div
+                  style={{
+                    background: "var(--bg-card)",
+                    border: "1px solid var(--border-card)",
+                    borderRadius: "8px",
+                    overflow: "hidden",
+                    minHeight: "220px",
+                  }}
+                >
+                  <MarkdownEditor
                     key={todayJournalPath}
                     filePath={todayJournalPath}
                     initialContent={todayJournalContent}
@@ -1588,7 +1903,9 @@ export function App() {
                   />
                 </div>
               ) : (
-                <div style={{ color: "var(--text-muted)", fontSize: "0.85rem", fontStyle: "italic" }}>
+                <div
+                  style={{ color: "var(--text-muted)", fontSize: "0.85rem", fontStyle: "italic" }}
+                >
                   Preparing today's daily journal entry...
                 </div>
               )}
@@ -1609,15 +1926,15 @@ export function App() {
                 return pA - pB;
               });
 
-              return sortedTasks.map(task => {
+              return sortedTasks.map((task) => {
                 const rawLines = task.raw_markdown.split("\n");
                 const hasNotes = rawLines.length > 1;
                 const notes = hasNotes ? rawLines.slice(1).join("\n") : "";
                 const isEditingThisTask = editingTaskHash === task.hash;
 
                 return (
-                  <div 
-                    key={task.hash} 
+                  <div
+                    key={task.hash}
                     className={`task-card ${task.status} ${isEditingThisTask ? "editing" : ""}`}
                     onClick={() => {
                       if (!isEditingThisTask) {
@@ -1626,14 +1943,14 @@ export function App() {
                     }}
                   >
                     {isEditingThisTask ? (
-                      <div 
+                      <div
                         className="task-inline-editor-container"
                         style={{ width: "100%" }}
                         onClick={(e) => e.stopPropagation()} // Ignore click propagation
                       >
-                        <MarkdownEditor 
+                        <MarkdownEditor
                           key={task.hash}
-                          filePath={(task as any).file_path || ""}
+                          filePath={task.file_path || ""}
                           initialContent={task.raw_markdown}
                           onSave={async (content) => {
                             await handleSaveTaskInlineEdit(task, content);
@@ -1647,7 +1964,7 @@ export function App() {
                     ) : (
                       <>
                         {/* Status Indicator Checkbox */}
-                        <div 
+                        <div
                           className={`checkbox ${task.status}`}
                           onClick={(e) => {
                             e.stopPropagation(); // Stop toggling editor on click!
@@ -1662,7 +1979,9 @@ export function App() {
                         {/* Task details */}
                         <div className="task-details">
                           <div className="task-header-row">
-                            <div className="task-desc">{renderMarkdownDescription(task.description)}</div>
+                            <div className="task-desc">
+                              {renderMarkdownDescription(task.description)}
+                            </div>
                             {(() => {
                               const doneDate = getTaskDoneDate(task.raw_markdown);
                               if (!task.due_date && !doneDate) return null;
@@ -1683,8 +2002,8 @@ export function App() {
                                 </div>
                               );
                             })()}
-                            <button 
-                              className="edit-modal-btn" 
+                            <button
+                              className="edit-modal-btn"
                               title="Edit Details"
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -1694,21 +2013,21 @@ export function App() {
                               <Pencil size={14} />
                             </button>
                           </div>
-                          
+
                           {/* Notes block */}
                           {hasNotes && renderTaskNotesAndSubtasks(notes)}
 
                           {/* Nested Subtasks List */}
                           {(() => {
-                            const subtasks = tasks.filter(t => t.parent_hash === task.hash);
+                            const subtasks = tasks.filter((t) => t.parent_hash === task.hash);
                             if (subtasks.length === 0) return null;
                             return (
                               <div className="task-subtasks-list">
-                                {subtasks.map(sub => {
+                                {subtasks.map((sub) => {
                                   const isEditingThisSub = editingTaskHash === sub.hash;
                                   return (
-                                    <div 
-                                      key={sub.hash} 
+                                    <div
+                                      key={sub.hash}
                                       className={`subtask-item ${sub.status}`}
                                       onClick={(e) => {
                                         e.stopPropagation();
@@ -1717,14 +2036,22 @@ export function App() {
                                         }
                                       }}
                                     >
-                                      <div 
+                                      <div
                                         className={`subtask-checkbox-clickable ${sub.status}`}
                                         onClick={(e) => {
                                           e.stopPropagation();
-                                          const statuses: ("todo" | "doing" | "done" | "cancelled")[] = ["todo", "doing", "done", "cancelled"];
-                                          const currIdx = statuses.indexOf(sub.status as any);
-                                          const nextStatus = statuses[(currIdx + 1) % statuses.length];
-                                          updateTaskStatus((sub as any).file_path || "", sub.line_number, sub.hash, nextStatus);
+                                          const statuses: (
+                                            "todo" | "doing" | "done" | "cancelled"
+                                          )[] = ["todo", "doing", "done", "cancelled"];
+                                          const currIdx = statuses.indexOf(sub.status);
+                                          const nextStatus =
+                                            statuses[(currIdx + 1) % statuses.length];
+                                          updateTaskStatus(
+                                            sub.file_path || "",
+                                            sub.line_number,
+                                            sub.hash,
+                                            nextStatus,
+                                          );
                                         }}
                                       >
                                         {sub.status === "done" && "✓"}
@@ -1732,7 +2059,9 @@ export function App() {
                                         {sub.status === "cancelled" && "×"}
                                       </div>
                                       <div className="subtask-text-content">
-                                        <span className="subtask-title">{renderMarkdownDescription(sub.description)}</span>
+                                        <span className="subtask-title">
+                                          {renderMarkdownDescription(sub.description)}
+                                        </span>
                                       </div>
                                     </div>
                                   );
@@ -1744,30 +2073,49 @@ export function App() {
                           {/* Metadata Badges Container */}
                           <div className="metadata-container">
                             <div className="metadata-left-badges">
-                              {task.priority !== null && task.priority !== undefined && (() => {
-                                const letter = task.priority === 1 ? "A" : task.priority === 2 ? "B" : task.priority === 3 ? "C" : task.priority === 4 ? "D" : String(task.priority);
-                                return (
-                                  <span className={`badge-priority p-${letter}`}>{letter}</span>
-                                );
-                              })()}
+                              {task.priority !== null &&
+                                task.priority !== undefined &&
+                                (() => {
+                                  const letter =
+                                    task.priority === 1
+                                      ? "A"
+                                      : task.priority === 2
+                                        ? "B"
+                                        : task.priority === 3
+                                          ? "C"
+                                          : task.priority === 4
+                                            ? "D"
+                                            : String(task.priority);
+                                  return (
+                                    <span className={`badge-priority p-${letter}`}>{letter}</span>
+                                  );
+                                })()}
                               {task.project && (
                                 <span className="pill project">+{task.project}</span>
                               )}
-                              {getTaskContexts(task.raw_markdown).map(ctx => (
-                                <span key={ctx} className="pill context">@{ctx}</span>
+                              {getTaskContexts(task.raw_markdown).map((ctx) => (
+                                <span key={ctx} className="pill context">
+                                  @{ctx}
+                                </span>
                               ))}
-                              {getTaskTags(task.raw_markdown).map(tag => (
-                                <span key={tag} className="pill tag">#{tag}</span>
+                              {getTaskTags(task.raw_markdown).map((tag) => (
+                                <span key={tag} className="pill tag">
+                                  #{tag}
+                                </span>
                               ))}
                               {task.s_start && (
                                 <span className="pill scheduled">s:{task.s_start}</span>
                               )}
                               {task.duration_secs && (
-                                <span className="pill scheduled">dur:{task.duration_secs / 60}m</span>
+                                <span className="pill scheduled">
+                                  dur:{task.duration_secs / 60}m
+                                </span>
                               )}
                             </div>
                             {(() => {
-                              const subtasksCount = tasks.filter(t => t.parent_hash === task.hash).length;
+                              const subtasksCount = tasks.filter(
+                                (t) => t.parent_hash === task.hash,
+                              ).length;
                               if (subtasksCount === 0 && !hasNotes) return null;
                               return (
                                 <span className="subtask-counter">
@@ -1791,7 +2139,6 @@ export function App() {
       {showDrawer && drawerDate && (
         <div className="day-drawer-overlay" onClick={() => setShowDrawer(false)}>
           <div className="day-drawer" onClick={(e) => e.stopPropagation()}>
-            
             {/* Drawer Header */}
             <div className="day-drawer-header">
               <div>
@@ -1799,7 +2146,11 @@ export function App() {
                   {drawerDate.toLocaleDateString("en-US", { weekday: "long" })}
                 </h3>
                 <span style={{ fontSize: "0.9rem", color: "var(--text-muted)" }}>
-                  {drawerDate.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+                  {drawerDate.toLocaleDateString("en-US", {
+                    month: "long",
+                    day: "numeric",
+                    year: "numeric",
+                  })}
                 </span>
               </div>
               <button className="day-drawer-close" onClick={() => setShowDrawer(false)}>
@@ -1810,13 +2161,26 @@ export function App() {
             {/* Drawer Event List */}
             <div className="day-drawer-events-list">
               {getSortedEventsForDay(drawerDate).length === 0 ? (
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100px", color: "var(--text-muted)", gap: "0.5rem" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    height: "100px",
+                    color: "var(--text-muted)",
+                    gap: "0.5rem",
+                  }}
+                >
                   <AlertCircle size={24} />
                   <span>No events scheduled</span>
                 </div>
               ) : (
-                getSortedEventsForDay(drawerDate).map(event => {
-                  const timePart = event.s_start && event.s_start.length > 10 ? event.s_start.slice(11, 16) : "All Day";
+                getSortedEventsForDay(drawerDate).map((event) => {
+                  const timePart =
+                    event.s_start && event.s_start.length > 10
+                      ? event.s_start.slice(11, 16)
+                      : "All Day";
                   const isEditing = editingEventHash === event.hash;
 
                   return (
@@ -1824,13 +2188,20 @@ export function App() {
                       <div className="drawer-event-header">
                         <div>
                           <span className="drawer-event-time">
-                            <Clock size={12} style={{ display: "inline", marginRight: "0.25rem", verticalAlign: "middle" }} />
+                            <Clock
+                              size={12}
+                              style={{
+                                display: "inline",
+                                marginRight: "0.25rem",
+                                verticalAlign: "middle",
+                              }}
+                            />
                             {timePart} {event.duration_secs ? `(${event.duration_secs / 60}m)` : ""}
                           </span>
                           <div className="drawer-event-desc">{event.description}</div>
                         </div>
                         {!isEditing && (
-                          <button 
+                          <button
                             className="drawer-event-edit-btn"
                             onClick={(e) => handleEditClick(e, event)}
                             title="Reschedule event"
@@ -1842,7 +2213,14 @@ export function App() {
 
                       {/* Notes/Recurring rules indicators */}
                       {event.recurring && (
-                        <div style={{ fontSize: "0.8rem", color: "var(--color-violet)", fontWeight: 500, marginTop: "0.25rem" }}>
+                        <div
+                          style={{
+                            fontSize: "0.8rem",
+                            color: "var(--color-violet)",
+                            fontWeight: 500,
+                            marginTop: "0.25rem",
+                          }}
+                        >
                           🔁 Recurs: {event.recurring}
                         </div>
                       )}
@@ -1850,10 +2228,9 @@ export function App() {
                       {/* Inline reschedule form popover */}
                       {isEditing && (
                         <div className="edit-schedule-popover">
-                          
                           <div className="edit-popover-field">
                             <label>Date</label>
-                            <input 
+                            <input
                               type="date"
                               className="edit-popover-input"
                               value={editDateInput}
@@ -1863,7 +2240,7 @@ export function App() {
 
                           <div className="edit-popover-field">
                             <label>Start Time</label>
-                            <input 
+                            <input
                               type="time"
                               className="edit-popover-input"
                               value={editTimeInput}
@@ -1873,7 +2250,7 @@ export function App() {
 
                           <div className="edit-popover-field">
                             <label>Duration (minutes)</label>
-                            <input 
+                            <input
                               type="number"
                               className="edit-popover-input"
                               value={editDurationInput}
@@ -1883,14 +2260,14 @@ export function App() {
                           </div>
 
                           <div className="edit-popover-actions">
-                            <button 
-                              className="calendar-tab-btn" 
+                            <button
+                              className="calendar-tab-btn"
                               style={{ border: "1px solid var(--border-card)" }}
                               onClick={() => setEditingEventHash(null)}
                             >
                               Cancel
                             </button>
-                            <button 
+                            <button
                               className="calendar-tab-btn active"
                               onClick={() => handleSaveSchedule(event)}
                             >
@@ -1904,7 +2281,6 @@ export function App() {
                 })
               )}
             </div>
-
           </div>
         </div>
       )}

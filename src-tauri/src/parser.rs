@@ -1,7 +1,7 @@
-use regex::Regex;
-use sha2::{Sha256, Digest};
-use std::sync::OnceLock;
 use crate::CHECKLIST_CHAR_CLASS;
+use regex::Regex;
+use sha2::{Digest, Sha256};
+use std::sync::OnceLock;
 
 static HEADER_RE: OnceLock<Regex> = OnceLock::new();
 static PROJECT_RE: OnceLock<Regex> = OnceLock::new();
@@ -52,7 +52,12 @@ fn get_code_re() -> &'static Regex {
 }
 
 fn get_s_re() -> &'static Regex {
-    S_RE.get_or_init(|| Regex::new(r"\bs:(?:\x22([^\x22]+)\x22|'([^']+)'|(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2})|([^\s]+))").unwrap())
+    S_RE.get_or_init(|| {
+        Regex::new(
+            r"\bs:(?:\x22([^\x22]+)\x22|'([^']+)'|(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2})|([^\s]+))",
+        )
+        .unwrap()
+    })
 }
 
 fn get_due_re() -> &'static Regex {
@@ -64,11 +69,15 @@ fn get_dur_re() -> &'static Regex {
 }
 
 fn get_rec_re() -> &'static Regex {
-    REC_RE.get_or_init(|| Regex::new(r"\brecurring:(?:\x22([^\x22]+)\x22|'([^']+)'|([^\s]+))").unwrap())
+    REC_RE.get_or_init(|| {
+        Regex::new(r"\brecurring:(?:\x22([^\x22]+)\x22|'([^']+)'|([^\s]+))").unwrap()
+    })
 }
 
 fn get_wd_re() -> &'static Regex {
-    WD_RE.get_or_init(|| Regex::new(r"\bwhen_done:(?:\x22([^\x22]+)\x22|'([^']+)'|([^\s]+))").unwrap())
+    WD_RE.get_or_init(|| {
+        Regex::new(r"\bwhen_done:(?:\x22([^\x22]+)\x22|'([^']+)'|([^\s]+))").unwrap()
+    })
 }
 
 fn get_p_re() -> &'static Regex {
@@ -92,8 +101,8 @@ pub struct ParsedTask {
     pub line_number: usize, // 1-based index
     pub raw_markdown: String,
     pub hash: String,
-    pub status: String,      // "todo", "doing", "done", "cancelled"
-    pub task_type: String,   // "task" or "event"
+    pub status: String,    // "todo", "doing", "done", "cancelled"
+    pub task_type: String, // "task" or "event"
     pub description: String,
     pub project: Option<String>,
     pub due_date: Option<String>,
@@ -138,8 +147,14 @@ fn is_valid_datetime(s: &str) -> bool {
 fn parse_duration(s: &str) -> Result<i32, String> {
     let re = get_duration_re();
     if let Some(caps) = re.captures(s) {
-        let h = caps.get(1).map(|m| m.as_str().parse::<i32>().unwrap_or(0)).unwrap_or(0);
-        let m = caps.get(2).map(|m| m.as_str().parse::<i32>().unwrap_or(0)).unwrap_or(0);
+        let h = caps
+            .get(1)
+            .map(|m| m.as_str().parse::<i32>().unwrap_or(0))
+            .unwrap_or(0);
+        let m = caps
+            .get(2)
+            .map(|m| m.as_str().parse::<i32>().unwrap_or(0))
+            .unwrap_or(0);
         if h == 0 && m == 0 {
             return Err(format!("Invalid duration format: {}", s));
         }
@@ -162,7 +177,10 @@ fn strip_inline_comments(text: &str) -> String {
     result
 }
 
-pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask>, Vec<ParsedCustomView>) {
+pub fn parse_markdown_content(
+    file_path: &str,
+    content: &str,
+) -> (Vec<ParsedTask>, Vec<ParsedCustomView>) {
     let lines: Vec<&str> = content.lines().collect();
     let mut tasks = Vec::new();
     let mut views = Vec::new();
@@ -207,7 +225,7 @@ pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask
                     i += 1;
                 }
                 let query_raw = query_lines.join("\n");
-                
+
                 // Extract title from query_raw
                 let mut title = format!("Custom View @ Line {}", start_line);
                 for q_line in &query_lines {
@@ -256,7 +274,9 @@ pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask
                     break;
                 }
             }
-            let parent_hash = indent_stack.last().map(|(_, parent_hash)| parent_hash.clone());
+            let parent_hash = indent_stack
+                .last()
+                .map(|(_, parent_hash)| parent_hash.clone());
 
             // Status and Type determination
             let (status, mut task_type) = match marker {
@@ -293,7 +313,9 @@ pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask
             }
 
             // Clean trailing blank lines from the gathered block
-            while raw_markdown_lines.len() > 1 && raw_markdown_lines.last().unwrap().trim().is_empty() {
+            while raw_markdown_lines.len() > 1
+                && raw_markdown_lines.last().unwrap().trim().is_empty()
+            {
                 raw_markdown_lines.pop();
             }
 
@@ -348,9 +370,12 @@ pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask
                 if let Some(m) = caps.get(0) {
                     clean_description = clean_description.replace(m.as_str(), "");
                 }
-                
+
                 if !is_valid_datetime(&val) {
-                    errors.push(format!("Invalid scheduled start format: '{}' (expected YYYY-MM-DD HH:MM)", val));
+                    errors.push(format!(
+                        "Invalid scheduled start format: '{}' (expected YYYY-MM-DD HH:MM)",
+                        val
+                    ));
                 }
                 val
             });
@@ -372,9 +397,12 @@ pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask
                 if let Some(m) = caps.get(0) {
                     clean_description = clean_description.replace(m.as_str(), "");
                 }
-                
+
                 if !is_valid_date(&val) {
-                    errors.push(format!("Invalid due date format: '{}' (expected YYYY-MM-DD)", val));
+                    errors.push(format!(
+                        "Invalid due date format: '{}' (expected YYYY-MM-DD)",
+                        val
+                    ));
                 }
                 val
             });
@@ -392,7 +420,7 @@ pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask
                 if let Some(m) = caps.get(0) {
                     clean_description = clean_description.replace(m.as_str(), "");
                 }
-                
+
                 match parse_duration(&val) {
                     Ok(secs) => Some(secs),
                     Err(err) => {
@@ -431,9 +459,12 @@ pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask
                 if let Some(m) = caps.get(0) {
                     clean_description = clean_description.replace(m.as_str(), "");
                 }
-                
+
                 if val != "delete" && val != "archive" {
-                    errors.push(format!("Invalid when_done action: '{}' (expected 'delete' or 'archive')", val));
+                    errors.push(format!(
+                        "Invalid when_done action: '{}' (expected 'delete' or 'archive')",
+                        val
+                    ));
                 }
                 val
             });
@@ -445,14 +476,17 @@ pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask
                 if let Some(m) = caps.get(0) {
                     clean_description = clean_description.replace(m.as_str(), "");
                 }
-                
+
                 match val.as_str() {
                     "A" => Some(1),
                     "B" => Some(2),
                     "C" => Some(3),
                     "D" => Some(4),
                     _ => {
-                        errors.push(format!("Invalid priority format: '{}' (expected A, B, C, or D)", val));
+                        errors.push(format!(
+                            "Invalid priority format: '{}' (expected A, B, C, or D)",
+                            val
+                        ));
                         None
                     }
                 }
@@ -495,9 +529,10 @@ pub fn parse_markdown_content(file_path: &str, content: &str) -> (Vec<ParsedTask
             }
 
             // Cleanup whitespace in description
-            let clean_description = clean_description.trim()
-                .replace("  ", " ");
-            let clean_description = get_whitespace_re().replace_all(&clean_description, " ").to_string();
+            let clean_description = clean_description.trim().replace("  ", " ");
+            let clean_description = get_whitespace_re()
+                .replace_all(&clean_description, " ")
+                .to_string();
 
             let parse_errors = if errors.is_empty() {
                 None
@@ -580,13 +615,15 @@ mod tests {
 - [ ] Another task"#;
         let (tasks, _) = parse_markdown_content("test.md", content);
         assert_eq!(tasks.len(), 2);
-        
+
         let task1 = &tasks[0];
         assert_eq!(task1.status, "doing");
         assert_eq!(task1.description, "Write parser");
-        assert!(task1.raw_markdown.contains("This is an indented note paragraph."));
+        assert!(task1
+            .raw_markdown
+            .contains("This is an indented note paragraph."));
         assert!(task1.raw_markdown.contains("- And a sub-bullet"));
-        
+
         let task2 = &tasks[1];
         assert_eq!(task2.status, "todo");
         assert_eq!(task2.description, "Another task");
@@ -599,7 +636,8 @@ mod tests {
         assert_eq!(tasks.len(), 1);
         let task = &tasks[0];
         assert!(task.parse_errors.is_some());
-        let errors: Vec<String> = serde_json::from_str(task.parse_errors.as_ref().unwrap()).unwrap();
+        let errors: Vec<String> =
+            serde_json::from_str(task.parse_errors.as_ref().unwrap()).unwrap();
         assert_eq!(errors.len(), 3);
         assert!(errors[0].contains("Invalid due date"));
         assert!(errors[1].contains("Invalid duration format"));
@@ -620,7 +658,9 @@ group_by: "none"
         let (_, views) = parse_markdown_content("test.md", content);
         assert_eq!(views.len(), 1);
         assert_eq!(views[0].title, "Today's Errands");
-        assert!(views[0].query_raw.contains("filter: \"due = today AND @errands\""));
+        assert!(views[0]
+            .query_raw
+            .contains("filter: \"due = today AND @errands\""));
     }
 
     #[test]
@@ -629,18 +669,21 @@ group_by: "none"
         let (tasks, _) = parse_markdown_content("test.md", content);
         assert_eq!(tasks.len(), 1);
         let task = &tasks[0];
-        
+
         // Projects, contexts, and tags inside links must be completely ignored
         assert_eq!(task.project, None);
         assert_eq!(task.contexts.len(), 0);
         assert_eq!(task.tags.len(), 0);
-        
+
         // Metadata outside links must be parsed correctly
         assert_eq!(task.s_start.as_deref(), Some("2026-07-23"));
         assert_eq!(task.due_date.as_deref(), Some("2026-07-23"));
-        
+
         // The markdown link itself should remain fully preserved in the final description!
-        assert_eq!(task.description, "Visit [our +work page with @phone details and #urgent tag](https://example.com/#tag)");
+        assert_eq!(
+            task.description,
+            "Visit [our +work page with @phone details and #urgent tag](https://example.com/#tag)"
+        );
     }
 
     #[test]
@@ -661,7 +704,8 @@ group_by: "none"
 
     #[test]
     fn test_parse_accented_unicode_metadata() {
-        let content = "- [ ] Análisis Portugal +work/eglc/estimación @eglc/gestión #urgente/producción";
+        let content =
+            "- [ ] Análisis Portugal +work/eglc/estimación @eglc/gestión #urgente/producción";
         let (tasks, _) = parse_markdown_content("test.md", content);
         assert_eq!(tasks.len(), 1);
         let task = &tasks[0];
@@ -717,7 +761,7 @@ group_by: "none"
     - [x] Nested subtask 3 completed"#;
         let (tasks, _) = parse_markdown_content("test.md", content);
         assert_eq!(tasks.len(), 4);
-        
+
         let parent = &tasks[0];
         assert_eq!(parent.description, "Parent task");
         assert_eq!(parent.parent_hash, None);
@@ -752,7 +796,7 @@ group_by: "none"
 
         assert_eq!(tasks[0].description, "Valid task outside");
         assert_eq!(tasks[1].description, "Another valid task");
-        
+
         // Check inline comment stripping
         assert_eq!(tasks[2].description, "Buy milk");
         assert_eq!(tasks[2].project.as_deref(), Some("work"));
@@ -777,6 +821,9 @@ group_by: "none"
         assert!(task.tags.contains(&"urgent".to_string()));
 
         // The backticks and their content must remain fully preserved in the final task description!
-        assert_eq!(task.description, "Call `Controller#getOrderConfigurator` and fix `+bug-spec` with `@client`");
+        assert_eq!(
+            task.description,
+            "Call `Controller#getOrderConfigurator` and fix `+bug-spec` with `@client`"
+        );
     }
 }

@@ -13,13 +13,18 @@ interface EditTaskModalProps {
 }
 
 // Regex helpers for manipulating the markdown string
-const replaceMetadata = (raw: string, regex: RegExp, newValue: string, type: 'priority' | 'date' | 'context' | 'project' | 'recur'): string => {
-  const lines = raw.split('\n');
+const replaceMetadata = (
+  raw: string,
+  regex: RegExp,
+  newValue: string,
+  type: "priority" | "date" | "context" | "project" | "recur",
+): string => {
+  const lines = raw.split("\n");
   if (lines.length === 0) return raw;
-  
+
   let headerLine = lines[0];
   const hasMatch = regex.test(headerLine);
-  
+
   if (newValue === "") {
     // Remove it
     headerLine = headerLine.replace(regex, "").trim();
@@ -29,7 +34,7 @@ const replaceMetadata = (raw: string, regex: RegExp, newValue: string, type: 'pr
       headerLine = headerLine.replace(regex, newValue).trim();
     } else {
       // Append it logically
-      if (type === 'priority') {
+      if (type === "priority") {
         // Priority goes right after checkbox
         headerLine = headerLine.replace(/^(\s*[-*+]\s+\[.*?\]\s*)/, `$1${newValue} `).trim();
       } else {
@@ -38,40 +43,58 @@ const replaceMetadata = (raw: string, regex: RegExp, newValue: string, type: 'pr
       }
     }
   }
-  
+
   // Clean up extra spaces
-  headerLine = headerLine.replace(/\s{2,}/g, ' ');
+  headerLine = headerLine.replace(/\s{2,}/g, " ");
   lines[0] = headerLine;
-  return lines.join('\n');
+  return lines.join("\n");
 };
 
-const PillInput = ({ type, prefix, items, onAdd, onRemove }: { type: string, prefix: string, items: string[], onAdd: (v: string) => void, onRemove: (v: string) => void }) => {
+const PillInput = ({
+  type,
+  prefix,
+  items,
+  onAdd,
+  onRemove,
+}: {
+  type: string;
+  prefix: string;
+  items: string[];
+  onAdd: (v: string) => void;
+  onRemove: (v: string) => void;
+}) => {
   const [val, setVal] = useState("");
   return (
-    <div className="form-group" style={{ marginBottom: '1rem' }}>
+    <div className="form-group" style={{ marginBottom: "1rem" }}>
       <label>{type.toUpperCase()}S</label>
-      <div className="metadata-container" style={{ marginBottom: items.length > 0 ? '0.5rem' : '0' }}>
-        {items.map(item => (
+      <div
+        className="metadata-container"
+        style={{ marginBottom: items.length > 0 ? "0.5rem" : "0" }}
+      >
+        {items.map((item) => (
           <span key={item} className={`pill ${type}`}>
-            {item} <button onClick={() => onRemove(item)} className="pill-remove"><X size={12}/></button>
+            {item}{" "}
+            <button onClick={() => onRemove(item)} className="pill-remove">
+              <X size={12} />
+            </button>
           </span>
         ))}
       </div>
-      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-        <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>{prefix}</span>
-        <input 
-          type="text" 
-          value={val} 
-          onChange={e => setVal(e.target.value)}
-          onKeyDown={e => {
-            if (e.key === 'Enter') {
+      <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+        <span style={{ color: "var(--text-muted)", fontWeight: 600 }}>{prefix}</span>
+        <input
+          type="text"
+          value={val}
+          onChange={(e) => setVal(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
               e.preventDefault();
               onAdd(val);
               setVal("");
             }
           }}
           className="form-input"
-          style={{ padding: '0.4rem 0.6rem' }}
+          style={{ padding: "0.4rem 0.6rem" }}
           placeholder={`Add ${type}... (Press Enter)`}
         />
       </div>
@@ -79,20 +102,27 @@ const PillInput = ({ type, prefix, items, onAdd, onRemove }: { type: string, pre
   );
 };
 
-export function EditTaskModal({ task, onClose, onSave, onDelete, projects, contexts }: EditTaskModalProps) {
+export function EditTaskModal({
+  task,
+  onClose,
+  onSave,
+  onDelete,
+  projects,
+  contexts,
+}: EditTaskModalProps) {
   const [rawMarkdown, setRawMarkdown] = useState<string>(task.raw_markdown);
   const [saving, setSaving] = useState(false);
 
   // Derived state from rawMarkdown
-  const lines = rawMarkdown.split('\n');
+  const lines = rawMarkdown.split("\n");
   const headerLine = lines[0] || "";
-  
+
   // Title
-  let title = headerLine.replace(/^(\s*[-*+]\s+\[.*?\]\s*)/, '');
-  title = title.replace(/\([A-Da-d]\)\s*/g, '');
-  title = title.replace(/(due:|s:|dur:|recurring:|when_done:)[^\s]+/g, '');
-  title = title.replace(/(\+[\w\-/]+|@[\w\-/]+|#[\w\-/]+)/g, '');
-  title = title.replace(/\[[^\]]*\]\([^)]*\)/g, ''); // strip links
+  let title = headerLine.replace(/^(\s*[-*+]\s+\[.*?\]\s*)/, "");
+  title = title.replace(/\([A-Da-d]\)\s*/g, "");
+  title = title.replace(/(due:|s:|dur:|recurring:|when_done:)[^\s]+/g, "");
+  title = title.replace(/(\+[\w\-/]+|@[\w\-/]+|#[\w\-/]+)/g, "");
+  title = title.replace(/\[[^\]]*\]\([^)]*\)/g, ""); // strip links
   title = title.trim();
 
   // Status
@@ -127,28 +157,29 @@ export function EditTaskModal({ task, onClose, onSave, onDelete, projects, conte
       descLines.push(line);
     }
   }
-  const description = descLines.join('\n');
+  const description = descLines.join("\n");
 
   // Handlers for Form Fields
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newTitle = e.target.value;
-    setRawMarkdown(prev => {
-      const l = prev.split('\n');
+    setRawMarkdown((prev) => {
+      const l = prev.split("\n");
       if (l.length === 0) return prev;
-      let h = l[0];
+      const h = l[0];
       const prefixMatch = h.match(/^(\s*[-*+]\s+\[.*?\]\s*(?:\([A-Da-d]\)\s*)?)/i);
       const prefix = prefixMatch ? prefixMatch[1] : "- [ ] ";
-      const metadataRe = /(?:due:|s:|dur:|recurring:|when_done:)[^\s]+|\+[\w\-/]+|@[\w\-/]+|#[\w\-/]+/g;
+      const metadataRe =
+        /(?:due:|s:|dur:|recurring:|when_done:)[^\s]+|\+[\w\-/]+|@[\w\-/]+|#[\w\-/]+/g;
       const metadata = h.match(metadataRe)?.join(" ") || "";
       l[0] = `${prefix}${newTitle} ${metadata}`.trim();
-      return l.join('\n');
+      return l.join("\n");
     });
   };
 
   const handleStatusChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const s = e.target.value;
-    setRawMarkdown(prev => {
-      const l = prev.split('\n');
+    setRawMarkdown((prev) => {
+      const l = prev.split("\n");
       if (l.length > 0) {
         if (/^\s*[-*+]\s+\[.\]/.test(l[0])) {
           l[0] = l[0].replace(/^(\s*[-*+]\s+\[)(.)(\])/, `$1${s}$3`);
@@ -156,68 +187,70 @@ export function EditTaskModal({ task, onClose, onSave, onDelete, projects, conte
           l[0] = `- [${s}] ${l[0]}`;
         }
       }
-      return l.join('\n');
+      return l.join("\n");
     });
   };
 
   const handlePriorityChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const p = e.target.value;
     const newVal = p ? `(${p})` : "";
-    setRawMarkdown(prev => replaceMetadata(prev, /\([A-Da-d]\)/i, newVal, 'priority'));
+    setRawMarkdown((prev) => replaceMetadata(prev, /\([A-Da-d]\)/i, newVal, "priority"));
   };
 
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const d = e.target.value;
     const newVal = d ? `due:${d}` : "";
-    setRawMarkdown(prev => replaceMetadata(prev, /due:[^\s]+/i, newVal, 'date'));
+    setRawMarkdown((prev) => replaceMetadata(prev, /due:[^\s]+/i, newVal, "date"));
   };
 
   const handleRecurChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const r = e.target.value;
     const newVal = r ? `recurring:${r}` : "";
-    setRawMarkdown(prev => replaceMetadata(prev, /recurring:[^\s]+/i, newVal, 'recur'));
+    setRawMarkdown((prev) => replaceMetadata(prev, /recurring:[^\s]+/i, newVal, "recur"));
   };
 
   const handleDescriptionChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newDesc = e.target.value;
-    setRawMarkdown([headerLine, ...(newDesc ? newDesc.split('\n') : []), ...subtaskLines].join('\n'));
+    setRawMarkdown(
+      [headerLine, ...(newDesc ? newDesc.split("\n") : []), ...subtaskLines].join("\n"),
+    );
   };
 
   const handleAddSubtask = () => {
-    setRawMarkdown([headerLine, ...descLines, ...subtaskLines, '    - [ ] New subtask'].join('\n'));
+    setRawMarkdown([headerLine, ...descLines, ...subtaskLines, "    - [ ] New subtask"].join("\n"));
   };
 
   const handleRemoveSubtask = (index: number) => {
     const newSt = [...subtaskLines];
     newSt.splice(index, 1);
-    setRawMarkdown([headerLine, ...descLines, ...newSt].join('\n'));
+    setRawMarkdown([headerLine, ...descLines, ...newSt].join("\n"));
   };
 
   const handleSubtaskChange = (index: number, newText: string) => {
     const newSt = [...subtaskLines];
     newSt[index] = newText;
-    setRawMarkdown([headerLine, ...descLines, ...newSt].join('\n'));
+    setRawMarkdown([headerLine, ...descLines, ...newSt].join("\n"));
   };
 
   const addMetadata = (prefix: string, value: string) => {
     const token = `${prefix}${value.trim()}`;
     if (!token.trim() || token === prefix) return;
     if (!headerLine.includes(token)) {
-      setRawMarkdown(prev => {
-        const l = prev.split('\n');
-        l[0] = `${l[0]} ${token}`.replace(/\s{2,}/g, ' ');
-        return l.join('\n');
+      setRawMarkdown((prev) => {
+        const l = prev.split("\n");
+        l[0] = `${l[0]} ${token}`.replace(/\s{2,}/g, " ");
+        return l.join("\n");
       });
     }
   };
 
   const removeMetadata = (token: string) => {
-    setRawMarkdown(prev => {
-      const l = prev.split('\n');
+    setRawMarkdown((prev) => {
+      const l = prev.split("\n");
       if (l.length === 0) return prev;
       const tokens = l[0].split(/\s+/);
-      l[0] = tokens.filter(t => t !== token).join(' ');
-      return l.join('\n');
+      l[0] = tokens.filter((t) => t !== token).join(" ");
+      return l.join("\n");
     });
   };
 
@@ -235,19 +268,20 @@ export function EditTaskModal({ task, onClose, onSave, onDelete, projects, conte
       <div className="modal-container" onClick={stopProp}>
         <div className="modal-header">
           <h2>Edit Task</h2>
-          <button className="modal-close" onClick={onClose}><X size={18} /></button>
+          <button className="modal-close" onClick={onClose}>
+            <X size={18} />
+          </button>
         </div>
 
         <div className="modal-body">
           {/* Left Column: Form Fields */}
           <div className="modal-form">
-            
             <div className="form-row">
               <div className="form-group" style={{ flex: 3 }}>
                 <label>TITLE *</label>
-                <input 
-                  type="text" 
-                  value={title} 
+                <input
+                  type="text"
+                  value={title}
                   onChange={handleTitleChange}
                   className="form-input"
                 />
@@ -265,8 +299,8 @@ export function EditTaskModal({ task, onClose, onSave, onDelete, projects, conte
 
             <div className="form-group">
               <label>DESCRIPTION</label>
-              <textarea 
-                value={description} 
+              <textarea
+                value={description}
                 onChange={handleDescriptionChange}
                 className="form-textarea"
                 placeholder="Add notes..."
@@ -287,14 +321,14 @@ export function EditTaskModal({ task, onClose, onSave, onDelete, projects, conte
 
               <div className="form-group">
                 <label>DUE DATE</label>
-                <input 
-                  type="date" 
-                  value={dueDate} 
+                <input
+                  type="date"
+                  value={dueDate}
                   onChange={handleDateChange}
                   className="form-input"
                 />
               </div>
-              
+
               <div className="form-group">
                 <label>RECUR</label>
                 <select value={recur} onChange={handleRecurChange} className="form-select">
@@ -307,17 +341,26 @@ export function EditTaskModal({ task, onClose, onSave, onDelete, projects, conte
             </div>
 
             <div className="form-row">
-              <PillInput 
-                type="context" prefix="@" items={parsedContexts} 
-                onAdd={(v) => addMetadata('@', v)} onRemove={removeMetadata} 
+              <PillInput
+                type="context"
+                prefix="@"
+                items={parsedContexts}
+                onAdd={(v) => addMetadata("@", v)}
+                onRemove={removeMetadata}
               />
-              <PillInput 
-                type="project" prefix="+" items={parsedProjects} 
-                onAdd={(v) => addMetadata('+', v)} onRemove={removeMetadata} 
+              <PillInput
+                type="project"
+                prefix="+"
+                items={parsedProjects}
+                onAdd={(v) => addMetadata("+", v)}
+                onRemove={removeMetadata}
               />
-              <PillInput 
-                type="tag" prefix="#" items={parsedTags} 
-                onAdd={(v) => addMetadata('#', v)} onRemove={removeMetadata} 
+              <PillInput
+                type="tag"
+                prefix="#"
+                items={parsedTags}
+                onAdd={(v) => addMetadata("#", v)}
+                onRemove={removeMetadata}
               />
             </div>
 
@@ -325,24 +368,29 @@ export function EditTaskModal({ task, onClose, onSave, onDelete, projects, conte
               <label>SUBTASKS</label>
               {subtaskLines.map((st, i) => (
                 <div key={i} className="form-subtask-row">
-                  <input 
-                    type="text" 
-                    value={st} 
+                  <input
+                    type="text"
+                    value={st}
                     onChange={(e) => handleSubtaskChange(i, e.target.value)}
-                    className="form-input" 
+                    className="form-input"
                   />
-                  <button onClick={() => handleRemoveSubtask(i)} className="btn-icon trash" title="Remove Subtask"><Trash size={16}/></button>
+                  <button
+                    onClick={() => handleRemoveSubtask(i)}
+                    className="btn-icon trash"
+                    title="Remove Subtask"
+                  >
+                    <Trash size={16} />
+                  </button>
                 </div>
               ))}
-              <button 
-                onClick={handleAddSubtask} 
-                className="btn-cancel" 
-                style={{ marginTop: '0.5rem', width: '100%', borderStyle: 'dashed' }}
+              <button
+                onClick={handleAddSubtask}
+                className="btn-cancel"
+                style={{ marginTop: "0.5rem", width: "100%", borderStyle: "dashed" }}
               >
                 + Add subtask
               </button>
             </div>
-
           </div>
 
           {/* Right Column: Raw Markdown Editor */}
@@ -352,7 +400,7 @@ export function EditTaskModal({ task, onClose, onSave, onDelete, projects, conte
             </div>
             <div className="raw-editor-wrapper">
               <MarkdownEditor
-                filePath={(task as any).file_path || "modal"}
+                filePath={task.file_path || "modal"}
                 initialContent={rawMarkdown}
                 onSave={async (c) => setRawMarkdown(c)}
                 onClose={() => {}}
@@ -366,9 +414,13 @@ export function EditTaskModal({ task, onClose, onSave, onDelete, projects, conte
 
         <div className="modal-footer">
           {onDelete && (
-            <button className="btn-delete" onClick={onDelete}>Delete Task</button>
+            <button className="btn-delete" onClick={onDelete}>
+              Delete Task
+            </button>
           )}
-          <button className="btn-cancel" onClick={onClose}>Cancel</button>
+          <button className="btn-cancel" onClick={onClose}>
+            Cancel
+          </button>
           <button className="btn-save" onClick={handleSave} disabled={saving}>
             {saving ? "Saving..." : "Save Changes"}
           </button>

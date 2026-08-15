@@ -1,23 +1,23 @@
 import { useState, useEffect } from "react";
-import { 
-  Folder, 
-  FolderOpen, 
-  FileText, 
-  FilePlus, 
-  FolderPlus, 
-  Edit2, 
-  Trash2, 
-  ChevronRight, 
+import {
+  Folder,
+  FolderOpen,
+  FileText,
+  FilePlus,
+  FolderPlus,
+  Edit2,
+  Trash2,
+  ChevronRight,
   ChevronDown,
   Check,
-  X
+  X,
 } from "lucide-react";
 import { FileNode } from "../types";
 
 // Extends types.ts if needed, but we can declare local interface first for reliability
 export interface FileNodeLocal {
-  name: String;
-  path: String;
+  name: string;
+  path: string;
   is_dir: boolean;
   children?: FileNodeLocal[];
 }
@@ -42,25 +42,25 @@ export interface FileTreePropsLocal {
   collapseAllTrigger?: number;
 }
 
-export function FileTree({ 
-  node, 
-  selectedPath, 
-  onSelectFile, 
-  onCreateFile, 
-  onCreateFolder, 
-  onRename, 
+export function FileTree({
+  node,
+  selectedPath,
+  onSelectFile,
+  onCreateFile,
+  onCreateFolder,
+  onRename,
   onDelete,
   readOnly = false,
-  collapseAllTrigger = 0
+  collapseAllTrigger = 0,
 }: FileTreeProps) {
   const [isOpen, setIsOpen] = useState<boolean>(false);
-  
+
   // Collapse folders on global collapse trigger
   useEffect(() => {
     if (collapseAllTrigger > 0 && node.is_dir) {
       setIsOpen(false);
     }
-  }, [collapseAllTrigger]);
+  }, [collapseAllTrigger, node.is_dir]);
 
   // Inline input editor state for renaming or adding
   const [editMode, setEditMode] = useState<"rename" | "create_file" | "create_dir" | null>(null);
@@ -77,7 +77,10 @@ export function FileTree({
     }
   };
 
-  const handleAction = async (e: React.MouseEvent, type: "rename" | "create_file" | "create_dir") => {
+  const handleAction = async (
+    e: React.MouseEvent,
+    type: "rename" | "create_file" | "create_dir",
+  ) => {
     e.stopPropagation();
     setEditMode(type);
     if (type === "rename") {
@@ -128,7 +131,7 @@ export function FileTree({
   return (
     <div className="file-tree-node">
       {/* Node Row */}
-      <div 
+      <div
         className={`file-tree-row ${isSelected ? "selected" : ""} ${node.is_dir ? "dir" : "file"}`}
         onClick={handleToggle}
       >
@@ -142,27 +145,45 @@ export function FileTree({
 
         <span className="file-tree-icon">
           {node.is_dir ? (
-            isOpen ? <FolderOpen size={16} color="#a78bfa" /> : <Folder size={16} color="#a78bfa" />
+            isOpen ? (
+              <FolderOpen size={16} color="#a78bfa" />
+            ) : (
+              <Folder size={16} color="#a78bfa" />
+            )
           ) : (
             <FileText size={16} color="#9ca3af" />
           )}
         </span>
 
         {editMode ? (
-          <form className="file-tree-edit-form" onSubmit={handleSubmit} onClick={e => e.stopPropagation()}>
-            <input 
+          <form
+            className="file-tree-edit-form"
+            onSubmit={handleSubmit}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <input
               type="text"
               value={inputText}
-              onChange={e => setInputText(e.target.value)}
+              onChange={(e) => setInputText(e.target.value)}
               className="file-tree-input"
               autoFocus
               onBlur={() => setEditMode(null)}
-              placeholder={editMode === "rename" ? "New name" : editMode === "create_file" ? "New note.md" : "New folder"}
+              placeholder={
+                editMode === "rename"
+                  ? "New name"
+                  : editMode === "create_file"
+                    ? "New note.md"
+                    : "New folder"
+              }
             />
             <button type="submit" className="file-tree-edit-btn success">
               <Check size={10} />
             </button>
-            <button type="button" className="file-tree-edit-btn cancel" onClick={() => setEditMode(null)}>
+            <button
+              type="button"
+              className="file-tree-edit-btn cancel"
+              onClick={() => setEditMode(null)}
+            >
               <X size={10} />
             </button>
           </form>
@@ -175,15 +196,15 @@ export function FileTree({
           <div className="file-tree-actions">
             {node.is_dir && (
               <>
-                <button 
-                  onClick={e => handleAction(e, "create_file")} 
+                <button
+                  onClick={(e) => handleAction(e, "create_file")}
                   title="New Markdown Note"
                   className="file-action-btn"
                 >
                   <FilePlus size={12} />
                 </button>
-                <button 
-                  onClick={e => handleAction(e, "create_dir")} 
+                <button
+                  onClick={(e) => handleAction(e, "create_dir")}
                   title="New Folder"
                   className="file-action-btn"
                 >
@@ -191,18 +212,14 @@ export function FileTree({
                 </button>
               </>
             )}
-            <button 
-              onClick={e => handleAction(e, "rename")} 
+            <button
+              onClick={(e) => handleAction(e, "rename")}
               title="Rename"
               className="file-action-btn"
             >
               <Edit2 size={12} />
             </button>
-            <button 
-              onClick={handleDeleteClick} 
-              title="Delete"
-              className="file-action-btn trash"
-            >
+            <button onClick={handleDeleteClick} title="Delete" className="file-action-btn trash">
               <Trash2 size={12} />
             </button>
           </div>
@@ -213,7 +230,7 @@ export function FileTree({
       {node.is_dir && isOpen && node.children && (
         <div className="file-tree-children">
           {node.children.map((child, index) => (
-            <FileTree 
+            <FileTree
               key={`${child.path}-${index}`}
               node={child}
               selectedPath={selectedPath}

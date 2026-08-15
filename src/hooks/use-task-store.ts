@@ -8,12 +8,17 @@ interface TaskState {
   loading: boolean;
   error: string | null;
   activeFilter: string;
-  
+
   // Actions
   setFilter: (filter: string) => void;
   fetchTasks: (filter?: string) => Promise<void>;
   fetchCustomViews: () => Promise<void>;
-  updateTaskStatus: (filePath: string, lineNumber: number, hash: string, newStatus: string) => Promise<void>;
+  updateTaskStatus: (
+    filePath: string,
+    lineNumber: number,
+    hash: string,
+    newStatus: string,
+  ) => Promise<void>;
 }
 
 export const useTaskStore = create<TaskState>((set, get) => ({
@@ -57,7 +62,12 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     }
   },
 
-  updateTaskStatus: async (filePath: string, lineNumber: number, hash: string, newStatus: string) => {
+  updateTaskStatus: async (
+    filePath: string,
+    lineNumber: number,
+    hash: string,
+    newStatus: string,
+  ) => {
     set({ loading: true, error: null });
     try {
       await invoke("update_task_status", {

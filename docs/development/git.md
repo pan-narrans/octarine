@@ -21,15 +21,15 @@ Agents must not create or remove branches or worktrees, commit, amend, rebase, m
 
 `master` is the integration branch. Short-lived branches target `master`:
 
-| Purpose | Format | Example |
-| --- | --- | --- |
-| Feature | `feature/<issue>-<slug>` | `feature/41-markdown-parser` |
-| Fix | `fix/<issue>-<slug>` | `fix/102-watcher-race` |
-| Documentation | `docs/<slug>` | `docs/contributor-policy` |
-| Refactor | `refactor/<slug>` | `refactor/frontend-state` |
-| Maintenance | `chore/<slug>` | `chore/update-dependencies` |
-| Release | `release/<version>` | `release/v1.0.0` |
-| Production hotfix | `hotfix/<issue>-<slug>` | `hotfix/104-ipc-deadlock` |
+| Purpose           | Format                   | Example                      |
+| ----------------- | ------------------------ | ---------------------------- |
+| Feature           | `feature/<issue>-<slug>` | `feature/41-markdown-parser` |
+| Fix               | `fix/<issue>-<slug>`     | `fix/102-watcher-race`       |
+| Documentation     | `docs/<slug>`            | `docs/contributor-policy`    |
+| Refactor          | `refactor/<slug>`        | `refactor/frontend-state`    |
+| Maintenance       | `chore/<slug>`           | `chore/update-dependencies`  |
+| Release           | `release/<version>`      | `release/v1.0.0`             |
+| Production hotfix | `hotfix/<issue>-<slug>`  | `hotfix/104-ipc-deadlock`    |
 
 Use lowercase words separated by hyphens. Include the issue number when one exists; otherwise omit it.
 

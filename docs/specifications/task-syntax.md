@@ -28,18 +28,18 @@ Metadata appears on the first line of a task:
 
 Supported forms:
 
-| Meaning | Form | Example |
-| --- | --- | --- |
-| Project | `+<path>` | `+work/client-a` |
-| Context | `@<name>` | `@computer` |
-| Tag | `#<name>` | `#urgent` |
-| Priority | `(A)` through `(D)` | `(A)` |
-| Due date | `due:<YYYY-MM-DD>` | `due:2026-08-20` |
-| Scheduled start | `s:<date-time>` | `s:2026-08-20 09:30` |
-| Duration | `dur:<duration>` | `dur:1h30m` |
-| Recurrence text | `recurring:<value>` | `recurring:weekly` |
-| Completion action | `when_done:<value>` | `when_done:archive` |
-| Completion date | `done:<YYYY-MM-DD>` | `done:2026-08-20` |
+| Meaning           | Form                | Example              |
+| ----------------- | ------------------- | -------------------- |
+| Project           | `+<path>`           | `+work/client-a`     |
+| Context           | `@<name>`           | `@computer`          |
+| Tag               | `#<name>`           | `#urgent`            |
+| Priority          | `(A)` through `(D)` | `(A)`                |
+| Due date          | `due:<YYYY-MM-DD>`  | `due:2026-08-20`     |
+| Scheduled start   | `s:<date-time>`     | `s:2026-08-20 09:30` |
+| Duration          | `dur:<duration>`    | `dur:1h30m`          |
+| Recurrence text   | `recurring:<value>` | `recurring:weekly`   |
+| Completion action | `when_done:<value>` | `when_done:archive`  |
+| Completion date   | `done:<YYYY-MM-DD>` | `done:2026-08-20`    |
 
 Some values accept single or double quotes. The parser validates known date, date-time, duration, and completion-action forms; unsupported values are preserved in raw Markdown and reported through parse errors where implemented.
 
@@ -51,7 +51,7 @@ Indented non-task lines following a task are included in its raw Markdown notes.
 
 ```markdown
 - [ ] Parent task +work
-  Supporting note.
+      Supporting note.
   - [ ] Child task
 ```
 

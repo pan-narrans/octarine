@@ -35,13 +35,15 @@ Before the first production deployment, adopt the develop/release model describe
 
 ## Verification
 
-The current frontend gate is:
+The required frontend gate is:
 
 ```bash
+npm run format:check
+npm run lint
 npm run build
 ```
 
-The target frontend gate adds formatting and linting after the baseline tooling change lands. The current Rust source does not yet pass its documented target gate; the next baseline change will make these commands mandatory and green:
+The required Rust gate is:
 
 ```bash
 cd src-tauri
@@ -50,7 +52,7 @@ cargo clippy --all-targets -- -D warnings
 cargo test
 ```
 
-Do not describe a planned check as enforced until it is configured and green in CI. See `docs/development/testing.md` for scope-aware verification.
+These commands are green locally. CI enforcement remains roadmap work; do not describe a planned CI check as enforced until it exists. See `docs/development/testing.md` for scope-aware verification.
 
 ## Architectural Invariants
 

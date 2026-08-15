@@ -1,17 +1,15 @@
 # Rust Development Guide
 
-This guide distinguishes current expectations from gates that become required after the quality-baseline change.
+This guide defines the current Rust expectations and required local gate.
 
 ## Formatting and Linting
 
-Target required commands:
+Required commands:
 
 ```bash
 cargo fmt --all -- --check
 cargo clippy --all-targets -- -D warnings
 ```
-
-The current branch does not yet pass these checks. They become mandatory only after the focused baseline change makes them green and CI enforces them.
 
 - Use standard `rustfmt` output.
 - Resolve Clippy findings rather than suppressing them.

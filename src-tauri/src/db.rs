@@ -1,21 +1,24 @@
+use crate::parser;
 use rusqlite::{params, Connection, Result};
+use sha2::Digest;
 use std::fs;
 use std::path::Path;
 use std::time::UNIX_EPOCH;
-use sha2::Digest;
-use crate::parser;
 
 pub fn initialize_db<P: AsRef<Path>>(db_path: P) -> Result<Connection> {
     let conn = Connection::open(db_path)?;
-    
+
     // Enable WAL mode and foreign key constraints
-    conn.execute_batch("
+    conn.execute_batch(
+        "
         PRAGMA journal_mode = WAL;
         PRAGMA foreign_keys = ON;
-    ")?;
+    ",
+    )?;
 
     // Create Tables
-    conn.execute_batch("
+    conn.execute_batch(
+        "
         CREATE TABLE IF NOT EXISTS files (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             path TEXT NOT NULL UNIQUE,
@@ -97,12 +100,14 @@ pub fn initialize_db<P: AsRef<Path>>(db_path: P) -> Result<Connection> {
             FOREIGN KEY(file_id) REFERENCES files(id) ON DELETE CASCADE
         );
         CREATE INDEX IF NOT EXISTS idx_merge_reviews_timestamp ON merge_reviews(timestamp);
-    ")?;
+    ",
+    )?;
 
     // Runtime table schema migration for priority and parent_hash columns
     {
         let mut stmt = conn.prepare("PRAGMA table_info(tasks)")?;
-        let columns: Vec<String> = stmt.query_map([], |row| row.get(1))?
+        let columns: Vec<String> = stmt
+            .query_map([], |row| row.get(1))?
             .filter_map(|r| r.ok())
             .collect();
         if !columns.contains(&"priority".to_string()) {
@@ -114,7 +119,10 @@ pub fn initialize_db<P: AsRef<Path>>(db_path: P) -> Result<Connection> {
     }
 
     // Ensure index on parent_hash is created after column migration is complete
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_parent_hash ON tasks(parent_hash);", [])?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_tasks_parent_hash ON tasks(parent_hash);",
+        [],
+    )?;
 
     Ok(conn)
 }
@@ -137,7 +145,9 @@ pub fn insert_or_update_file(conn: &Connection, path: &str, mtime: i64, hash: &s
          ON CONFLICT(path) DO UPDATE SET mtime = ?2, hash = ?3",
         params![path, mtime, hash],
     )?;
-    let id: i64 = conn.query_row("SELECT id FROM files WHERE path = ?", params![path], |r| r.get(0))?;
+    let id: i64 = conn.query_row("SELECT id FROM files WHERE path = ?", params![path], |r| {
+        r.get(0)
+    })?;
     Ok(id)
 }
 
@@ -153,7 +163,7 @@ pub fn index_single_file(conn: &Connection, path: &str) -> Result<(), Box<dyn st
     let metadata = fs::metadata(&canonical_path)?;
     let mtime = metadata.modified()?.duration_since(UNIX_EPOCH)?.as_secs() as i64;
     let content = fs::read_to_string(&canonical_path)?;
-    
+
     // Compute checksum
     let mut hasher = sha2::Sha256::new();
     hasher.update(content.as_bytes());
@@ -183,11 +193,18 @@ pub fn index_single_file(conn: &Connection, path: &str) -> Result<(), Box<dyn st
          ON CONFLICT(path) DO UPDATE SET mtime = ?2, hash = ?3",
         params![&canonical_path, mtime, file_hash],
     )?;
-    let file_id: i64 = tx.query_row("SELECT id FROM files WHERE path = ?", params![&canonical_path], |r| r.get(0))?;
+    let file_id: i64 = tx.query_row(
+        "SELECT id FROM files WHERE path = ?",
+        params![&canonical_path],
+        |r| r.get(0),
+    )?;
 
     // Delete existing tasks & views for file
     tx.execute("DELETE FROM tasks WHERE file_id = ?", params![file_id])?;
-    tx.execute("DELETE FROM custom_views WHERE file_id = ?", params![file_id])?;
+    tx.execute(
+        "DELETE FROM custom_views WHERE file_id = ?",
+        params![file_id],
+    )?;
 
     // Insert newly parsed tasks
     for task in tasks {
@@ -220,15 +237,31 @@ pub fn index_single_file(conn: &Connection, path: &str) -> Result<(), Box<dyn st
         // Handle Tags
         for tag in task.tags {
             tx.execute("INSERT OR IGNORE INTO tags (name) VALUES (?)", params![tag])?;
-            let tag_id: i64 = tx.query_row("SELECT id FROM tags WHERE name = ?", params![tag], |r| r.get(0))?;
-            tx.execute("INSERT OR IGNORE INTO task_tags (task_id, tag_id) VALUES (?, ?)", params![task_id, tag_id])?;
+            let tag_id: i64 =
+                tx.query_row("SELECT id FROM tags WHERE name = ?", params![tag], |r| {
+                    r.get(0)
+                })?;
+            tx.execute(
+                "INSERT OR IGNORE INTO task_tags (task_id, tag_id) VALUES (?, ?)",
+                params![task_id, tag_id],
+            )?;
         }
 
         // Handle Contexts
         for context in task.contexts {
-            tx.execute("INSERT OR IGNORE INTO contexts (name) VALUES (?)", params![context])?;
-            let context_id: i64 = tx.query_row("SELECT id FROM contexts WHERE name = ?", params![context], |r| r.get(0))?;
-            tx.execute("INSERT OR IGNORE INTO task_contexts (task_id, context_id) VALUES (?, ?)", params![task_id, context_id])?;
+            tx.execute(
+                "INSERT OR IGNORE INTO contexts (name) VALUES (?)",
+                params![context],
+            )?;
+            let context_id: i64 = tx.query_row(
+                "SELECT id FROM contexts WHERE name = ?",
+                params![context],
+                |r| r.get(0),
+            )?;
+            tx.execute(
+                "INSERT OR IGNORE INTO task_contexts (task_id, context_id) VALUES (?, ?)",
+                params![task_id, context_id],
+            )?;
         }
     }
 
@@ -263,7 +296,10 @@ fn scan_directory_recursive(dir: &Path, files: &mut Vec<String>) -> std::io::Res
     Ok(())
 }
 
-pub fn boot_sweep<P: AsRef<Path>>(conn: &Connection, vault_dir: P) -> Result<(), Box<dyn std::error::Error>> {
+pub fn boot_sweep<P: AsRef<Path>>(
+    conn: &Connection,
+    vault_dir: P,
+) -> Result<(), Box<dyn std::error::Error>> {
     let vault_path = vault_dir.as_ref();
     if !vault_path.exists() {
         fs::create_dir_all(vault_path)?;
@@ -275,7 +311,8 @@ pub fn boot_sweep<P: AsRef<Path>>(conn: &Connection, vault_dir: P) -> Result<(),
 
     // 2. Fetch all cached file paths from DB
     let mut stmt = conn.prepare("SELECT path FROM files")?;
-    let db_paths: Vec<String> = stmt.query_map([], |row| row.get(0))?
+    let db_paths: Vec<String> = stmt
+        .query_map([], |row| row.get(0))?
         .filter_map(|r| r.ok())
         .collect();
 
@@ -300,6 +337,15 @@ pub fn boot_sweep<P: AsRef<Path>>(conn: &Connection, vault_dir: P) -> Result<(),
 mod tests {
     use super::*;
     use tempfile::tempdir;
+
+    type IndexedTaskRow = (
+        String,
+        String,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<i32>,
+    );
 
     #[test]
     fn test_db_initialization_and_sweep() {
@@ -329,8 +375,12 @@ mod tests {
         assert_eq!(file_count, 1);
 
         // Verify tasks indexed
-        let mut stmt = conn.prepare("SELECT description, type, project, due_date, s_start, duration_secs FROM tasks").unwrap();
-        let tasks: Vec<(String, String, Option<String>, Option<String>, Option<String>, Option<i32>)> = stmt
+        let mut stmt = conn
+            .prepare(
+                "SELECT description, type, project, due_date, s_start, duration_secs FROM tasks",
+            )
+            .unwrap();
+        let tasks: Vec<IndexedTaskRow> = stmt
             .query_map([], |r| {
                 Ok((
                     r.get(0)?,
@@ -359,11 +409,19 @@ mod tests {
 
         // Verify tags & contexts
         let mut stmt = conn.prepare("SELECT name FROM tags").unwrap();
-        let tags: Vec<String> = stmt.query_map([], |r| r.get(0)).unwrap().filter_map(|r| r.ok()).collect();
+        let tags: Vec<String> = stmt
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
         assert!(tags.contains(&"high-priority".to_string()));
 
         let mut stmt = conn.prepare("SELECT name FROM contexts").unwrap();
-        let contexts: Vec<String> = stmt.query_map([], |r| r.get(0)).unwrap().filter_map(|r| r.ok()).collect();
+        let contexts: Vec<String> = stmt
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
         assert!(contexts.contains(&"db".to_string()));
 
         // Delete the file and re-sweep
@@ -371,10 +429,14 @@ mod tests {
         boot_sweep(&conn, &vault_dir).unwrap();
 
         // Verify DB is clean
-        let file_count_after: i64 = conn.query_row("SELECT count(*) FROM files", [], |r| r.get(0)).unwrap();
+        let file_count_after: i64 = conn
+            .query_row("SELECT count(*) FROM files", [], |r| r.get(0))
+            .unwrap();
         assert_eq!(file_count_after, 0);
 
-        let task_count_after: i64 = conn.query_row("SELECT count(*) FROM tasks", [], |r| r.get(0)).unwrap();
+        let task_count_after: i64 = conn
+            .query_row("SELECT count(*) FROM tasks", [], |r| r.get(0))
+            .unwrap();
         assert_eq!(task_count_after, 0);
     }
 
@@ -389,18 +451,16 @@ mod tests {
 
         // 1. Initial creation and sweep index
         let file_path = vault_dir.join("tasks.md");
-        fs::write(
-            &file_path,
-            r#"- [<] Fisio s:2026-08-11 due:2026-08-11"#,
-        )
-        .unwrap();
+        fs::write(&file_path, r#"- [<] Fisio s:2026-08-11 due:2026-08-11"#).unwrap();
 
         // Simulating non-canonical path indexing (standard in relative sweeps)
         let relative_path_str = format!("{}/./tasks.md", vault_dir.to_string_lossy());
         index_single_file(&conn, &relative_path_str).unwrap();
 
         // Verify exactly 1 task exists initially
-        let initial_count: i64 = conn.query_row("SELECT count(*) FROM tasks", [], |r| r.get(0)).unwrap();
+        let initial_count: i64 = conn
+            .query_row("SELECT count(*) FROM tasks", [], |r| r.get(0))
+            .unwrap();
         assert_eq!(initial_count, 1);
 
         // 2. Simulating external modification returned as absolute canonical path by watchers
@@ -418,7 +478,9 @@ mod tests {
 
         // Verify that we DO NOT have duplicates in database.
         // Under the current buggy behavior, final_count will be 2 because the two paths don't match!
-        let final_count: i64 = conn.query_row("SELECT count(*) FROM tasks", [], |r| r.get(0)).unwrap();
+        let final_count: i64 = conn
+            .query_row("SELECT count(*) FROM tasks", [], |r| r.get(0))
+            .unwrap();
         assert_eq!(final_count, 1);
     }
 
@@ -446,11 +508,8 @@ mod tests {
 
         // Compile query "+work" which translates to hierarchical SQL
         let sql_filter = crate::query_dsl::compile_filter_to_sql("+work").unwrap();
-        
-        let query_str = format!(
-            "SELECT count(*) FROM tasks WHERE {}",
-            sql_filter
-        );
+
+        let query_str = format!("SELECT count(*) FROM tasks WHERE {}", sql_filter);
 
         // Execute query and assert that BOTH parent and nested child task are returned!
         let matched_tasks: i64 = conn.query_row(&query_str, [], |r| r.get(0)).unwrap();
@@ -481,9 +540,11 @@ mod tests {
 
         // Query the database to assert that priority was indexed correctly
         let mut stmt = conn.prepare("SELECT description, priority FROM tasks ORDER BY CASE WHEN priority IS NULL THEN 9999 ELSE priority END ASC").unwrap();
-        let results: Vec<(String, Option<i32>)> = stmt.query_map([], |row| {
-            Ok((row.get(0)?, row.get(1)?))
-        }).unwrap().filter_map(|r| r.ok()).collect();
+        let results: Vec<(String, Option<i32>)> = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
 
         assert_eq!(results.len(), 3);
         assert_eq!(results[0].0, "High priority task");

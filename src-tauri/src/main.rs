@@ -3,16 +3,19 @@
     windows_subsystem = "windows"
 )]
 
-use std::sync::Mutex;
-use tauri::State;
-use tauri::Manager;
-use octarine::parser::{ParsedTask, ParsedCustomView};
-use octarine::file_ops::{FileNode, scan_dir_tree, create_file_on_disk, create_directory_on_disk, delete_path_on_disk, rename_path_on_disk, read_file_content_on_disk, write_file_content_on_disk};
-use octarine::db::{initialize_db, boot_sweep, index_single_file, delete_file};
-use octarine::writer::update_task_status_in_file;
+use octarine::db::{boot_sweep, delete_file, index_single_file, initialize_db};
+use octarine::file_ops::{
+    create_directory_on_disk, create_file_on_disk, delete_path_on_disk, read_file_content_on_disk,
+    rename_path_on_disk, scan_dir_tree, write_file_content_on_disk, FileNode,
+};
+use octarine::parser::{ParsedCustomView, ParsedTask};
 use octarine::query_dsl::compile_filter_to_sql;
 use octarine::watcher::start_watcher;
+use octarine::writer::update_task_status_in_file;
 use rusqlite::Connection;
+use std::sync::Mutex;
+use tauri::Manager;
+use tauri::State;
 
 struct AppState {
     db: Mutex<Connection>,
@@ -22,7 +25,10 @@ struct AppState {
 }
 
 #[tauri::command]
-fn get_tasks(state: State<'_, AppState>, filter: Option<String>) -> Result<Vec<ParsedTask>, String> {
+fn get_tasks(
+    state: State<'_, AppState>,
+    filter: Option<String>,
+) -> Result<Vec<ParsedTask>, String> {
     let conn = state.db.lock().unwrap();
     let where_clause = match filter {
         Some(f) if !f.trim().is_empty() => compile_filter_to_sql(&f)?,
@@ -35,45 +41,47 @@ fn get_tasks(state: State<'_, AppState>, filter: Option<String>) -> Result<Vec<P
     );
 
     let mut stmt = conn.prepare(&query_str).map_err(|e| e.to_string())?;
-    let rows = stmt.query_map([], |row| {
-        let line_number: usize = row.get(0)?;
-        let raw_markdown: String = row.get(1)?;
-        let hash: String = row.get(2)?;
-        let status: String = row.get(3)?;
-        let task_type: String = row.get(4)?;
-        let description: String = row.get(5)?;
-        let project: Option<String> = row.get(6)?;
-        let due_date: Option<String> = row.get(7)?;
-        let s_start: Option<String> = row.get(8)?;
-        let duration_secs: Option<i32> = row.get(9)?;
-        let recurring: Option<String> = row.get(10)?;
-        let when_done: Option<String> = row.get(11)?;
-        let parse_errors: Option<String> = row.get(12)?;
-        let priority: Option<i32> = row.get(13)?;
-        let file_path: String = row.get(14)?;
-        let parent_hash: Option<String> = row.get(15)?;
+    let rows = stmt
+        .query_map([], |row| {
+            let line_number: usize = row.get(0)?;
+            let raw_markdown: String = row.get(1)?;
+            let hash: String = row.get(2)?;
+            let status: String = row.get(3)?;
+            let task_type: String = row.get(4)?;
+            let description: String = row.get(5)?;
+            let project: Option<String> = row.get(6)?;
+            let due_date: Option<String> = row.get(7)?;
+            let s_start: Option<String> = row.get(8)?;
+            let duration_secs: Option<i32> = row.get(9)?;
+            let recurring: Option<String> = row.get(10)?;
+            let when_done: Option<String> = row.get(11)?;
+            let parse_errors: Option<String> = row.get(12)?;
+            let priority: Option<i32> = row.get(13)?;
+            let file_path: String = row.get(14)?;
+            let parent_hash: Option<String> = row.get(15)?;
 
-        Ok(ParsedTask {
-            line_number,
-            raw_markdown,
-            hash,
-            status,
-            task_type,
-            description,
-            project,
-            due_date,
-            s_start,
-            duration_secs,
-            recurring,
-            when_done,
-            priority,
-            tags: vec![],
-            contexts: vec![],
-            parse_errors,
-            file_path: Some(file_path),
-            parent_hash,
+            Ok(ParsedTask {
+                line_number,
+                raw_markdown,
+                hash,
+                status,
+                task_type,
+                description,
+                project,
+                due_date,
+                s_start,
+                duration_secs,
+                recurring,
+                when_done,
+                priority,
+                tags: vec![],
+                contexts: vec![],
+                parse_errors,
+                file_path: Some(file_path),
+                parent_hash,
+            })
         })
-    }).map_err(|e| e.to_string())?;
+        .map_err(|e| e.to_string())?;
 
     let mut tasks = Vec::new();
     for row in rows {
@@ -85,14 +93,18 @@ fn get_tasks(state: State<'_, AppState>, filter: Option<String>) -> Result<Vec<P
 #[tauri::command]
 fn get_custom_views(state: State<'_, AppState>) -> Result<Vec<ParsedCustomView>, String> {
     let conn = state.db.lock().unwrap();
-    let mut stmt = conn.prepare("SELECT line_number, title, query_raw FROM custom_views").map_err(|e| e.to_string())?;
-    let rows = stmt.query_map([], |row| {
-        Ok(ParsedCustomView {
-            line_number: row.get(0)?,
-            title: row.get(1)?,
-            query_raw: row.get(2)?,
+    let mut stmt = conn
+        .prepare("SELECT line_number, title, query_raw FROM custom_views")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(ParsedCustomView {
+                line_number: row.get(0)?,
+                title: row.get(1)?,
+                query_raw: row.get(2)?,
+            })
         })
-    }).map_err(|e| e.to_string())?;
+        .map_err(|e| e.to_string())?;
 
     let mut views = Vec::new();
     for row in rows {
@@ -124,7 +136,13 @@ fn update_task_markdown(
     new_raw_markdown: String,
 ) -> Result<(), String> {
     let conn = state.db.lock().unwrap();
-    octarine::writer::update_task_markdown_in_file(&conn, &file_path, line_number, &hash, &new_raw_markdown)?;
+    octarine::writer::update_task_markdown_in_file(
+        &conn,
+        &file_path,
+        line_number,
+        &hash,
+        &new_raw_markdown,
+    )?;
     index_single_file(&conn, &file_path).map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -174,14 +192,14 @@ fn set_vault_config(state: State<'_, AppState>, new_dir: String) -> Result<(), S
     // Save to configuration file
     let mut config_json = if std::path::Path::new(&config_path).exists() {
         let content = std::fs::read_to_string(&config_path).unwrap_or_default();
-        serde_json::from_str::<serde_json::Value>(&content).unwrap_or_else(|_| serde_json::json!({}))
+        serde_json::from_str::<serde_json::Value>(&content)
+            .unwrap_or_else(|_| serde_json::json!({}))
     } else {
         serde_json::json!({})
     };
     config_json["vault_dir"] = serde_json::Value::String(new_dir.clone());
 
-    let config_str = serde_json::to_string_pretty(&config_json)
-        .map_err(|e| e.to_string())?;
+    let config_str = serde_json::to_string_pretty(&config_json).map_err(|e| e.to_string())?;
     std::fs::write(&config_path, config_str)
         .map_err(|e| format!("Failed to write config file: {}", e))?;
 
@@ -193,9 +211,12 @@ fn set_vault_config(state: State<'_, AppState>, new_dir: String) -> Result<(), S
 
     // Clear old tables inside the SQLite cache
     let conn = state.db.lock().unwrap();
-    conn.execute("DELETE FROM tasks", []).map_err(|e| e.to_string())?;
-    conn.execute("DELETE FROM custom_views", []).map_err(|e| e.to_string())?;
-    conn.execute("DELETE FROM files", []).map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM tasks", [])
+        .map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM custom_views", [])
+        .map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM files", [])
+        .map_err(|e| e.to_string())?;
 
     // Perform an immediate fresh boot sweep indexing the newly configured vault
     boot_sweep(&conn, &resolved_dir).map_err(|e| e.to_string())?;
@@ -226,14 +247,14 @@ fn set_journal_config(state: State<'_, AppState>, new_dir: String) -> Result<(),
     // Save to configuration file
     let mut config_json = if std::path::Path::new(&config_path).exists() {
         let content = std::fs::read_to_string(&config_path).unwrap_or_default();
-        serde_json::from_str::<serde_json::Value>(&content).unwrap_or_else(|_| serde_json::json!({}))
+        serde_json::from_str::<serde_json::Value>(&content)
+            .unwrap_or_else(|_| serde_json::json!({}))
     } else {
         serde_json::json!({})
     };
     config_json["journal_dir"] = serde_json::Value::String(new_dir.clone());
 
-    let config_str = serde_json::to_string_pretty(&config_json)
-        .map_err(|e| e.to_string())?;
+    let config_str = serde_json::to_string_pretty(&config_json).map_err(|e| e.to_string())?;
     std::fs::write(&config_path, config_str)
         .map_err(|e| format!("Failed to write config file: {}", e))?;
 
@@ -283,7 +304,11 @@ fn delete_path(state: State<'_, AppState>, path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn rename_path(state: State<'_, AppState>, old_path: String, new_path: String) -> Result<(), String> {
+fn rename_path(
+    state: State<'_, AppState>,
+    old_path: String,
+    new_path: String,
+) -> Result<(), String> {
     rename_path_on_disk(&old_path, &new_path)?;
     let conn = state.db.lock().unwrap();
 
@@ -305,7 +330,11 @@ fn read_file_content(path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn write_file_content(state: State<'_, AppState>, path: String, content: String) -> Result<(), String> {
+fn write_file_content(
+    state: State<'_, AppState>,
+    path: String,
+    content: String,
+) -> Result<(), String> {
     write_file_content_on_disk(&path, &content)?;
     let conn = state.db.lock().unwrap();
     index_single_file(&conn, &path).map_err(|e| e.to_string())?;
@@ -342,7 +371,8 @@ fn main() {
                 } else {
                     // Update existing config file with default journal path if missing
                     let mut updated_config = config_json.clone();
-                    updated_config["journal_dir"] = serde_json::Value::String("~/octarine_journal".to_string());
+                    updated_config["journal_dir"] =
+                        serde_json::Value::String("~/octarine_journal".to_string());
                     if let Ok(config_str) = serde_json::to_string_pretty(&updated_config) {
                         let _ = std::fs::write(&config_path, config_str);
                     }
@@ -373,7 +403,7 @@ fn main() {
     std::fs::create_dir_all(&journal_dir).expect("failed to create journal directory");
 
     let conn = initialize_db(&db_path).expect("failed to initialize SQLite Cache database");
-    
+
     // Force a one-time database cache flush to clear out legacy buggy entries (like '+-')
     // and let our sub-millisecond sweep rebuild everything cleanly from scratch.
     let _ = conn.execute("DELETE FROM tasks", []);
@@ -382,13 +412,12 @@ fn main() {
 
     boot_sweep(&conn, &vault_dir).expect("failed to run boot sweep");
 
-    let mut builder = tauri::Builder::default()
-        .manage(AppState {
-            db: Mutex::new(conn),
-            _db_path: db_path.clone(),
-            vault_dir: Mutex::new(vault_dir.clone()),
-            journal_dir: Mutex::new(journal_dir.clone()),
-        });
+    let mut builder = tauri::Builder::default().manage(AppState {
+        db: Mutex::new(conn),
+        _db_path: db_path.clone(),
+        vault_dir: Mutex::new(vault_dir.clone()),
+        journal_dir: Mutex::new(journal_dir.clone()),
+    });
 
     builder = builder.invoke_handler(tauri::generate_handler![
         get_tasks,
@@ -418,10 +447,10 @@ fn main() {
                 let _ = handle.emit_all("vault-changed", ());
             })
             .expect("failed to start native file watcher");
-            
+
             // Keep the watcher alive by leaking it
             Box::leak(Box::new(_watcher));
-            
+
             Ok(())
         })
         .run(tauri::generate_context!())

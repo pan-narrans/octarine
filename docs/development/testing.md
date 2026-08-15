@@ -24,7 +24,7 @@ Do not impose an arbitrary coverage percentage initially. Cover critical invaria
 
 - Documentation-only: inspect links, commands, and formatting. Run builds if executable examples or configuration changed.
 - Frontend: formatting and linting after configured, plus `npm run build`.
-- Rust: formatting, Clippy, and tests after the green baseline lands.
+- Rust: formatting, Clippy, and tests.
 - Parser/index: syntax fixtures, specification update, clean rebuild, and incremental indexing; increment index-format version when stored meaning changes.
 - Database/configuration: forward migration and migration from the previous supported version; protect durable data from cache cleanup.
 - Filesystem/watcher: allowed and rejected paths, symlink behavior, observable async outcomes, and indexing-before-notification.

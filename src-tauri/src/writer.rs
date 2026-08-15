@@ -1,9 +1,9 @@
-use std::fs;
-use std::path::Path;
+use crate::CHECKLIST_CHAR_CLASS;
 use regex::Regex;
 use rusqlite::{params, Connection};
+use std::fs;
+use std::path::Path;
 use std::sync::OnceLock;
-use crate::CHECKLIST_CHAR_CLASS;
 
 static CHECKBOX_SUB_RE: OnceLock<Regex> = OnceLock::new();
 static STRIP_CHECKBOX_RE: OnceLock<Regex> = OnceLock::new();
@@ -82,13 +82,19 @@ pub fn update_task_status_in_file(
         for offset in 1..=search_radius {
             // Check below
             let scan_idx = start_line + offset;
-            if scan_idx >= 0 && (scan_idx as usize) < lines.len() && is_match_at_line(&lines, scan_idx as usize, &original_lines) {
+            if scan_idx >= 0
+                && (scan_idx as usize) < lines.len()
+                && is_match_at_line(&lines, scan_idx as usize, &original_lines)
+            {
                 found_line = Some(scan_idx as usize);
                 break;
             }
             // Check above
             let scan_idx = start_line - offset;
-            if scan_idx >= 0 && (scan_idx as usize) < lines.len() && is_match_at_line(&lines, scan_idx as usize, &original_lines) {
+            if scan_idx >= 0
+                && (scan_idx as usize) < lines.len()
+                && is_match_at_line(&lines, scan_idx as usize, &original_lines)
+            {
                 found_line = Some(scan_idx as usize);
                 break;
             }
@@ -122,7 +128,7 @@ pub fn update_task_status_in_file(
         let prefix = caps.get(1).unwrap().as_str();
         let suffix = caps.get(3).unwrap().as_str();
         let mut rest = caps.get(4).unwrap().as_str().to_string();
-        
+
         // Clean out any pre-existing done:YYYY-MM-DD tags first
         let re_done = get_re_done();
         rest = re_done.replace_all(&rest, "").to_string();
@@ -150,7 +156,7 @@ fn is_match_at_line(file_lines: &[String], start_idx: usize, original_lines: &[&
     if start_idx + original_lines.len() > file_lines.len() {
         return false;
     }
-    
+
     for (offset, orig_line) in original_lines.iter().enumerate() {
         let disk_line = &file_lines[start_idx + offset];
         if offset == 0 {
@@ -160,7 +166,7 @@ fn is_match_at_line(file_lines: &[String], start_idx: usize, original_lines: &[&
             let re = get_strip_checkbox_re();
             let disk_cap = re.captures(disk_line);
             let orig_cap = re.captures(orig_line);
-            
+
             match (disk_cap, orig_cap) {
                 (Some(dc), Some(oc)) => {
                     if dc.get(1).unwrap().as_str() != oc.get(1).unwrap().as_str() {
@@ -223,12 +229,18 @@ pub fn update_event_schedule_in_file(
         let start_line = original_line_number as i32 - 1;
         for offset in 1..=search_radius {
             let scan_idx = start_line + offset;
-            if scan_idx >= 0 && (scan_idx as usize) < lines.len() && is_match_at_line(&lines, scan_idx as usize, &original_lines) {
+            if scan_idx >= 0
+                && (scan_idx as usize) < lines.len()
+                && is_match_at_line(&lines, scan_idx as usize, &original_lines)
+            {
                 found_line = Some(scan_idx as usize);
                 break;
             }
             let scan_idx = start_line - offset;
-            if scan_idx >= 0 && (scan_idx as usize) < lines.len() && is_match_at_line(&lines, scan_idx as usize, &original_lines) {
+            if scan_idx >= 0
+                && (scan_idx as usize) < lines.len()
+                && is_match_at_line(&lines, scan_idx as usize, &original_lines)
+            {
                 found_line = Some(scan_idx as usize);
                 break;
             }
@@ -285,11 +297,11 @@ pub fn update_task_markdown_in_file(
     new_raw_markdown: &str,
 ) -> Result<(), String> {
     // 1. Read file content on disk
-    let file_content = fs::read_to_string(file_path)
-        .map_err(|e| format!("Failed to read file: {}", e))?;
-    
+    let file_content =
+        fs::read_to_string(file_path).map_err(|e| format!("Failed to read file: {}", e))?;
+
     let mut lines: Vec<String> = file_content.split('\n').map(|s| s.to_string()).collect();
-    
+
     // 2. Resolve original raw markdown from hash
     let mut stmt = db_conn
         .prepare("SELECT raw_markdown FROM tasks WHERE hash = ?")
@@ -306,24 +318,30 @@ pub fn update_task_markdown_in_file(
     // 3. Locate the original block
     let mut found_start_idx: Option<usize> = None;
     let index_0 = original_line_number.saturating_sub(1);
-    
+
     // Direct match check (Phase 1)
     if is_match_at_line(&lines, index_0, &original_block_lines) {
         found_start_idx = Some(index_0);
     }
-    
+
     // Fallback search check (Phase 2)
     if found_start_idx.is_none() {
         let search_radius = 15;
         let start_line = original_line_number as i32 - 1;
         for offset in 1..=search_radius {
             let scan_idx = start_line + offset;
-            if scan_idx >= 0 && (scan_idx as usize) < lines.len() && is_match_at_line(&lines, scan_idx as usize, &original_block_lines) {
+            if scan_idx >= 0
+                && (scan_idx as usize) < lines.len()
+                && is_match_at_line(&lines, scan_idx as usize, &original_block_lines)
+            {
                 found_start_idx = Some(scan_idx as usize);
                 break;
             }
             let scan_idx = start_line - offset;
-            if scan_idx >= 0 && (scan_idx as usize) < lines.len() && is_match_at_line(&lines, scan_idx as usize, &original_block_lines) {
+            if scan_idx >= 0
+                && (scan_idx as usize) < lines.len()
+                && is_match_at_line(&lines, scan_idx as usize, &original_block_lines)
+            {
                 found_start_idx = Some(scan_idx as usize);
                 break;
             }
@@ -338,13 +356,15 @@ pub fn update_task_markdown_in_file(
     let end_idx = start_idx + original_block_lines.len();
 
     // 4. Splice the new lines into the vector
-    let new_block_lines: Vec<String> = new_raw_markdown.split('\n').map(|s| s.to_string()).collect();
+    let new_block_lines: Vec<String> = new_raw_markdown
+        .split('\n')
+        .map(|s| s.to_string())
+        .collect();
     lines.splice(start_idx..end_idx, new_block_lines);
 
     // 5. Write back to disk
     let updated_content = lines.join("\n");
-    fs::write(file_path, updated_content)
-        .map_err(|e| format!("Failed to write file: {}", e))?;
+    fs::write(file_path, updated_content).map_err(|e| format!("Failed to write file: {}", e))?;
 
     Ok(())
 }
@@ -352,7 +372,7 @@ pub fn update_task_markdown_in_file(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::{initialize_db, index_single_file};
+    use crate::db::{index_single_file, initialize_db};
     use tempfile::tempdir;
 
     #[test]
@@ -526,7 +546,10 @@ mod tests {
         // Verify done:YYYY-MM-DD tag is appended
         let content_done = fs::read_to_string(&file_path).unwrap();
         let today = chrono::Local::now().format("%Y-%m-%d").to_string();
-        assert!(content_done.contains(&format!("- [x] Implement completion date @db done:{}", today)));
+        assert!(content_done.contains(&format!(
+            "- [x] Implement completion date @db done:{}",
+            today
+        )));
 
         // Re-index file to update SQLite cache with the new hash
         index_single_file(&conn, file_path.to_str().unwrap()).unwrap();
@@ -540,7 +563,8 @@ mod tests {
             .unwrap();
 
         // Revert back to doing
-        update_task_status_in_file(&conn, file_path.to_str().unwrap(), 2, &new_hash, "doing").unwrap();
+        update_task_status_in_file(&conn, file_path.to_str().unwrap(), 2, &new_hash, "doing")
+            .unwrap();
 
         // Verify done:YYYY-MM-DD tag is stripped
         let content_doing = fs::read_to_string(&file_path).unwrap();

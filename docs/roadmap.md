@@ -4,10 +4,10 @@ This document contains planned work. Items here are not current capabilities or 
 
 ## Documentation and Quality Baseline
 
-- Establish portable `AGENTS.md` and project-specific `CONTRIBUTING.md`.
-- Make Rust formatting, Clippy, and tests green.
-- Configure ESLint and Prettier and make their checks green.
-- Pin Node and Rust toolchains.
+- [x] Establish portable `AGENTS.md` and project-specific `CONTRIBUTING.md`.
+- [x] Make Rust formatting, Clippy, and tests green.
+- [x] Configure ESLint and Prettier and make their checks green.
+- [x] Pin Node and Rust toolchains.
 - Add pull-request CI after local gates pass.
 
 ## Core Correctness

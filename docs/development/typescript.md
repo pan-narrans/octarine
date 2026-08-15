@@ -1,16 +1,10 @@
 # TypeScript and React Development Guide
 
-This guide distinguishes current expectations from gates that become required after the frontend tooling baseline.
+This guide defines the current TypeScript and React expectations and required local gate.
 
 ## Quality Gates
 
-The current required frontend command is:
-
-```bash
-npm run build
-```
-
-The focused tooling change will configure and make these commands green before they become required:
+Required commands:
 
 ```bash
 npm run format:check

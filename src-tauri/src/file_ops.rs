@@ -1,6 +1,6 @@
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
-use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct FileNode {
@@ -11,10 +11,11 @@ pub struct FileNode {
 }
 
 pub fn scan_dir_tree(dir_path: &Path) -> Result<FileNode, String> {
-    let name = dir_path.file_name()
+    let name = dir_path
+        .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "Root".to_string());
-    
+
     let path = dir_path.to_string_lossy().to_string();
     let is_dir = dir_path.is_dir();
 
@@ -23,7 +24,7 @@ pub fn scan_dir_tree(dir_path: &Path) -> Result<FileNode, String> {
         let mut node_children = Vec::new();
         let entries = fs::read_dir(dir_path)
             .map_err(|e| format!("Failed to read directory {}: {}", path, e))?;
-        
+
         for entry in entries.flatten() {
             let entry_path = entry.path();
             let entry_name = entry.file_name().to_string_lossy().to_string();
@@ -80,13 +81,9 @@ pub fn create_file_on_disk(parent_dir: &str, name: &str) -> Result<String, Strin
     }
 
     // Automatically scaffold a clean markdown header
-    let placeholder = format!(
-        "# {}\n\n",
-        file_name.replace(".md", "")
-    );
-    fs::write(&file_path, placeholder)
-        .map_err(|e| format!("Failed to create file: {}", e))?;
-    
+    let placeholder = format!("# {}\n\n", file_name.replace(".md", ""));
+    fs::write(&file_path, placeholder).map_err(|e| format!("Failed to create file: {}", e))?;
+
     Ok(file_path.to_string_lossy().to_string())
 }
 
@@ -95,9 +92,8 @@ pub fn create_directory_on_disk(parent_dir: &str, name: &str) -> Result<String, 
     if dir_path.exists() {
         return Err("A directory with that name already exists.".to_string());
     }
-    fs::create_dir_all(&dir_path)
-        .map_err(|e| format!("Failed to create directory: {}", e))?;
-    
+    fs::create_dir_all(&dir_path).map_err(|e| format!("Failed to create directory: {}", e))?;
+
     Ok(dir_path.to_string_lossy().to_string())
 }
 
@@ -107,11 +103,9 @@ pub fn delete_path_on_disk(path_str: &str) -> Result<(), String> {
         return Err("The specified path does not exist on disk.".to_string());
     }
     if path.is_dir() {
-        fs::remove_dir_all(path)
-            .map_err(|e| format!("Failed to delete folder: {}", e))?;
+        fs::remove_dir_all(path).map_err(|e| format!("Failed to delete folder: {}", e))?;
     } else {
-        fs::remove_file(path)
-            .map_err(|e| format!("Failed to delete file: {}", e))?;
+        fs::remove_file(path).map_err(|e| format!("Failed to delete file: {}", e))?;
     }
     Ok(())
 }
@@ -125,8 +119,7 @@ pub fn rename_path_on_disk(old_path_str: &str, new_path_str: &str) -> Result<(),
     if new_path.exists() {
         return Err("The destination path already exists.".to_string());
     }
-    fs::rename(old_path, new_path)
-        .map_err(|e| format!("Failed to rename/move path: {}", e))?;
+    fs::rename(old_path, new_path).map_err(|e| format!("Failed to rename/move path: {}", e))?;
     Ok(())
 }
 
@@ -135,8 +128,7 @@ pub fn read_file_content_on_disk(path_str: &str) -> Result<String, String> {
     if !path.exists() {
         return Err("File not found.".to_string());
     }
-    fs::read_to_string(path)
-        .map_err(|e| format!("Failed to read file: {}", e))
+    fs::read_to_string(path).map_err(|e| format!("Failed to read file: {}", e))
 }
 
 pub fn write_file_content_on_disk(path_str: &str, content: &str) -> Result<(), String> {
@@ -144,14 +136,13 @@ pub fn write_file_content_on_disk(path_str: &str, content: &str) -> Result<(), S
     if !path.exists() {
         return Err("File not found on disk.".to_string());
     }
-    fs::write(path, content)
-        .map_err(|e| format!("Failed to write file: {}", e))?;
+    fs::write(path, content).map_err(|e| format!("Failed to write file: {}", e))?;
     Ok(())
 }
 
+use regex::Regex;
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
-use regex::Regex;
 
 static JOURNAL_REGEX: OnceLock<Regex> = OnceLock::new();
 
@@ -190,7 +181,8 @@ pub fn build_journal_tree(journal_dir_path: &Path) -> Result<FileNode, String> {
         for entry in entries.flatten() {
             let entry_path = entry.path();
             if entry_path.is_file() {
-                let file_name = entry_path.file_name()
+                let file_name = entry_path
+                    .file_name()
                     .map(|n| n.to_string_lossy().to_string())
                     .unwrap_or_default();
                 if get_journal_regex().is_match(&file_name) {
@@ -216,7 +208,8 @@ pub fn build_journal_tree(journal_dir_path: &Path) -> Result<FileNode, String> {
                     is_dir: false,
                     children: None,
                 };
-                groups.entry(year)
+                groups
+                    .entry(year)
                     .or_default()
                     .entry(month)
                     .or_default()
@@ -285,26 +278,26 @@ mod tests {
         // 1. Scaffold sub-directories and files
         let proj_a = create_directory_on_disk(&vault_path.to_string_lossy(), "Project A").unwrap();
         let _proj_b = create_directory_on_disk(&vault_path.to_string_lossy(), "Project B").unwrap();
-        
+
         let file_a1 = create_file_on_disk(&proj_a, "task1.md").unwrap();
         let _file_a2 = create_file_on_disk(&proj_a, "task2.md").unwrap();
 
         // Write content to file a1
         write_file_content_on_disk(&file_a1, "# Task 1\n- [<] Clean up s:2026-07-23\n").unwrap();
-        
+
         // 2. Scan Directory Tree
         let tree = scan_dir_tree(vault_path).unwrap();
-        assert_eq!(tree.is_dir, true);
-        
+        assert!(tree.is_dir);
+
         let children = tree.children.unwrap();
         assert_eq!(children.len(), 2); // Project A, Project B
         assert_eq!(children[0].name, "Project A");
-        assert_eq!(children[0].is_dir, true);
+        assert!(children[0].is_dir);
 
         let sub_children = children[0].children.as_ref().unwrap();
         assert_eq!(sub_children.len(), 2); // task1.md, task2.md
         assert_eq!(sub_children[0].name, "task1.md");
-        assert_eq!(sub_children[0].is_dir, false);
+        assert!(!sub_children[0].is_dir);
 
         // 3. Read content
         let content = read_file_content_on_disk(&file_a1).unwrap();
@@ -343,7 +336,7 @@ mod tests {
 
         let tree = build_journal_tree(journal_path).unwrap();
         assert_eq!(tree.name, "000 - journals (3)");
-        assert_eq!(tree.is_dir, true);
+        assert!(tree.is_dir);
 
         let years = tree.children.unwrap();
         assert_eq!(years.len(), 2); // 2026, 2025 (newest first!)
@@ -358,7 +351,10 @@ mod tests {
         let days_july = months_2026[0].children.as_ref().unwrap();
         assert_eq!(days_july.len(), 1);
         assert_eq!(days_july[0].name, "2026-07-23");
-        assert_eq!(days_july[0].is_dir, false);
-        assert_eq!(days_july[0].path, file_2026_07_23.to_string_lossy().to_string());
+        assert!(!days_july[0].is_dir);
+        assert_eq!(
+            days_july[0].path,
+            file_2026_07_23.to_string_lossy().to_string()
+        );
     }
 }

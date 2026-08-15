@@ -1,8 +1,51 @@
-use std::path::Path;
-use std::sync::mpsc::channel;
-use std::thread;
-use notify::{Watcher, RecursiveMode, RecommendedWatcher, Config, EventKind};
+use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use rusqlite::Connection;
+use std::path::Path;
+use std::sync::mpsc::{channel, Receiver};
+use std::thread;
+
+fn spawn_event_loop<F>(
+    db_path: String,
+    rx: Receiver<Result<notify::Event, notify::Error>>,
+    on_change: F,
+) where
+    F: Fn() + Send + Sync + 'static,
+{
+    thread::spawn(move || {
+        for res in rx {
+            match res {
+                Ok(event) => {
+                    let should_process = matches!(
+                        event.kind,
+                        EventKind::Modify(_) | EventKind::Create(_) | EventKind::Remove(_)
+                    );
+
+                    if should_process {
+                        for path in event.paths {
+                            if path.extension().is_some_and(|ext| ext == "md") {
+                                if let Some(path_str) = path.to_str() {
+                                    if let Ok(conn) = Connection::open(&db_path) {
+                                        let _ = conn.execute_batch("PRAGMA foreign_keys = ON;");
+                                        let changed = if path.exists() {
+                                            crate::db::index_single_file(&conn, path_str).is_ok()
+                                        } else {
+                                            crate::db::delete_file(&conn, path_str).is_ok()
+                                        };
+
+                                        if changed {
+                                            on_change();
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(e) => eprintln!("Watcher error: {:?}", e),
+            }
+        }
+    });
+}
 
 pub fn start_watcher<P: AsRef<Path> + Send + 'static, F>(
     db_path: String,
@@ -17,43 +60,7 @@ where
     let mut watcher = RecommendedWatcher::new(tx, Config::default())?;
     watcher.watch(vault_dir.as_ref(), RecursiveMode::Recursive)?;
 
-    thread::spawn(move || {
-        for res in rx {
-            match res {
-                Ok(event) => {
-                    // Check if it's a modify, create, or delete event
-                    let should_process = matches!(event.kind, EventKind::Modify(_) | EventKind::Create(_) | EventKind::Remove(_));
-
-                    if should_process {
-                        for path in event.paths {
-                            if path.extension().is_some_and(|ext| ext == "md") {
-                                if let Some(path_str) = path.to_str() {
-                                    // Re-open DB connection in the watcher thread
-                                    if let Ok(conn) = Connection::open(&db_path) {
-                                        let _ = conn.execute_batch("PRAGMA foreign_keys = ON;");
-                                        let mut changed = false;
-                                        if path.exists() {
-                                            if crate::db::index_single_file(&conn, path_str).is_ok() {
-                                                changed = true;
-                                            }
-                                        } else {
-                                            if crate::db::delete_file(&conn, path_str).is_ok() {
-                                                changed = true;
-                                            }
-                                        }
-                                        if changed {
-                                            on_change();
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                Err(e) => eprintln!("Watcher error: {:?}", e),
-            }
-        }
-    });
+    spawn_event_loop(db_path, rx, on_change);
 
     Ok(watcher)
 }
@@ -61,9 +68,30 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::{initialize_db, boot_sweep};
-    use tempfile::tempdir;
+    use crate::db::{boot_sweep, initialize_db};
+    use notify::PollWatcher;
     use std::fs;
+    use std::sync::mpsc;
+    use std::time::Duration;
+    use tempfile::tempdir;
+
+    fn start_test_watcher<F>(
+        db_path: String,
+        vault_dir: &Path,
+        on_change: F,
+    ) -> Result<PollWatcher, notify::Error>
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        let (tx, rx) = channel();
+        let config = Config::default()
+            .with_poll_interval(Duration::from_millis(50))
+            .with_compare_contents(true);
+        let mut watcher = PollWatcher::new(tx, config)?;
+        watcher.watch(vault_dir, RecursiveMode::Recursive)?;
+        spawn_event_loop(db_path, rx, on_change);
+        Ok(watcher)
+    }
 
     #[test]
     fn test_file_watcher_incremental_indexing() {
@@ -76,25 +104,24 @@ mod tests {
         boot_sweep(&conn, &vault_dir).unwrap();
 
         // Start watcher
-        let _watcher = start_watcher(
+        let (change_tx, change_rx) = mpsc::channel();
+        let _watcher = start_test_watcher(
             db_path.to_str().unwrap().to_string(),
-            vault_dir.clone(),
-            || {},
+            &vault_dir,
+            move || {
+                let _ = change_tx.send(());
+            },
         )
         .unwrap();
 
         // Create a new file inside the vault
         let file_path = vault_dir.join("watch-tasks.md");
-        fs::write(
-            &file_path,
-            "- [ ] Live watched task #urgent",
-        )
-        .unwrap();
+        fs::write(&file_path, "- [ ] Live watched task #urgent").unwrap();
 
-        // Sleep to allow notify event to propagate and thread to index
-        thread::sleep(std::time::Duration::from_millis(300));
+        change_rx
+            .recv_timeout(Duration::from_secs(10))
+            .expect("watcher did not report an indexed file before the timeout");
 
-        // Query the database to see if the watcher indexed it
         let task_exists: i64 = conn
             .query_row(
                 "SELECT count(*) FROM tasks WHERE description = 'Live watched task'",
