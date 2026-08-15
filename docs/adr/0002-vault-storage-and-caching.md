@@ -6,7 +6,7 @@ Approved
 
 ## Implementation Status
 
-Partial. Markdown is authoritative and SQLite indexing plus native watching exist. Startup currently clears core cache tables before sweeping, so the approved incremental-startup behavior is not active. Versioned invalidation is planned in `../roadmap.md`.
+Implemented. Markdown is authoritative, SQLite indexing and native watching exist, and startup reuses unchanged indexed rows. Separate schema and index-format versions trigger a one-time derived-cache rebuild when required. Watcher lifecycle hardening remains tracked separately in `../roadmap.md`.
 
 ## Context
 

@@ -51,7 +51,7 @@ The canonical implemented syntax is documented in `specifications/task-syntax.md
 
 Task queries join the normalized tag and context associations and return them with each task, together with the source file path.
 
-The application currently clears core index tables at every launch before sweeping the vault. As a result, incremental startup caching is not yet active despite support in the indexer. The planned correction introduces schema and index-format versions and rebuilds only when required.
+The cache stores separate schema and index-format versions. Startup preserves indexed rows when both versions match, skips unchanged files by modification time plus content hash, and removes records for files no longer present. A version mismatch clears derived rows once so the following sweep rebuilds them from Markdown.
 
 ## Filesystem Watcher
 

@@ -10,6 +10,7 @@ SQLite is a derived local index. Markdown files remain authoritative and the ind
 - `contexts` and `task_contexts`: normalized context dictionary and task relationships.
 - `custom_views`: indexed `tasks-query` blocks.
 - `merge_reviews`: reserved by a future sync ADR; it is not an implemented user feature.
+- `cache_metadata`: schema and index-format versions used for cache lifecycle decisions.
 
 Foreign keys are enabled. File deletion cascades to its task and custom-view rows. WAL mode is enabled for the database connection.
 
@@ -26,11 +27,11 @@ For one Markdown file:
 
 The boot sweep indexes Markdown files found recursively and removes cache records for missing files.
 
-## Current Invalidation Limitation
+## Versioned Invalidation
 
-Application startup currently deletes core index rows before the boot sweep, so incremental startup behavior is not active. The unconditional truncate is temporary technical debt.
+Application startup retains core index rows when the stored schema and index-format versions match the running application. Missing or mismatched version metadata invalidates derived rows once; the boot sweep then rebuilds them from Markdown. Invalidating the cache also removes orphaned tag and context dictionary rows.
 
-The planned lifecycle stores separate schema and index-format versions. Schema migrations change physical structure; an index-format bump triggers a one-time rebuild when parser meaning changes. Orphaned tag and context dictionary rows must be cleaned where relevant.
+Increment `CACHE_SCHEMA_VERSION` when a physical schema change requires invalidation after its migration is applied. Increment `INDEX_FORMAT_VERSION` whenever parser or indexing semantics could change the meaning of existing rows.
 
 ## Durable Data Boundary
 

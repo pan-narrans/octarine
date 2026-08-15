@@ -1,9 +1,12 @@
 use crate::parser;
-use rusqlite::{params, Connection, Result};
+use rusqlite::{params, Connection, OptionalExtension, Result};
 use sha2::Digest;
 use std::fs;
 use std::path::Path;
 use std::time::UNIX_EPOCH;
+
+const CACHE_SCHEMA_VERSION: i64 = 1;
+const INDEX_FORMAT_VERSION: i64 = 1;
 
 pub fn initialize_db<P: AsRef<Path>>(db_path: P) -> Result<Connection> {
     let conn = Connection::open(db_path)?;
@@ -100,6 +103,11 @@ pub fn initialize_db<P: AsRef<Path>>(db_path: P) -> Result<Connection> {
             FOREIGN KEY(file_id) REFERENCES files(id) ON DELETE CASCADE
         );
         CREATE INDEX IF NOT EXISTS idx_merge_reviews_timestamp ON merge_reviews(timestamp);
+
+        CREATE TABLE IF NOT EXISTS cache_metadata (
+            key TEXT PRIMARY KEY,
+            value INTEGER NOT NULL
+        );
     ",
     )?;
 
@@ -124,7 +132,47 @@ pub fn initialize_db<P: AsRef<Path>>(db_path: P) -> Result<Connection> {
         [],
     )?;
 
+    reconcile_cache_versions(&conn)?;
+
     Ok(conn)
+}
+
+fn reconcile_cache_versions(conn: &Connection) -> Result<()> {
+    let stored_schema_version: Option<i64> = conn
+        .query_row(
+            "SELECT value FROM cache_metadata WHERE key = 'schema_version'",
+            [],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let stored_index_version: Option<i64> = conn
+        .query_row(
+            "SELECT value FROM cache_metadata WHERE key = 'index_format_version'",
+            [],
+            |row| row.get(0),
+        )
+        .optional()?;
+
+    let requires_rebuild = stored_schema_version != Some(CACHE_SCHEMA_VERSION)
+        || stored_index_version != Some(INDEX_FORMAT_VERSION);
+
+    let tx = conn.unchecked_transaction()?;
+    if requires_rebuild {
+        tx.execute("DELETE FROM files", [])?;
+        tx.execute("DELETE FROM tags", [])?;
+        tx.execute("DELETE FROM contexts", [])?;
+    }
+    tx.execute(
+        "INSERT INTO cache_metadata (key, value) VALUES ('schema_version', ?1)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        params![CACHE_SCHEMA_VERSION],
+    )?;
+    tx.execute(
+        "INSERT INTO cache_metadata (key, value) VALUES ('index_format_version', ?1)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        params![INDEX_FORMAT_VERSION],
+    )?;
+    tx.commit()
 }
 
 pub fn get_file_mtime_and_hash(conn: &Connection, path: &str) -> Result<Option<(i64, String)>> {
@@ -412,6 +460,85 @@ mod tests {
         Option<String>,
         Option<i32>,
     );
+
+    #[test]
+    fn test_boot_sweep_reuses_unchanged_index_rows_after_reopen() {
+        let temp_dir = tempdir().unwrap();
+        let db_path = temp_dir.path().join("cache.db");
+        let vault_dir = temp_dir.path().join("vault");
+        fs::create_dir_all(&vault_dir).unwrap();
+        fs::write(vault_dir.join("tasks.md"), "- [ ] Keep cached task\n").unwrap();
+
+        let conn = initialize_db(&db_path).unwrap();
+        boot_sweep(&conn, &vault_dir).unwrap();
+        let original_task_id: i64 = conn
+            .query_row(
+                "SELECT id FROM tasks WHERE description = 'Keep cached task'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        drop(conn);
+
+        let reopened = initialize_db(&db_path).unwrap();
+        boot_sweep(&reopened, &vault_dir).unwrap();
+        let reopened_task_id: i64 = reopened
+            .query_row(
+                "SELECT id FROM tasks WHERE description = 'Keep cached task'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+
+        assert_eq!(reopened_task_id, original_task_id);
+    }
+
+    #[test]
+    fn test_index_format_version_mismatch_invalidates_derived_rows() {
+        let temp_dir = tempdir().unwrap();
+        let db_path = temp_dir.path().join("cache.db");
+        let vault_dir = temp_dir.path().join("vault");
+        fs::create_dir_all(&vault_dir).unwrap();
+        fs::write(
+            vault_dir.join("tasks.md"),
+            "- [ ] Rebuild cached task #cache\n",
+        )
+        .unwrap();
+
+        let conn = initialize_db(&db_path).unwrap();
+        boot_sweep(&conn, &vault_dir).unwrap();
+        conn.execute(
+            "UPDATE cache_metadata SET value = 0 WHERE key = 'index_format_version'",
+            [],
+        )
+        .unwrap();
+        drop(conn);
+
+        let reopened = initialize_db(&db_path).unwrap();
+        let file_count: i64 = reopened
+            .query_row("SELECT count(*) FROM files", [], |row| row.get(0))
+            .unwrap();
+        let tag_count: i64 = reopened
+            .query_row("SELECT count(*) FROM tags", [], |row| row.get(0))
+            .unwrap();
+        let index_version: i64 = reopened
+            .query_row(
+                "SELECT value FROM cache_metadata WHERE key = 'index_format_version'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+
+        assert_eq!(file_count, 0);
+        assert_eq!(tag_count, 0);
+        assert_eq!(index_version, INDEX_FORMAT_VERSION);
+
+        boot_sweep(&reopened, &vault_dir).unwrap();
+        let rebuilt_task_count: i64 = reopened
+            .query_row("SELECT count(*) FROM tasks", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(rebuilt_task_count, 1);
+    }
 
     #[test]
     fn test_db_initialization_and_sweep() {
