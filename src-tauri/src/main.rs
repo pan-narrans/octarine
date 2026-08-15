@@ -30,12 +30,12 @@ fn get_tasks(
     filter: Option<String>,
 ) -> Result<Vec<ParsedTask>, String> {
     let conn = state.db.lock().unwrap();
-    let where_clause = match filter {
+    let compiled = match filter {
         Some(f) if !f.trim().is_empty() => compile_filter_to_sql(&f)?,
-        _ => "1 = 1".to_string(),
+        _ => compile_filter_to_sql("")?,
     };
 
-    query_tasks(&conn, &where_clause).map_err(|e| e.to_string())
+    query_tasks(&conn, &compiled.sql, &compiled.params).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

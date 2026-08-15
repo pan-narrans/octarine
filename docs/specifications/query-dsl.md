@@ -34,8 +34,8 @@ The parser records the contents of a `tasks-query` code block and extracts its t
 - `yesterday` and relative forms such as `+7d` or `-1w`.
 - General grouping and sorting semantics.
 
-## Current Compiler Limitation
+## Compiler and Execution Boundary
 
-The current compiler tokenizes input and produces escaped SQL fragments. It does not yet build and validate a complete expression tree or return bound parameters. Tag and context filters also require fully qualified task identifiers when used with joined queries.
+The compiler tokenizes input, validates a complete expression tree, and emits SQL containing placeholders plus a separate list of bound values. Field and operator names come only from compiler-owned allowlists. Project, context, tag, priority, status, type, and date values are validated before execution, and task columns are qualified for joined queries.
 
-Before expanding the language, the compiler must produce a validated AST, qualified SQL, and bound values. Execution-level tests must cover valid expressions, invalid grammar, operator precedence, joins, and injection attempts.
+Tests cover valid expressions, malformed grammar, invalid enum-like values, hierarchical project execution, and separation of user values from SQL text. Expand both grammar validation and execution tests whenever the language grows.

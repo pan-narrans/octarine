@@ -69,7 +69,7 @@ Structured conflict responses remain planned so the frontend can distinguish mis
 
 `src-tauri/src/query_dsl.rs` supports boolean expressions, parentheses, projects, contexts, tags, priorities, and comparisons for due date, status, and type. Supported relative dates are currently `today` and `tomorrow`.
 
-The compiler currently produces SQL fragments. A validated expression tree with bound parameters and fully qualified columns is planned before expanding the language.
+The compiler validates a complete expression tree and emits SQL made from allowlisted fields and operators, with user values carried separately as bound parameters. Task columns are fully qualified for joined queries.
 
 ## Current Structural Limitations
 

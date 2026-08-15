@@ -1,5 +1,6 @@
 use crate::parser;
-use rusqlite::{params, Connection, OptionalExtension, Result};
+use rusqlite::types::Value;
+use rusqlite::{params, params_from_iter, Connection, OptionalExtension, Result};
 use sha2::Digest;
 use std::fs;
 use std::path::Path;
@@ -204,7 +205,11 @@ pub fn delete_file(conn: &Connection, path: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn query_tasks(conn: &Connection, where_clause: &str) -> Result<Vec<parser::ParsedTask>> {
+pub fn query_tasks(
+    conn: &Connection,
+    where_clause: &str,
+    query_params: &[Value],
+) -> Result<Vec<parser::ParsedTask>> {
     let query = format!(
         "SELECT
             tasks.line_number,
@@ -241,7 +246,7 @@ pub fn query_tasks(conn: &Connection, where_clause: &str) -> Result<Vec<parser::
     );
 
     let mut stmt = conn.prepare(&query)?;
-    let rows = stmt.query_map([], |row| {
+    let rows = stmt.query_map(params_from_iter(query_params.iter()), |row| {
         let tags_json: String = row.get(16)?;
         let contexts_json: String = row.get(17)?;
 
@@ -617,7 +622,7 @@ mod tests {
             .collect();
         assert!(contexts.contains(&"db".to_string()));
 
-        let indexed_tasks = query_tasks(&conn, "1 = 1").unwrap();
+        let indexed_tasks = query_tasks(&conn, "1 = 1", &[]).unwrap();
         let design_task = indexed_tasks
             .iter()
             .find(|task| task.description == "Design SQLite schema")
@@ -714,12 +719,16 @@ mod tests {
         index_single_file(&conn, file_path.to_str().unwrap()).unwrap();
 
         // Compile query "+work" which translates to hierarchical SQL
-        let sql_filter = crate::query_dsl::compile_filter_to_sql("+work").unwrap();
+        let compiled = crate::query_dsl::compile_filter_to_sql("+work").unwrap();
 
-        let query_str = format!("SELECT count(*) FROM tasks WHERE {}", sql_filter);
+        let query_str = format!("SELECT count(*) FROM tasks WHERE {}", compiled.sql);
 
         // Execute query and assert that BOTH parent and nested child task are returned!
-        let matched_tasks: i64 = conn.query_row(&query_str, [], |r| r.get(0)).unwrap();
+        let matched_tasks: i64 = conn
+            .query_row(&query_str, params_from_iter(compiled.params.iter()), |r| {
+                r.get(0)
+            })
+            .unwrap();
         assert_eq!(matched_tasks, 2);
     }
 

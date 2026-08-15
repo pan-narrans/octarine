@@ -18,7 +18,7 @@ This document contains planned work. Items here are not current capabilities or 
 - [x] Reject ambiguous source-match fallbacks.
 - Return structured write conflicts.
 - [x] Add schema and index-format versions; restore incremental startup indexing.
-- Validate and parameterize query expressions.
+- [x] Validate and parameterize query expressions.
 
 ## Filesystem and Lifecycle Hardening
 
