@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::io::Write;
 use std::path::Path;
+use tempfile::NamedTempFile;
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct FileNode {
@@ -136,7 +138,31 @@ pub fn write_file_content_on_disk(path_str: &str, content: &str) -> Result<(), S
     if !path.exists() {
         return Err("File not found on disk.".to_string());
     }
-    fs::write(path, content).map_err(|e| format!("Failed to write file: {}", e))?;
+
+    let parent = path
+        .parent()
+        .ok_or_else(|| "File path has no parent directory.".to_string())?;
+    let permissions = fs::metadata(path)
+        .map_err(|e| format!("Failed to read file metadata: {e}"))?
+        .permissions();
+    let mut temporary = NamedTempFile::new_in(parent)
+        .map_err(|e| format!("Failed to create temporary file: {e}"))?;
+
+    temporary
+        .write_all(content.as_bytes())
+        .map_err(|e| format!("Failed to write temporary file: {e}"))?;
+    temporary
+        .as_file_mut()
+        .set_permissions(permissions)
+        .map_err(|e| format!("Failed to preserve file permissions: {e}"))?;
+    temporary
+        .as_file_mut()
+        .sync_all()
+        .map_err(|e| format!("Failed to sync temporary file: {e}"))?;
+    temporary
+        .persist(path)
+        .map_err(|e| format!("Failed to replace file atomically: {}", e.error))?;
+
     Ok(())
 }
 
@@ -269,6 +295,28 @@ pub fn build_journal_tree(journal_dir_path: &Path) -> Result<FileNode, String> {
 mod tests {
     use super::*;
     use tempfile::tempdir;
+
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    fn test_atomic_write_preserves_content_and_permissions() {
+        let temp_dir = tempdir().unwrap();
+        let file_path = temp_dir.path().join("note.md");
+        fs::write(&file_path, "before\n").unwrap();
+
+        #[cfg(unix)]
+        fs::set_permissions(&file_path, fs::Permissions::from_mode(0o640)).unwrap();
+
+        write_file_content_on_disk(file_path.to_str().unwrap(), "after\n").unwrap();
+
+        assert_eq!(fs::read_to_string(&file_path).unwrap(), "after\n");
+        #[cfg(unix)]
+        assert_eq!(
+            fs::metadata(&file_path).unwrap().permissions().mode() & 0o777,
+            0o640
+        );
+    }
 
     #[test]
     fn test_scan_dir_tree_and_file_ops() {

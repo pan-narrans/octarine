@@ -46,4 +46,4 @@ Parser changes must cover:
 
 ## Safe-Write Boundary
 
-The current writer uses expected location and cached source data with a nearby search fallback. The target contract sends the original raw block with each edit, accepts only one exact match, and returns a structured conflict on zero or multiple matches. See `architecture.md` and `roadmap.md` for current limitations and planned hardening.
+The writer receives the original raw block with each edit, uses the expected location, and falls back to a nearby source search after line shifts. Writes are independent of the SQLite cache and replace files atomically. Ambiguous fallback detection and structured conflicts remain planned hardening; see `architecture.md` and `roadmap.md`.

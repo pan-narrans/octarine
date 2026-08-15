@@ -234,7 +234,7 @@ export function App() {
     };
     const nextStatus = nextStatusMap[task.status] || "todo";
 
-    await updateTaskStatus(task.file_path || "", task.line_number, task.hash, nextStatus);
+    await updateTaskStatus(task.file_path || "", task.line_number, task.raw_markdown, nextStatus);
   };
 
   const handleSaveTaskInlineEdit = async (task: Task, newContent: string) => {
@@ -248,7 +248,7 @@ export function App() {
       await invoke("update_task_markdown", {
         filePath: task.file_path || "",
         lineNumber: task.line_number,
-        hash: task.hash,
+        originalRawMarkdown: task.raw_markdown,
         newRawMarkdown: trimmed,
       });
       setEditingTaskHash(null);
@@ -763,7 +763,7 @@ export function App() {
       await invoke("update_event_schedule", {
         filePath: event.file_path || "",
         lineNumber: event.line_number,
-        hash: event.hash,
+        originalRawMarkdown: event.raw_markdown,
         newSStart: new_s_start,
         newDurationSecs: new_duration_secs,
       });
@@ -1283,7 +1283,7 @@ export function App() {
                 await invoke("update_task_markdown", {
                   filePath: modalTask.file_path || "",
                   lineNumber: modalTask.line_number,
-                  hash: modalTask.hash,
+                  originalRawMarkdown: modalTask.raw_markdown,
                   newRawMarkdown: newRawMarkdown.trim(),
                 });
                 await fetchTasks();

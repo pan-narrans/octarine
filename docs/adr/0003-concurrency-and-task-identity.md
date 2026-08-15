@@ -6,7 +6,7 @@ Approved
 
 ## Implementation Status
 
-Partial. Location/content hashes and nearby source matching exist. The current writer can depend on SQLite to retrieve the original block and does not yet implement the complete atomic, ambiguity-aware source-locator contract.
+Partial. Commands provide the original source block, location/content hashes and nearby source matching exist, and file replacement is atomic. The writer does not yet reject ambiguous nearby matches or return structured conflict data.
 
 ## Context
 

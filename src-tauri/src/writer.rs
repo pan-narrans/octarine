@@ -1,6 +1,6 @@
+use crate::file_ops::write_file_content_on_disk;
 use crate::CHECKLIST_CHAR_CLASS;
 use regex::Regex;
-use rusqlite::{params, Connection};
 use std::fs;
 use std::path::Path;
 use std::sync::OnceLock;
@@ -39,26 +39,16 @@ fn get_re_done() -> &'static Regex {
 }
 
 pub fn update_task_status_in_file(
-    db_conn: &Connection,
     file_path: &str,
     original_line_number: usize, // 1-based
-    original_content_hash: &str,
+    original_raw_markdown: &str,
     new_status: &str, // "todo", "doing", "done", "cancelled"
 ) -> Result<(), String> {
-    // 1. Retrieve the original raw markdown from the database
-    let mut stmt = db_conn
-        .prepare("SELECT raw_markdown FROM tasks WHERE hash = ?")
-        .map_err(|e| e.to_string())?;
-    let original_raw_markdown: String = stmt
-        .query_row(params![original_content_hash], |r| r.get(0))
-        .map_err(|_| "Task hash not found in database cache. Please reload.".to_string())?;
-
-    // 2. Read the file from disk
     if !Path::new(file_path).exists() {
         return Err(format!("File not found on disk: {}", file_path));
     }
     let content = fs::read_to_string(file_path).map_err(|e| e.to_string())?;
-    let lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
+    let lines: Vec<String> = content.split('\n').map(|s| s.to_string()).collect();
 
     let original_lines: Vec<&str> = original_raw_markdown.lines().collect();
     if original_lines.is_empty() {
@@ -109,7 +99,6 @@ pub fn update_task_status_in_file(
         }
     };
 
-    // 3. Perform the edit on lines starting at `line_idx`
     let mut edited_lines = lines;
     let target_line = &edited_lines[line_idx];
 
@@ -145,9 +134,8 @@ pub fn update_task_status_in_file(
         return Err("Failed to format checkbox on the target line.".to_string());
     }
 
-    // 4. Save file back to disk
     let updated_content = edited_lines.join("\n");
-    fs::write(file_path, updated_content).map_err(|e| e.to_string())?;
+    write_file_content_on_disk(file_path, &updated_content)?;
 
     Ok(())
 }
@@ -186,27 +174,17 @@ fn is_match_at_line(file_lines: &[String], start_idx: usize, original_lines: &[&
 }
 
 pub fn update_event_schedule_in_file(
-    db_conn: &Connection,
     file_path: &str,
     original_line_number: usize,
-    original_content_hash: &str,
+    original_raw_markdown: &str,
     new_s_start: Option<String>,
     new_duration_secs: Option<i32>,
 ) -> Result<(), String> {
-    // 1. Retrieve the original raw markdown from the database
-    let mut stmt = db_conn
-        .prepare("SELECT raw_markdown FROM tasks WHERE hash = ?")
-        .map_err(|e| e.to_string())?;
-    let original_raw_markdown: String = stmt
-        .query_row(params![original_content_hash], |r| r.get(0))
-        .map_err(|_| "Task hash not found in database cache. Please reload.".to_string())?;
-
-    // 2. Read the file from disk
     if !Path::new(file_path).exists() {
         return Err(format!("File not found on disk: {}", file_path));
     }
     let content = fs::read_to_string(file_path).map_err(|e| e.to_string())?;
-    let lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
+    let lines: Vec<String> = content.split('\n').map(|s| s.to_string()).collect();
 
     let original_lines: Vec<&str> = original_raw_markdown.lines().collect();
     if original_lines.is_empty() {
@@ -282,18 +260,16 @@ pub fn update_event_schedule_in_file(
     let new_line = format!("{}{}", line_clean, suffix);
     edited_lines[line_idx] = new_line;
 
-    // Save back to disk
     let updated_content = edited_lines.join("\n");
-    fs::write(file_path, updated_content).map_err(|e| e.to_string())?;
+    write_file_content_on_disk(file_path, &updated_content)?;
 
     Ok(())
 }
 
 pub fn update_task_markdown_in_file(
-    db_conn: &Connection,
     file_path: &str,
     original_line_number: usize,
-    original_content_hash: &str,
+    original_raw_markdown: &str,
     new_raw_markdown: &str,
 ) -> Result<(), String> {
     // 1. Read file content on disk
@@ -301,14 +277,6 @@ pub fn update_task_markdown_in_file(
         fs::read_to_string(file_path).map_err(|e| format!("Failed to read file: {}", e))?;
 
     let mut lines: Vec<String> = file_content.split('\n').map(|s| s.to_string()).collect();
-
-    // 2. Resolve original raw markdown from hash
-    let mut stmt = db_conn
-        .prepare("SELECT raw_markdown FROM tasks WHERE hash = ?")
-        .map_err(|e| e.to_string())?;
-    let original_raw_markdown: String = stmt
-        .query_row(params![original_content_hash], |r| r.get(0))
-        .map_err(|_| "Task hash not found in database cache. Please reload.".to_string())?;
 
     let original_block_lines: Vec<&str> = original_raw_markdown.lines().collect();
     if original_block_lines.is_empty() {
@@ -362,9 +330,8 @@ pub fn update_task_markdown_in_file(
         .collect();
     lines.splice(start_idx..end_idx, new_block_lines);
 
-    // 5. Write back to disk
     let updated_content = lines.join("\n");
-    fs::write(file_path, updated_content).map_err(|e| format!("Failed to write file: {}", e))?;
+    write_file_content_on_disk(file_path, &updated_content)?;
 
     Ok(())
 }
@@ -394,21 +361,30 @@ mod tests {
         let conn = initialize_db(&db_path).unwrap();
         index_single_file(&conn, file_path.to_str().unwrap()).unwrap();
 
-        // Get the task's hash from DB
-        let hash: String = conn
+        let original_raw_markdown: String = conn
             .query_row(
-                "SELECT hash FROM tasks WHERE description = 'Implement safe writer'",
+                "SELECT raw_markdown FROM tasks WHERE description = 'Implement safe writer'",
                 [],
                 |r| r.get(0),
             )
             .unwrap();
 
+        // The source block supplied by the caller is sufficient even if the derived cache is stale.
+        conn.execute("DELETE FROM tasks", []).unwrap();
+
         // 1. Test Direct Match: Mark "Implement safe writer" as doing (/)
-        update_task_status_in_file(&conn, file_path.to_str().unwrap(), 2, &hash, "doing").unwrap();
+        update_task_status_in_file(
+            file_path.to_str().unwrap(),
+            2,
+            &original_raw_markdown,
+            "doing",
+        )
+        .unwrap();
 
         // Verify file updated
         let content_after = fs::read_to_string(&file_path).unwrap();
         assert!(content_after.contains("- [/] Implement safe writer @db"));
+        assert!(content_after.ends_with('\n'));
 
         // 2. Test Line Shift: Pretend an external editor inserts 3 empty lines at the top
         fs::write(
@@ -424,12 +400,18 @@ mod tests {
         .unwrap();
 
         // The task was originally at line 2. Now it is at line 5.
-        // We will call the update_task_status_in_file specifying the original line 2 and original hash.
-        update_task_status_in_file(&conn, file_path.to_str().unwrap(), 2, &hash, "done").unwrap();
+        update_task_status_in_file(
+            file_path.to_str().unwrap(),
+            2,
+            &original_raw_markdown,
+            "done",
+        )
+        .unwrap();
 
         // Verify the file was updated correctly despite the line shift
         let content_after_shift = fs::read_to_string(&file_path).unwrap();
         assert!(content_after_shift.contains("- [x] Implement safe writer @db"));
+        assert!(content_after_shift.ends_with('\n'));
     }
 
     #[test]
@@ -450,10 +432,9 @@ mod tests {
         let conn = initialize_db(&db_path).unwrap();
         index_single_file(&conn, file_path.to_str().unwrap()).unwrap();
 
-        // Get event's hash from DB
-        let hash: String = conn
+        let original_raw_markdown: String = conn
             .query_row(
-                "SELECT hash FROM tasks WHERE description = 'Project kickoff meeting'",
+                "SELECT raw_markdown FROM tasks WHERE description = 'Project kickoff meeting'",
                 [],
                 |r| r.get(0),
             )
@@ -461,10 +442,9 @@ mod tests {
 
         // Update schedule metadata to 11:30 and 1.5 hours duration (90 minutes / 5400 secs)
         update_event_schedule_in_file(
-            &conn,
             file_path.to_str().unwrap(),
             2,
-            &hash,
+            &original_raw_markdown,
             Some("2026-07-23 11:30".to_string()),
             Some(5400),
         )
@@ -493,9 +473,9 @@ mod tests {
         let conn = initialize_db(&db_path).unwrap();
         index_single_file(&conn, file_path.to_str().unwrap()).unwrap();
 
-        let hash: String = conn
+        let original_raw_markdown: String = conn
             .query_row(
-                "SELECT hash FROM tasks WHERE description = 'Implement inline editing'",
+                "SELECT raw_markdown FROM tasks WHERE description = 'Implement inline editing'",
                 [],
                 |r| r.get(0),
             )
@@ -503,10 +483,9 @@ mod tests {
 
         // Update full task raw markdown line
         update_task_markdown_in_file(
-            &conn,
             file_path.to_str().unwrap(),
             2,
-            &hash,
+            &original_raw_markdown,
             "- [ ] (A) Implement inline editing @db due:2026-07-24",
         )
         .unwrap();
@@ -532,16 +511,22 @@ mod tests {
         let conn = initialize_db(&db_path).unwrap();
         index_single_file(&conn, file_path.to_str().unwrap()).unwrap();
 
-        let hash: String = conn
+        let original_raw_markdown: String = conn
             .query_row(
-                "SELECT hash FROM tasks WHERE description = 'Implement completion date'",
+                "SELECT raw_markdown FROM tasks WHERE description = 'Implement completion date'",
                 [],
                 |r| r.get(0),
             )
             .unwrap();
 
         // Mark as done
-        update_task_status_in_file(&conn, file_path.to_str().unwrap(), 2, &hash, "done").unwrap();
+        update_task_status_in_file(
+            file_path.to_str().unwrap(),
+            2,
+            &original_raw_markdown,
+            "done",
+        )
+        .unwrap();
 
         // Verify done:YYYY-MM-DD tag is appended
         let content_done = fs::read_to_string(&file_path).unwrap();
@@ -551,20 +536,25 @@ mod tests {
             today
         )));
 
-        // Re-index file to update SQLite cache with the new hash
+        // Re-index file to obtain the source block containing the completion date.
         index_single_file(&conn, file_path.to_str().unwrap()).unwrap();
 
-        let new_hash: String = conn
+        let updated_raw_markdown: String = conn
             .query_row(
-                "SELECT hash FROM tasks WHERE description = 'Implement completion date'",
+                "SELECT raw_markdown FROM tasks WHERE description = 'Implement completion date'",
                 [],
                 |r| r.get(0),
             )
             .unwrap();
 
         // Revert back to doing
-        update_task_status_in_file(&conn, file_path.to_str().unwrap(), 2, &new_hash, "doing")
-            .unwrap();
+        update_task_status_in_file(
+            file_path.to_str().unwrap(),
+            2,
+            &updated_raw_markdown,
+            "doing",
+        )
+        .unwrap();
 
         // Verify done:YYYY-MM-DD tag is stripped
         let content_doing = fs::read_to_string(&file_path).unwrap();

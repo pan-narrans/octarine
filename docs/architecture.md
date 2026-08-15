@@ -61,9 +61,9 @@ The watcher is currently leaked to keep it alive, is not replaced when the confi
 
 ## Source Writes
 
-`src-tauri/src/writer.rs` supports task status, schedule, and raw-block updates. It checks the expected location and searches nearby after line shifts. The current implementation may retrieve the original source block from SQLite and writes the resulting file directly.
+`src-tauri/src/writer.rs` supports task status, schedule, and raw-block updates. Each command supplies the original source block, so mutation does not depend on SQLite cache timing. The writer checks the expected location and searches nearby after line shifts. Task and full-file edits use a temporary file in the source directory, preserve permissions, flush its contents, and atomically replace the original.
 
-The target safe-write contract sends the original block with each mutation, rejects zero or multiple matches, and performs atomic replacement while preserving file characteristics.
+The remaining safe-write hardening is to detect and reject ambiguous fallback matches rather than accepting the first nearby match.
 
 ## Query Language
 

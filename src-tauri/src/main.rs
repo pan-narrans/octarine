@@ -66,11 +66,11 @@ fn update_task_status(
     state: State<'_, AppState>,
     file_path: String,
     line_number: usize,
-    hash: String,
+    original_raw_markdown: String,
     new_status: String,
 ) -> Result<(), String> {
+    update_task_status_in_file(&file_path, line_number, &original_raw_markdown, &new_status)?;
     let conn = state.db.lock().unwrap();
-    update_task_status_in_file(&conn, &file_path, line_number, &hash, &new_status)?;
     index_single_file(&conn, &file_path).map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -80,17 +80,16 @@ fn update_task_markdown(
     state: State<'_, AppState>,
     file_path: String,
     line_number: usize,
-    hash: String,
+    original_raw_markdown: String,
     new_raw_markdown: String,
 ) -> Result<(), String> {
-    let conn = state.db.lock().unwrap();
     octarine::writer::update_task_markdown_in_file(
-        &conn,
         &file_path,
         line_number,
-        &hash,
+        &original_raw_markdown,
         &new_raw_markdown,
     )?;
+    let conn = state.db.lock().unwrap();
     index_single_file(&conn, &file_path).map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -106,19 +105,18 @@ fn update_event_schedule(
     state: State<'_, AppState>,
     file_path: String,
     line_number: usize,
-    hash: String,
+    original_raw_markdown: String,
     new_s_start: Option<String>,
     new_duration_secs: Option<i32>,
 ) -> Result<(), String> {
-    let conn = state.db.lock().unwrap();
     octarine::writer::update_event_schedule_in_file(
-        &conn,
         &file_path,
         line_number,
-        &hash,
+        &original_raw_markdown,
         new_s_start,
         new_duration_secs,
     )?;
+    let conn = state.db.lock().unwrap();
     index_single_file(&conn, &file_path).map_err(|e| e.to_string())?;
     Ok(())
 }

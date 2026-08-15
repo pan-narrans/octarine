@@ -16,7 +16,7 @@ interface TaskState {
   updateTaskStatus: (
     filePath: string,
     lineNumber: number,
-    hash: string,
+    originalRawMarkdown: string,
     newStatus: string,
   ) => Promise<void>;
 }
@@ -65,7 +65,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   updateTaskStatus: async (
     filePath: string,
     lineNumber: number,
-    hash: string,
+    originalRawMarkdown: string,
     newStatus: string,
   ) => {
     set({ loading: true, error: null });
@@ -73,7 +73,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       await invoke("update_task_status", {
         filePath,
         lineNumber,
-        hash,
+        originalRawMarkdown,
         newStatus,
       });
       // Re-fetch immediately to align with the new cached/written state!
