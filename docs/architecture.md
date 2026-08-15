@@ -1,104 +1,80 @@
-# System Architecture & Organization
+# Current Architecture
 
-This document details how the Octarine codebase is logically separated, how data flows through the system, and how components interact in real-time.
+This document describes the implementation that exists today. Planned architecture belongs in `roadmap.md` and the ADRs.
 
----
+## Data Flow
 
-## 1. System Overview & Data Flow
-
-Octarine utilizes a **Tauri Server-Client architecture** designed for high-concurrency file tracking, zero-latency UI updates, and native desktop execution. 
-
-```
-                                      +------------------+
-                                      |  Markdown Vault  |
-                                      |  (.md Filesystem)|
-                                      +--------+---------+
-                                               |
-                                               | (Local Read/Write)
-                                               v
-+------------------+   File Events    +--------+---------+
-|                  |----------------->|                  |
-|  External Editors|                  |   Tauri Backend  |
-| (Obsidian / Vim) |<-----------------|   (Rust Core)    |
-|                  |   Disk Sync      +----+----+--------+
-+------------------+                       |    |
-                                           |    | (SQL Indexing)
-                        Tauri Events / IPC |    v
-+------------------+    (Instant Sync)     |  +--------------+
-|                  |<----------------------+  | SQLite Cache |
-|  React Frontend  |                          |   (Local DB) |
-| (Vite Dashboard) |------------------------> +--------------+
-|                  |    Tauri Invoke Commands
-+------------------+         (JSON/IPC)
+```text
+Markdown vault
+    │
+    ├── external editor changes ──> native watcher
+    │                                  │
+    └── Tauri file/task commands       ▼
+                                  Rust indexer
+                                       │
+                          source-preserving parser
+                                       │
+                                       ▼
+                                  SQLite cache
+                                       │
+                                  Tauri IPC/events
+                                       │
+                                       ▼
+                                 React frontend
 ```
 
----
+Markdown is durable user data. SQLite is a derived cache.
 
-## 2. Core Architectural Layers
+## Frontend
 
-### 2.1 The Sync & Watch Engine (Tauri Rust Core)
-The backend is a high-performance native Rust application responsible for managing low-level system integrations.
-- **File Watcher (`notify` crate):** Uses native operating system event systems (FSEvents on macOS, inotify on Linux, ReadDirectoryChangesW on Windows) to monitor the Markdown Vault.
-- **Safe Writer:** Implements the Strict Location and Content Hashing strategy (ADR 0003). When an action is taken on the React UI, the Rust backend attempts to edit the source file. If the file has changed externally in the interim, the operation is aborted, and Tauri broadcasts an event to the frontend to reload.
-- **Tauri IPC Command Router:** Exposes asynchronous Rust commands to the React frontend via Tauri's high-speed JSON Inter-Process Communication (`invoke` handlers).
+The React frontend lives in `src/`. `App.tsx` currently coordinates most navigation, filtering, calendar, note, journal, and configuration behavior. Zustand stores task and custom-view state, while several components manage file-tree and editor presentation.
 
-### 2.2 The SQLite Cache Layer (Rust Caching)
-To ensure sub-millisecond loads and ultra-fast indexing, a local SQLite database caches parsed document metadata.
-- **Engine:** Built with Rust's high-performance native SQL clients (`rusqlite` or `sqlx`).
-- **Startup Scan:** Startup checks are executed in Rust. It compares filesystem modification timestamps (`mtime`) with cached SQLite records, rebuilding indices *only* for files modified since the last check.
+The frontend calls Tauri commands with `invoke` and listens for `vault-changed` events. Some command payloads are manually typed and some metadata is reparsed from raw Markdown in the frontend. Generated contracts and Rust-owned metadata are planned corrections.
 
-### 2.3 The Markdown & Metadata Parser
-The parser processes standard markdown files into structured task models.
-- **Implementation:** Written as a pure, stateless Rust AST tokenizer utilizing high-performance parser primitives (e.g. `pulldown-cmark`). 
-- **Compilation Targets:** 
-  - **Native (Phase 1 / v2.0 Immediate):** Compiled to native binaries for Desktop (Tauri) and Mobile (Tauri Mobile) as our first-priority goal.
-  - **WASM (Phase 2 / Deferred):** Compiled to WebAssembly (WASM via `wasm-pack`) for standard web/browser environments in a subsequent release.
-- **Structure:** Multi-line tasks and parent/child lists are evaluated natively by mapping nested block nodes in the AST.
+## Tauri Command Boundary
 
-### 2.4 The Frontend Dashboard (React/Vite)
-The UI is a fast, visually polished single-page application running inside Tauri's native WebView container.
-- **Interactions & Gestures:** Fully responsive and touch-optimized, supporting interactive drag-to-reorder behaviors, swipe-to-complete, and native defer menus.
-- **Tauri Event Bus:** Listens to Tauri-emitted Rust events (e.g. file changes, synchronization notices), updating the reactive state in real-time.
+`src-tauri/src/main.rs` owns startup, application state, and command registration. Commands expose task queries and mutations, configuration, file operations, directory trees, and journal trees.
 
----
+The current commands accept path strings from the frontend. Complete validation against configured vault and journal roots is not yet centralized; this is a known security gap tracked in `roadmap.md`.
 
-## 3. Directory Layout Guidelines
+## Parser
 
-To support a seamless compilation workflow for Tauri, the codebase is structured with independent frontend and backend compilation peer folders:
+`src-tauri/src/parser.rs` is a Rust source-preserving structural scanner. It tracks lines, indentation, fenced code blocks, and comments, then extracts constrained inline metadata with regular expressions. It is not currently a CommonMark AST parser.
 
-```
-/Users/a.perez/personal-projects/Octarine/
-├── package.json                  # Frontend Web Dependencies & Workspaces
-├── vite.config.ts                # Vite Configuration
-├── tailwind.config.js            # Tailwind Utility Styling Rules
-├── src/                          # FRONTEND: React Vite Web Code
-│   ├── main.tsx                  # React Entrypoint
-│   ├── components/               # UI widgets (Calendar, Tasks List, Gestures)
-│   ├── hooks/                    # Tauri Event custom listeners
-│   └── pages/                    # Main views (Home, Calendar, Custom views)
-│
-├── src-tauri/                    # BACKEND: Tauri Native Rust Backend
-│   ├── Cargo.toml                # Rust Dependencies & Build Rules
-│   └── src/                      # Rust Compiler context
-│       ├── main.rs               # App Entrypoint & Command Registrations
-│       ├── db.rs                 # SQLite Cache database connection & hooks
-│       ├── parser.rs             # Stateless Markdown AST Parser Core
-│       └── watcher.rs            # Native file monitor & Event bridge
-│
-└── shared/                       # Shared Types & Models
-    └── types.ts                  # Shared TypeScript models
-```
+The parser retains exact line numbers and raw Markdown blocks for indexed tasks. It excludes metadata found in links, raw URLs, code spans, fenced code blocks, and comments. Nested checklist items are indexed separately with a derived parent hash.
 
----
+The canonical implemented syntax is documented in `specifications/task-syntax.md` and `specifications/parser.md`.
 
-## 4. Multi-Platform & P2P Synchronization (v2.0 Path)
+## SQLite Index
 
-To ensure a smooth evolution to the v2.0 roadmap, v1.0 codebases strictly obey standard decoupling protocols.
+`src-tauri/src/db.rs` initializes SQLite in WAL mode with foreign keys enabled. It stores files, tasks, tags, contexts, and custom views. File content and timestamps support change detection.
 
-### 4.1 Interface Decoupling (The Adapter Pattern)
-The frontend application must never write files directly. It communicates with a stateless interface layer (`FileSystemAdapter`):
-*   **v1.0 Implementation:** Invokes local Rust/Tauri native file-system handlers.
-*   **v2.0 Implementation:** Overrides standard handlers with local browser OPFS APIs (Web Sandbox) or Yjs/Automerge CRDT synchronized state payloads.
+The application currently clears core index tables at every launch before sweeping the vault. As a result, incremental startup caching is not yet active despite support in the indexer. The planned correction introduces schema and index-format versions and rebuilds only when required.
 
-### 4.2 Local Auto-Merge Auditing
-While CRDTs guarantee conflict-free data resolution on reconnect in v2.0, the SQLite cache layer exposes a tracking index (`merge_reviews`) for auto-merged transactions. This stores visual text diffs of recent merge reconciliations, enabling users to audit, review, or manually roll back any overlapping peer-to-peer changes.
+## Filesystem Watcher
+
+`src-tauri/src/watcher.rs` watches the initial vault recursively. For changed Markdown files it opens SQLite, indexes or deletes the file, and then emits a frontend event.
+
+The watcher is currently leaked to keep it alive, is not replaced when the configured vault changes, and does not independently manage an external journal root. A managed watcher service is planned.
+
+## Source Writes
+
+`src-tauri/src/writer.rs` supports task status, schedule, and raw-block updates. It checks the expected location and searches nearby after line shifts. The current implementation may retrieve the original source block from SQLite and writes the resulting file directly.
+
+The target safe-write contract sends the original block with each mutation, rejects zero or multiple matches, and performs atomic replacement while preserving file characteristics.
+
+## Query Language
+
+`src-tauri/src/query_dsl.rs` supports boolean expressions, parentheses, projects, contexts, tags, priorities, and comparisons for due date, status, and type. Supported relative dates are currently `today` and `tomorrow`.
+
+The compiler currently produces SQL fragments. A validated expression tree with bound parameters and fully qualified columns is planned before expanding the language.
+
+## Current Structural Limitations
+
+- `App.tsx` contains several product features and substantial local state.
+- Tauri commands, services, domain logic, and infrastructure are not yet separated into explicit boundaries.
+- IPC types are duplicated manually between Rust and TypeScript.
+- Configuration and cache files use home-directory dotfiles rather than platform application directories.
+- Logging and user-facing errors are inconsistent.
+
+These are migration targets, not requirements to refactor unrelated code. New work should follow `CONTRIBUTING.md` and the staged roadmap.

@@ -3,6 +3,9 @@
 ## Status
 Proposed
 
+## Implementation Status
+Partial. Hierarchical project extraction and descendant query matching exist. The complete relative Kanban navigation and display contract has not been implemented or verified as described.
+
 ## Context
 Octarine utilizes a plaintext hierarchical project pathing syntax (e.g., `+work/client-1/project-a`) as defined in ADR 0001. 
 

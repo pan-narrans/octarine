@@ -3,6 +3,9 @@
 ## Status
 Approved (v1.0 Baseline & v2.0 Sync Expansion)
 
+## Implementation Status
+Partial. The Tauri/React desktop baseline exists. Mobile, browser, CRDT, libp2p, E2EE, device trust, filtering, relay, and merge-review capabilities are not implemented and remain roadmap work.
+
 ## Context
 To eliminate throw-away code and establish maximum runtime performance immediately, we have pivoted to **Tauri (Rust Core)** as the architectural core of **v1.0 Desktop**. As we look ahead, we require seamless synchronization across multiple expanded clients in **v2.0** (macOS, Linux, Windows, iOS, Android, Web, and self-hosted server nodes) without sacrificing data privacy or locking users into proprietary cloud environments.
 

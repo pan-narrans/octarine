@@ -3,6 +3,9 @@
 ## Status
 Proposed
 
+## Implementation Status
+Partial and deferred. Canonical task parsing is implemented in native Rust as a source-preserving structural scanner, not a CommonMark AST parser. WASM bindings and browser/mobile targets are not implemented.
+
 ## Context
 Octarine must run with extreme high performance across all three target environments:
 1. **Desktop App:** Tauri (native Rust core).

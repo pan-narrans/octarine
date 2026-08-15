@@ -3,6 +3,9 @@
 ## Status
 Proposed
 
+## Implementation Status
+Partial. Checklist markers, inline metadata, multiline notes, and nested tasks are implemented through a source-preserving Rust scanner. The AST wording in this ADR is not the current implementation; see `../specifications/parser.md`.
+
 ## Context
 The application needs a plaintext syntax that is both highly structured for querying and fully interoperable with standard Markdown tools (like Obsidian). Existing solutions like `todo.txt` lack native Markdown formatting, while standard Obsidian tasks lack rigorous, standardized metadata keys.
 

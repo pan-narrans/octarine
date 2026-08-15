@@ -3,6 +3,9 @@
 ## Status
 Proposed
 
+## Implementation Status
+Partial. Zustand is used for task/custom-view state, but the frontend does not implement the proposed list virtualization or demonstrated per-card atomic subscription architecture. Performance figures are unverified targets.
+
 ## Context
 Octarine’s Kanban views, calendar boards, and search panels must display highly interactive lists of tasks and events. On web, phone, and desktop screens, rendering hundreds or thousands of rich, interactive card elements (each with contextual menus, metadata badges, drag-and-drop support, and state selectors) causes severe performance degradation:
 1. **DOM Bloat:** Large numbers of DOM or virtual nodes degrade browser/webview layout engines, dropping scroll rates well below 60fps.

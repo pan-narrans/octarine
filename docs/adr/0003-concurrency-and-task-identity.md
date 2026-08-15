@@ -3,6 +3,9 @@
 ## Status
 Approved
 
+## Implementation Status
+Partial. Location/content hashes and nearby source matching exist. The current writer can depend on SQLite to retrieve the original block and does not yet implement the complete atomic, ambiguity-aware source-locator contract.
+
 ## Context
 Tasks must be identifiable so the UI can send commands (like "mark as complete") to the backend. Injecting unique IDs (like HTML comments) into the Markdown files bloats the plaintext. Alternatively, relying on exact line numbers is dangerous because external editors might add/remove lines, causing the app to overwrite the wrong data.
 

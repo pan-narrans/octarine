@@ -3,6 +3,9 @@
 ## Status
 Proposed
 
+## Implementation Status
+Not started. Boot traversal and indexing are sequential, and startup currently rebuilds the core cache. The throughput and latency figures in this proposal are targets, not verified measurements.
+
 ## Context
 When Octarine starts up, it must reconcile the local SQLite database cache with the current state of the Markdown vault files on disk. For vaults with 10,000+ to 50,000+ files, performing file metadata checks and database insertions sequentially is slow ($O(N)$), causing long loading splash-screens on startup and blocking the user from immediate action.
 

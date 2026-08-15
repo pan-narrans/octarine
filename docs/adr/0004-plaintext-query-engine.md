@@ -3,6 +3,9 @@
 ## Status
 Approved
 
+## Implementation Status
+Partial. `tasks-query` blocks and a filter subset are implemented. Grouping, sorting, several documented operators/date forms, full grammar validation, and bound SQL parameters are not implemented. See `../specifications/query-dsl.md`.
+
 ## Context
 The user needs the ability to create custom, tailored dashboard views (e.g., grouping by project, filtering by upcoming due dates). Defining these in a hidden backend configuration file reduces the portability of the system.
 

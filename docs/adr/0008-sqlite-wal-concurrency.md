@@ -3,6 +3,9 @@
 ## Status
 Proposed
 
+## Implementation Status
+Partial. Native SQLite initialization enables WAL mode and foreign keys. The remaining tuning, multi-platform behavior, and performance claims have not been implemented or benchmarked.
+
 ## Context
 Octarine utilizes a local SQLite read cache to support sub-millisecond view queries and Kanban loads. 
 
