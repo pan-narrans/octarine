@@ -50,7 +50,7 @@ The required Rust gate is:
 cd src-tauri
 cargo fmt --all -- --check
 cargo clippy --all-targets -- -D warnings
-cargo test
+cargo test --all-targets
 ```
 
 Run `npm run ipc:generate` after changing a shared Rust DTO and commit the generated files. These commands are enforced by the `Quality` workflow for pull requests targeting `develop` or `master`, and on pushes to `develop`. See `docs/development/testing.md` for scope-aware verification.

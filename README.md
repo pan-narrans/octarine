@@ -12,7 +12,7 @@ Octarine is an early-stage, local-first desktop task manager and Markdown worksp
 - Display task, calendar, note, journal, project, context, tag, and embedded custom-query views.
 - Apply task-level edits with location and source-content checks.
 
-Octarine is under active development, and IPC contracts are still maintained manually. See `docs/architecture.md` and `docs/roadmap.md` for the honest implementation boundary.
+Octarine is under active development. See `docs/architecture.md` and `docs/roadmap.md` for the honest implementation boundary.
 
 ## Planned, Not Implemented
 
@@ -21,7 +21,6 @@ Octarine is under active development, and IPC contracts are still maintained man
 - Mobile and browser/WASM clients.
 - Parallel boot indexing and measured large-vault performance guarantees.
 - Frontend list virtualization.
-- A complete generated IPC contract layer.
 
 ## Technology
 
@@ -61,6 +60,7 @@ Use the Node version in `.node-version` and the Rust version in `rust-toolchain.
 
 ```bash
 npm ci
+npm run ipc:check
 npm run format:check
 npm run lint
 npm run build
@@ -77,7 +77,7 @@ Backend checks run from `src-tauri/`:
 ```bash
 cargo fmt --all -- --check
 cargo clippy --all-targets -- -D warnings
-cargo test
+cargo test --all-targets
 ```
 
 Read `CONTRIBUTING.md` before making changes. Product purpose is documented in `docs/vision.md`; current internals are documented in `docs/architecture.md`.

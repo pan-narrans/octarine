@@ -6,7 +6,7 @@ Approved
 
 ## Implementation Status
 
-Partial. Commands provide the original source block, location/content hashes and ambiguity-aware nearby source matching exist, and file replacement is atomic. The writer does not yet return structured conflict data.
+Partial. Commands provide the original source block, location/content hashes and ambiguity-aware nearby source matching exist, file replacement is atomic, and write commands return structured conflict codes. The frontend does not yet present every conflict through the warning-and-refresh interaction described below.
 
 ## Context
 

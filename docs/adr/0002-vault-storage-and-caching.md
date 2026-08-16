@@ -6,7 +6,7 @@ Approved
 
 ## Implementation Status
 
-Implemented. Markdown is authoritative, SQLite indexing and native watching exist, and startup reuses unchanged indexed rows. Separate schema and index-format versions trigger a one-time derived-cache rebuild when required. Watcher lifecycle hardening remains tracked separately in `../roadmap.md`.
+Implemented. Markdown is authoritative, SQLite indexing and a state-owned native watcher exist, and startup reuses unchanged indexed rows. Separate schema and index-format versions trigger a one-time derived-cache rebuild when required. Performance statements in this ADR remain design goals until supported by the measurements required in `../roadmap.md`.
 
 ## Context
 
