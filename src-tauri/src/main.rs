@@ -338,11 +338,19 @@ fn write_file_content(
 
 fn main() {
     let home_dir = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    let db_path = format!("{}/.octarine_cache.db", home_dir);
     let home_path = std::path::Path::new(&home_dir);
     let platform_config_dir = tauri::api::path::config_dir()
         .expect("platform config directory is unavailable")
         .join("com.octarine.app");
+    let platform_cache_dir = tauri::api::path::cache_dir()
+        .expect("platform cache directory is unavailable")
+        .join("com.octarine.app");
+    std::fs::create_dir_all(&platform_cache_dir)
+        .expect("failed to create application cache directory");
+    let db_path = platform_cache_dir
+        .join("index.sqlite3")
+        .to_string_lossy()
+        .into_owned();
     let diagnostics =
         Diagnostics::new(&platform_config_dir).expect("failed to initialize local diagnostics");
     let (config, config_path) = load_or_migrate_config(home_path, &platform_config_dir)

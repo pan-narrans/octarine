@@ -59,6 +59,8 @@ Task queries join the normalized tag and context associations and return them wi
 
 The cache stores separate schema and index-format versions. Startup preserves indexed rows when both versions match, skips unchanged files by modification time plus content hash, and removes records for files no longer present. A version mismatch clears derived rows once so the following sweep rebuilds them from Markdown.
 
+The disposable database is stored as `com.octarine.app/index.sqlite3` under the operating system's platform cache directory. Older home-directory cache files are ignored and may be removed manually because Markdown remains authoritative.
+
 ## Filesystem Watcher
 
 `src-tauri/src/watcher.rs` watches the initial vault recursively. For changed Markdown files it opens SQLite, indexes or deletes the file, and then emits a frontend event.
@@ -82,7 +84,6 @@ The compiler validates a complete expression tree and emits SQL made from allowl
 - `App.tsx` contains several product features and substantial local state.
 - Tauri commands remain registered in the startup shell rather than feature-specific command modules.
 - IPC types are duplicated manually between Rust and TypeScript.
-- The disposable SQLite cache still uses a home-directory dotfile rather than a platform application-data directory.
 - User-facing errors are inconsistent.
 
 These are migration targets, not requirements to refactor unrelated code. New work should follow `CONTRIBUTING.md` and the staged roadmap.
