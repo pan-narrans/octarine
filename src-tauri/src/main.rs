@@ -3,6 +3,7 @@
     windows_subsystem = "windows"
 )]
 
+use notify::RecommendedWatcher;
 use octarine::config::{expand_home, load_or_migrate_config, save_config, AppConfig};
 use octarine::db::{boot_sweep, delete_file, index_single_file, initialize_db, query_tasks};
 use octarine::file_ops::{
@@ -24,11 +25,23 @@ use tauri::State;
 
 struct AppState {
     db: Mutex<Connection>,
-    _db_path: String,
+    db_path: String,
     vault_dir: Mutex<String>,
     journal_dir: Mutex<String>,
     config: Mutex<AppConfig>,
     config_path: PathBuf,
+    watcher: Mutex<Option<RecommendedWatcher>>,
+}
+
+fn build_vault_watcher(
+    db_path: &str,
+    vault_dir: &str,
+    app: tauri::AppHandle,
+) -> Result<RecommendedWatcher, String> {
+    start_watcher(db_path.to_string(), vault_dir.to_string(), move || {
+        let _ = app.emit_all("vault-changed", ());
+    })
+    .map_err(|e| format!("Failed to watch configured vault: {e}"))
 }
 
 fn resolve_vault_path(
@@ -151,7 +164,11 @@ fn update_event_schedule(
 }
 
 #[tauri::command]
-fn set_vault_config(state: State<'_, AppState>, new_dir: String) -> Result<(), String> {
+fn set_vault_config(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    new_dir: String,
+) -> Result<(), String> {
     let home_dir = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
     let mut resolved_dir = expand_home(&new_dir, std::path::Path::new(&home_dir))
         .to_string_lossy()
@@ -163,6 +180,7 @@ fn set_vault_config(state: State<'_, AppState>, new_dir: String) -> Result<(), S
     resolved_dir = canonicalize_root(&resolved_dir)?
         .to_string_lossy()
         .into_owned();
+    let replacement_watcher = build_vault_watcher(&state.db_path, &resolved_dir, app)?;
 
     {
         let mut config = state.config.lock().unwrap();
@@ -170,12 +188,6 @@ fn set_vault_config(state: State<'_, AppState>, new_dir: String) -> Result<(), S
         updated.vault_dir = new_dir;
         save_config(&state.config_path, &updated)?;
         *config = updated;
-    }
-
-    // Update active vault_dir inside AppState under lock
-    {
-        let mut vault_lock = state.vault_dir.lock().unwrap();
-        *vault_lock = resolved_dir.clone();
     }
 
     // Clear old tables inside the SQLite cache
@@ -189,6 +201,13 @@ fn set_vault_config(state: State<'_, AppState>, new_dir: String) -> Result<(), S
 
     // Perform an immediate fresh boot sweep indexing the newly configured vault
     boot_sweep(&conn, &resolved_dir).map_err(|e| e.to_string())?;
+    drop(conn);
+
+    {
+        let mut vault_lock = state.vault_dir.lock().unwrap();
+        *vault_lock = resolved_dir;
+    }
+    *state.watcher.lock().unwrap() = Some(replacement_watcher);
 
     Ok(())
 }
@@ -371,11 +390,12 @@ fn main() {
 
     let mut builder = tauri::Builder::default().manage(AppState {
         db: Mutex::new(conn),
-        _db_path: db_path.clone(),
+        db_path: db_path.clone(),
         vault_dir: Mutex::new(vault_dir.clone()),
         journal_dir: Mutex::new(journal_dir.clone()),
         config: Mutex::new(config),
         config_path,
+        watcher: Mutex::new(None),
     });
 
     builder = builder.invoke_handler(tauri::generate_handler![
@@ -399,16 +419,12 @@ fn main() {
     ]);
 
     builder
-        .setup(move |app| {
-            let handle = app.handle();
-            // Start background watcher and emit "vault-changed" event on updates
-            let _watcher = start_watcher(db_path, vault_dir, move || {
-                let _ = handle.emit_all("vault-changed", ());
-            })
-            .expect("failed to start native file watcher");
-
-            // Keep the watcher alive by leaking it
-            Box::leak(Box::new(_watcher));
+        .setup(|app| {
+            let state = app.state::<AppState>();
+            let vault_dir = state.vault_dir.lock().unwrap().clone();
+            let watcher = build_vault_watcher(&state.db_path, &vault_dir, app.handle())
+                .map_err(std::io::Error::other)?;
+            *state.watcher.lock().unwrap() = Some(watcher);
 
             Ok(())
         })

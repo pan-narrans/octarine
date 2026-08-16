@@ -61,7 +61,7 @@ The cache stores separate schema and index-format versions. Startup preserves in
 
 `src-tauri/src/watcher.rs` watches the initial vault recursively. For changed Markdown files it opens SQLite, indexes or deletes the file, and then emits a frontend event.
 
-The watcher is currently leaked to keep it alive, is not replaced when the configured vault changes, and does not independently manage an external journal root. A managed watcher service is planned.
+The active native watcher is owned by application state. Reconfiguring the vault constructs and validates a replacement watcher, reindexes the selected vault, and then swaps it into state; dropping the previous watcher closes its event channel and event loop. The journal root is intentionally not indexed or watched as part of the task vault.
 
 ## Source Writes
 
