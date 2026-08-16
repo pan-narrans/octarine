@@ -16,7 +16,7 @@ This document contains planned work. Items here are not current capabilities or 
 - Generate TypeScript IPC contracts from Rust DTOs.
 - [x] Make source edits independent of SQLite cache timing and atomically replace files.
 - [x] Reject ambiguous source-match fallbacks.
-- Return structured write conflicts.
+- [x] Return structured write conflicts.
 - [x] Add schema and index-format versions; restore incremental startup indexing.
 - [x] Validate and parameterize query expressions.
 

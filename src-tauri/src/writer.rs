@@ -1,12 +1,51 @@
 use crate::file_ops::write_file_content_on_disk;
 use crate::CHECKLIST_CHAR_CLASS;
 use regex::Regex;
+use serde::Serialize;
 use std::fs;
 use std::path::Path;
 use std::sync::OnceLock;
 
 static CHECKBOX_SUB_RE: OnceLock<Regex> = OnceLock::new();
 static STRIP_CHECKBOX_RE: OnceLock<Regex> = OnceLock::new();
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WriteErrorCode {
+    SourceMissing,
+    SourceChanged,
+    SourceAmbiguous,
+    InvalidSource,
+    OperationFailed,
+}
+
+#[derive(Debug, Serialize)]
+pub struct WriteError {
+    pub code: WriteErrorCode,
+    pub message: &'static str,
+}
+
+impl WriteError {
+    pub fn operation_failed() -> Self {
+        Self {
+            code: WriteErrorCode::OperationFailed,
+            message: "The source file could not be updated.",
+        }
+    }
+
+    pub fn source_missing() -> Self {
+        Self {
+            code: WriteErrorCode::SourceMissing,
+            message: "The source file no longer exists. Please refresh.",
+        }
+    }
+}
+
+impl From<String> for WriteError {
+    fn from(_: String) -> Self {
+        Self::operation_failed()
+    }
+}
 
 fn get_checkbox_sub_re() -> &'static Regex {
     CHECKBOX_SUB_RE.get_or_init(|| {
@@ -43,19 +82,22 @@ pub fn update_task_status_in_file(
     original_line_number: usize, // 1-based
     original_raw_markdown: &str,
     new_status: &str, // "todo", "doing", "done", "cancelled"
-) -> Result<(), String> {
+) -> Result<(), WriteError> {
     if !Path::new(file_path).exists() {
-        return Err(format!("File not found on disk: {}", file_path));
+        return Err(WriteError::source_missing());
     }
-    let content = fs::read_to_string(file_path).map_err(|e| e.to_string())?;
+    let content = fs::read_to_string(file_path).map_err(|_| WriteError::operation_failed())?;
     let lines: Vec<String> = content.split('\n').map(|s| s.to_string()).collect();
 
     let original_lines: Vec<&str> = original_raw_markdown.lines().collect();
     if original_lines.is_empty() {
-        return Err("Original raw markdown is empty.".to_string());
+        return Err(WriteError {
+            code: WriteErrorCode::InvalidSource,
+            message: "The original task source is empty.",
+        });
     }
 
-    let line_idx = locate_source_block(&lines, original_line_number, &original_lines, "task")?;
+    let line_idx = locate_source_block(&lines, original_line_number, &original_lines)?;
 
     let mut edited_lines = lines;
     let target_line = &edited_lines[line_idx];
@@ -89,7 +131,10 @@ pub fn update_task_status_in_file(
         let new_line = format!("{}{}{}{}", prefix, status_char, suffix, rest);
         edited_lines[line_idx] = new_line;
     } else {
-        return Err("Failed to format checkbox on the target line.".to_string());
+        return Err(WriteError {
+            code: WriteErrorCode::InvalidSource,
+            message: "The target source is not a supported task checkbox.",
+        });
     }
 
     let updated_content = edited_lines.join("\n");
@@ -135,8 +180,7 @@ fn locate_source_block(
     file_lines: &[String],
     original_line_number: usize,
     original_lines: &[&str],
-    source_kind: &str,
-) -> Result<usize, String> {
+) -> Result<usize, WriteError> {
     const SEARCH_RADIUS: usize = 15;
 
     let expected_idx = original_line_number.checked_sub(1);
@@ -158,12 +202,14 @@ fn locate_source_block(
 
     match matches.as_slice() {
         [idx] => Ok(*idx),
-        [] => Err(format!(
-            "Concurrency Collision: The {source_kind} could not be located in the file. It may have been edited or moved externally. Please refresh."
-        )),
-        _ => Err(format!(
-            "Concurrency Collision: Multiple matching {source_kind} blocks were found near the expected location. No file changes were made. Please refresh."
-        )),
+        [] => Err(WriteError {
+            code: WriteErrorCode::SourceChanged,
+            message: "The source changed or moved and could not be matched. Please refresh.",
+        }),
+        _ => Err(WriteError {
+            code: WriteErrorCode::SourceAmbiguous,
+            message: "Multiple matching source blocks were found. Please refresh.",
+        }),
     }
 }
 
@@ -173,19 +219,22 @@ pub fn update_event_schedule_in_file(
     original_raw_markdown: &str,
     new_s_start: Option<String>,
     new_duration_secs: Option<i32>,
-) -> Result<(), String> {
+) -> Result<(), WriteError> {
     if !Path::new(file_path).exists() {
-        return Err(format!("File not found on disk: {}", file_path));
+        return Err(WriteError::source_missing());
     }
-    let content = fs::read_to_string(file_path).map_err(|e| e.to_string())?;
+    let content = fs::read_to_string(file_path).map_err(|_| WriteError::operation_failed())?;
     let lines: Vec<String> = content.split('\n').map(|s| s.to_string()).collect();
 
     let original_lines: Vec<&str> = original_raw_markdown.lines().collect();
     if original_lines.is_empty() {
-        return Err("Original raw markdown is empty.".to_string());
+        return Err(WriteError {
+            code: WriteErrorCode::InvalidSource,
+            message: "The original event source is empty.",
+        });
     }
 
-    let line_idx = locate_source_block(&lines, original_line_number, &original_lines, "event")?;
+    let line_idx = locate_source_block(&lines, original_line_number, &original_lines)?;
 
     let mut edited_lines = lines;
     let target_line = &edited_lines[line_idx];
@@ -226,20 +275,27 @@ pub fn update_task_markdown_in_file(
     original_line_number: usize,
     original_raw_markdown: &str,
     new_raw_markdown: &str,
-) -> Result<(), String> {
+) -> Result<(), WriteError> {
     // 1. Read file content on disk
-    let file_content =
-        fs::read_to_string(file_path).map_err(|e| format!("Failed to read file: {}", e))?;
+    let file_content = fs::read_to_string(file_path).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            WriteError::source_missing()
+        } else {
+            WriteError::operation_failed()
+        }
+    })?;
 
     let mut lines: Vec<String> = file_content.split('\n').map(|s| s.to_string()).collect();
 
     let original_block_lines: Vec<&str> = original_raw_markdown.lines().collect();
     if original_block_lines.is_empty() {
-        return Err("Original raw markdown is empty.".to_string());
+        return Err(WriteError {
+            code: WriteErrorCode::InvalidSource,
+            message: "The original task source is empty.",
+        });
     }
 
-    let start_idx =
-        locate_source_block(&lines, original_line_number, &original_block_lines, "task")?;
+    let start_idx = locate_source_block(&lines, original_line_number, &original_block_lines)?;
 
     let end_idx = start_idx + original_block_lines.len();
 
@@ -349,8 +405,38 @@ mod tests {
         )
         .unwrap_err();
 
-        assert!(error.contains("Multiple matching task blocks"));
+        assert_eq!(error.code, WriteErrorCode::SourceAmbiguous);
+        assert_eq!(
+            serde_json::to_value(&error).unwrap()["code"],
+            "source_ambiguous"
+        );
         assert_eq!(fs::read_to_string(&file_path).unwrap(), content);
+    }
+
+    #[test]
+    fn test_safe_writer_reports_changed_and_missing_sources() {
+        let temp_dir = tempdir().unwrap();
+        let file_path = temp_dir.path().join("tasks.md");
+        fs::write(&file_path, "- [ ] Edited externally\n").unwrap();
+
+        let changed = update_task_status_in_file(
+            file_path.to_str().unwrap(),
+            1,
+            "- [ ] Original task",
+            "done",
+        )
+        .unwrap_err();
+        assert_eq!(changed.code, WriteErrorCode::SourceChanged);
+
+        fs::remove_file(&file_path).unwrap();
+        let missing = update_task_status_in_file(
+            file_path.to_str().unwrap(),
+            1,
+            "- [ ] Original task",
+            "done",
+        )
+        .unwrap_err();
+        assert_eq!(missing.code, WriteErrorCode::SourceMissing);
     }
 
     #[test]

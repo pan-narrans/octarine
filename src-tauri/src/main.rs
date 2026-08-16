@@ -19,7 +19,7 @@ use octarine::path_security::{
 };
 use octarine::query_dsl::compile_filter_to_sql;
 use octarine::watcher::start_watcher;
-use octarine::writer::update_task_status_in_file;
+use octarine::writer::{update_task_status_in_file, WriteError};
 use rusqlite::Connection;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -117,11 +117,12 @@ fn update_task_status(
     line_number: usize,
     original_raw_markdown: String,
     new_status: String,
-) -> Result<(), String> {
-    let file_path = resolve_vault_path(&state, &file_path, false)?;
+) -> Result<(), WriteError> {
+    let file_path = resolve_vault_path(&state, &file_path, false)
+        .map_err(|_| WriteError::operation_failed())?;
     update_task_status_in_file(&file_path, line_number, &original_raw_markdown, &new_status)?;
     let conn = state.db.lock().unwrap();
-    index_single_file(&conn, &file_path).map_err(|e| e.to_string())?;
+    index_single_file(&conn, &file_path).map_err(|_| WriteError::operation_failed())?;
     Ok(())
 }
 
@@ -132,8 +133,9 @@ fn update_task_markdown(
     line_number: usize,
     original_raw_markdown: String,
     new_raw_markdown: String,
-) -> Result<(), String> {
-    let file_path = resolve_vault_path(&state, &file_path, false)?;
+) -> Result<(), WriteError> {
+    let file_path = resolve_vault_path(&state, &file_path, false)
+        .map_err(|_| WriteError::operation_failed())?;
     octarine::writer::update_task_markdown_in_file(
         &file_path,
         line_number,
@@ -141,7 +143,7 @@ fn update_task_markdown(
         &new_raw_markdown,
     )?;
     let conn = state.db.lock().unwrap();
-    index_single_file(&conn, &file_path).map_err(|e| e.to_string())?;
+    index_single_file(&conn, &file_path).map_err(|_| WriteError::operation_failed())?;
     Ok(())
 }
 
@@ -159,8 +161,9 @@ fn update_event_schedule(
     original_raw_markdown: String,
     new_s_start: Option<String>,
     new_duration_secs: Option<i32>,
-) -> Result<(), String> {
-    let file_path = resolve_vault_path(&state, &file_path, false)?;
+) -> Result<(), WriteError> {
+    let file_path = resolve_vault_path(&state, &file_path, false)
+        .map_err(|_| WriteError::operation_failed())?;
     octarine::writer::update_event_schedule_in_file(
         &file_path,
         line_number,
@@ -169,7 +172,7 @@ fn update_event_schedule(
         new_duration_secs,
     )?;
     let conn = state.db.lock().unwrap();
-    index_single_file(&conn, &file_path).map_err(|e| e.to_string())?;
+    index_single_file(&conn, &file_path).map_err(|_| WriteError::operation_failed())?;
     Ok(())
 }
 

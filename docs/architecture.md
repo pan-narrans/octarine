@@ -69,7 +69,7 @@ The active native watcher is owned by application state. Reconfiguring the vault
 
 `src-tauri/src/writer.rs` supports task status, schedule, and raw-block updates. Each command supplies the original source block, so mutation does not depend on SQLite cache timing. The writer checks the expected location and searches nearby after line shifts, rejecting a fallback when multiple nearby blocks match. Task and full-file edits use a temporary file in the source directory, preserve permissions, flush its contents, and atomically replace the original.
 
-Structured conflict responses remain planned so the frontend can distinguish missing, changed, and ambiguous source failures without interpreting error text.
+Task write commands return structured errors with stable codes for missing, changed, ambiguous, invalid, and operational failures. The frontend can distinguish concurrency conflicts without interpreting human-readable error text.
 
 ## Query Language
 
