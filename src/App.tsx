@@ -24,9 +24,23 @@ import {
   BookOpen,
   Pencil,
 } from "lucide-react";
-import { invoke } from "@tauri-apps/api/tauri";
 import { open } from "@tauri-apps/api/shell";
 import { listen } from "@tauri-apps/api/event";
+import { updateEventSchedule, updateTaskMarkdown } from "./features/tasks/ipc";
+import {
+  createDirectory,
+  createFile,
+  deletePath,
+  getJournalConfig,
+  getVaultConfig,
+  readFileContent,
+  readJournalTree,
+  readVaultTree,
+  renamePath,
+  setJournalConfig,
+  setVaultConfig,
+  writeFileContent,
+} from "./features/workspace/ipc";
 
 interface ProjectNode {
   name: string;
@@ -178,7 +192,7 @@ export function App() {
     fetchJournalTree();
 
     // Fetch active vault path dynamically from Tauri state
-    invoke<string>("get_vault_config")
+    getVaultConfig()
       .then((path) => {
         setActiveVaultPath(path);
         setVaultInput(path);
@@ -186,7 +200,7 @@ export function App() {
       .catch((err) => console.error("Failed to query active vault path:", err));
 
     // Fetch active journal path dynamically from Tauri state
-    invoke<string>("get_journal_config")
+    getJournalConfig()
       .then((path) => {
         setActiveJournalPath(path);
         setJournalInput(path);
@@ -245,12 +259,7 @@ export function App() {
     }
 
     try {
-      await invoke("update_task_markdown", {
-        filePath: task.file_path || "",
-        lineNumber: task.line_number,
-        originalRawMarkdown: task.raw_markdown,
-        newRawMarkdown: trimmed,
-      });
+      await updateTaskMarkdown(task.file_path || "", task.line_number, task.raw_markdown, trimmed);
       setEditingTaskHash(null);
       await fetchTasks();
     } catch (e) {
@@ -314,7 +323,7 @@ export function App() {
 
   const fetchDirTree = async () => {
     try {
-      const tree = await invoke<FileNode>("read_dir_tree");
+      const tree = await readVaultTree();
       setDirTree(tree);
     } catch (e) {
       console.error("Failed to load directory tree:", e);
@@ -323,7 +332,7 @@ export function App() {
 
   const fetchJournalTree = async () => {
     try {
-      const tree = await invoke<FileNode>("read_journal_tree");
+      const tree = await readJournalTree();
       setJournalTree(tree);
     } catch (e) {
       console.error("Failed to load journal tree:", e);
@@ -333,7 +342,7 @@ export function App() {
   const handleSaveJournal = async () => {
     setSavingJournal(true);
     try {
-      await invoke("set_journal_config", { newDir: journalInput.trim() });
+      await setJournalConfig(journalInput.trim());
       setActiveJournalPath(journalInput.trim());
       setIsEditingJournal(false);
       await fetchJournalTree();
@@ -356,13 +365,10 @@ export function App() {
 
       let content = "";
       try {
-        content = await invoke("read_file_content", { path: filePath });
+        content = await readFileContent(filePath);
       } catch {
         // File does not exist yet, write empty string to scaffold it!
-        await invoke("write_file_content", {
-          path: filePath,
-          content: `# 📓 Journal Entry: ${todayStr}\n\n`,
-        });
+        await writeFileContent(filePath, `# 📓 Journal Entry: ${todayStr}\n\n`);
         content = `# 📓 Journal Entry: ${todayStr}\n\n`;
       }
       await fetchJournalTree();
@@ -387,13 +393,10 @@ export function App() {
 
       let content = "";
       try {
-        content = await invoke("read_file_content", { path: filePath });
+        content = await readFileContent(filePath);
       } catch {
         // Silently scaffold today's journal note
-        await invoke("write_file_content", {
-          path: filePath,
-          content: `# 📓 Journal Entry: ${todayStr}\n\n`,
-        });
+        await writeFileContent(filePath, `# 📓 Journal Entry: ${todayStr}\n\n`);
         content = `# 📓 Journal Entry: ${todayStr}\n\n`;
       }
       setTodayJournalPath(filePath);
@@ -408,7 +411,7 @@ export function App() {
   const handleSaveTodayJournalContent = async (content: string) => {
     if (!todayJournalPath) return;
     try {
-      await invoke("write_file_content", { path: todayJournalPath, content });
+      await writeFileContent(todayJournalPath, content);
       setTodayJournalContent(content);
     } catch (e) {
       console.error("Failed to save today's journal:", e);
@@ -418,7 +421,7 @@ export function App() {
 
   const handleSelectFile = async (path: string) => {
     try {
-      const content = await invoke<string>("read_file_content", { path });
+      const content = await readFileContent(path);
       setActiveFilePath(path);
       setActiveFileContent(content);
     } catch (e) {
@@ -429,7 +432,7 @@ export function App() {
 
   const handleCreateFile = async (parentPath: string, name: string) => {
     try {
-      const createdPath = await invoke<string>("create_file", { parentDir: parentPath, name });
+      const createdPath = await createFile(parentPath, name);
       await fetchDirTree();
       await handleSelectFile(createdPath);
     } catch (e) {
@@ -440,7 +443,7 @@ export function App() {
 
   const handleCreateFolder = async (parentPath: string, name: string) => {
     try {
-      await invoke("create_directory", { parentDir: parentPath, name });
+      await createDirectory(parentPath, name);
       await fetchDirTree();
     } catch (e) {
       console.error("Failed to create directory:", e);
@@ -450,7 +453,7 @@ export function App() {
 
   const handleDeletePath = async (path: string) => {
     try {
-      await invoke("delete_path", { path });
+      await deletePath(path);
       if (activeFilePath === path) {
         setActiveFilePath(null);
         setActiveFileContent(null);
@@ -464,7 +467,7 @@ export function App() {
 
   const handleRenamePath = async (oldPath: string, newPath: string) => {
     try {
-      await invoke("rename_path", { oldPath, newPath });
+      await renamePath(oldPath, newPath);
       if (activeFilePath === oldPath) {
         setActiveFilePath(newPath);
       }
@@ -478,7 +481,7 @@ export function App() {
   const handleSaveFileContent = async (content: string) => {
     if (!activeFilePath) return;
     try {
-      await invoke("write_file_content", { path: activeFilePath, content });
+      await writeFileContent(activeFilePath, content);
       setActiveFileContent(content);
     } catch (e) {
       console.error("Failed to save note:", e);
@@ -760,13 +763,13 @@ export function App() {
       const new_s_start = `${editDateInput.trim()} ${editTimeInput.trim()}`;
       const new_duration_secs = editDurationInput * 60;
 
-      await invoke("update_event_schedule", {
-        filePath: event.file_path || "",
-        lineNumber: event.line_number,
-        originalRawMarkdown: event.raw_markdown,
-        newSStart: new_s_start,
-        newDurationSecs: new_duration_secs,
-      });
+      await updateEventSchedule(
+        event.file_path || "",
+        event.line_number,
+        event.raw_markdown,
+        new_s_start,
+        new_duration_secs,
+      );
 
       setEditingEventHash(null);
       fetchTasks(); // Reload local store dynamically
@@ -781,7 +784,7 @@ export function App() {
     if (!vaultInput.trim()) return;
     setSavingVault(true);
     try {
-      await invoke("set_vault_config", { newDir: vaultInput.trim() });
+      await setVaultConfig(vaultInput.trim());
       setActiveVaultPath(vaultInput.trim());
       setIsEditingVault(false);
       await fetchTasks();
@@ -1280,12 +1283,12 @@ export function App() {
             onClose={() => setModalTask(null)}
             onSave={async (newRawMarkdown) => {
               try {
-                await invoke("update_task_markdown", {
-                  filePath: modalTask.file_path || "",
-                  lineNumber: modalTask.line_number,
-                  originalRawMarkdown: modalTask.raw_markdown,
-                  newRawMarkdown: newRawMarkdown.trim(),
-                });
+                await updateTaskMarkdown(
+                  modalTask.file_path || "",
+                  modalTask.line_number,
+                  modalTask.raw_markdown,
+                  newRawMarkdown.trim(),
+                );
                 await fetchTasks();
               } catch (e) {
                 console.error("Failed to save full task modal:", e);

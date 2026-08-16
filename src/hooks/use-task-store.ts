@@ -1,6 +1,10 @@
 import { create } from "zustand";
-import { invoke } from "@tauri-apps/api/tauri";
 import { Task, CustomView, isTask, isCustomView } from "../types";
+import {
+  getCustomViews,
+  getTasks,
+  updateTaskStatus as updateTaskStatusOnDisk,
+} from "../features/tasks/ipc";
 
 interface TaskState {
   tasks: Task[];
@@ -37,8 +41,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const activeFilter = filter !== undefined ? filter : get().activeFilter;
-      // Invoke Tauri Rust Command
-      const rawTasks = await invoke("get_tasks", { filter: activeFilter || null });
+      const rawTasks = await getTasks(activeFilter || null);
       if (Array.isArray(rawTasks)) {
         const validatedTasks = rawTasks.filter(isTask);
         set({ tasks: validatedTasks, loading: false });
@@ -52,7 +55,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
 
   fetchCustomViews: async () => {
     try {
-      const rawViews = await invoke("get_custom_views");
+      const rawViews = await getCustomViews();
       if (Array.isArray(rawViews)) {
         const validatedViews = rawViews.filter(isCustomView);
         set({ customViews: validatedViews });
@@ -70,12 +73,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   ) => {
     set({ loading: true, error: null });
     try {
-      await invoke("update_task_status", {
-        filePath,
-        lineNumber,
-        originalRawMarkdown,
-        newStatus,
-      });
+      await updateTaskStatusOnDisk(filePath, lineNumber, originalRawMarkdown, newStatus);
       // Re-fetch immediately to align with the new cached/written state!
       await get().fetchTasks();
     } catch (e: unknown) {

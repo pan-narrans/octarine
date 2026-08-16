@@ -29,7 +29,7 @@ Markdown is durable user data. SQLite is a derived cache.
 
 The React frontend lives in `src/`. `App.tsx` currently coordinates most navigation, filtering, calendar, note, journal, and configuration behavior. Zustand stores task and custom-view state, while several components manage file-tree and editor presentation.
 
-The frontend calls Tauri commands with `invoke` and listens for `vault-changed` events. Rust returns normalized task metadata, including tags, contexts, and source file paths, so the frontend does not reinterpret raw Markdown. Shared response and error DTOs are generated from Rust into `src/generated/ipc`; frontend aliases and runtime guards live in `src/types`.
+Feature-owned adapters under `src/features/*/ipc.ts` are the only frontend modules that call Tauri commands. Rust returns normalized task metadata, including tags, contexts, and source file paths, so the frontend does not reinterpret raw Markdown. Shared response and error DTOs are generated from Rust into `src/generated/ipc`; frontend aliases and runtime guards live in `src/types`.
 
 ## Tauri Command Boundary
 
