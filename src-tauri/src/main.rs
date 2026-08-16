@@ -5,7 +5,10 @@
 
 use notify::RecommendedWatcher;
 use octarine::config::{expand_home, load_or_migrate_config, save_config, AppConfig};
-use octarine::db::{boot_sweep, delete_file, index_single_file, initialize_db, query_tasks};
+use octarine::db::{
+    boot_sweep_with_diagnostics, delete_file, index_single_file, initialize_db, query_tasks,
+};
+use octarine::diagnostics::Diagnostics;
 use octarine::file_ops::{
     create_directory_on_disk, create_file_on_disk, delete_path_on_disk, read_file_content_on_disk,
     rename_path_on_disk, scan_dir_tree, write_file_content_on_disk, FileNode,
@@ -31,16 +34,23 @@ struct AppState {
     config: Mutex<AppConfig>,
     config_path: PathBuf,
     watcher: Mutex<Option<RecommendedWatcher>>,
+    diagnostics: Diagnostics,
 }
 
 fn build_vault_watcher(
     db_path: &str,
     vault_dir: &str,
     app: tauri::AppHandle,
+    diagnostics: Diagnostics,
 ) -> Result<RecommendedWatcher, String> {
-    start_watcher(db_path.to_string(), vault_dir.to_string(), move || {
-        let _ = app.emit_all("vault-changed", ());
-    })
+    start_watcher(
+        db_path.to_string(),
+        vault_dir.to_string(),
+        Some(diagnostics),
+        move || {
+            let _ = app.emit_all("vault-changed", ());
+        },
+    )
     .map_err(|e| format!("Failed to watch configured vault: {e}"))
 }
 
@@ -180,7 +190,12 @@ fn set_vault_config(
     resolved_dir = canonicalize_root(&resolved_dir)?
         .to_string_lossy()
         .into_owned();
-    let replacement_watcher = build_vault_watcher(&state.db_path, &resolved_dir, app)?;
+    let replacement_watcher = build_vault_watcher(
+        &state.db_path,
+        &resolved_dir,
+        app,
+        state.diagnostics.clone(),
+    )?;
 
     {
         let mut config = state.config.lock().unwrap();
@@ -200,7 +215,8 @@ fn set_vault_config(
         .map_err(|e| e.to_string())?;
 
     // Perform an immediate fresh boot sweep indexing the newly configured vault
-    boot_sweep(&conn, &resolved_dir).map_err(|e| e.to_string())?;
+    boot_sweep_with_diagnostics(&conn, &resolved_dir, Some(&state.diagnostics))
+        .map_err(|e| e.to_string())?;
     drop(conn);
 
     {
@@ -323,7 +339,8 @@ fn rename_path(
     if new_path.ends_with(".md") {
         index_single_file(&conn, &new_path).map_err(|e| e.to_string())?;
     } else if std::path::Path::new(&new_path).is_dir() {
-        boot_sweep(&conn, &new_path).map_err(|e| e.to_string())?;
+        boot_sweep_with_diagnostics(&conn, &new_path, Some(&state.diagnostics))
+            .map_err(|e| e.to_string())?;
     }
     Ok(())
 }
@@ -354,6 +371,8 @@ fn main() {
     let platform_config_dir = tauri::api::path::config_dir()
         .expect("platform config directory is unavailable")
         .join("com.octarine.app");
+    let diagnostics =
+        Diagnostics::new(&platform_config_dir).expect("failed to initialize local diagnostics");
     let (config, config_path) = load_or_migrate_config(home_path, &platform_config_dir)
         .expect("failed to load application configuration");
 
@@ -386,7 +405,9 @@ fn main() {
 
     let conn = initialize_db(&db_path).expect("failed to initialize SQLite Cache database");
 
-    boot_sweep(&conn, &vault_dir).expect("failed to run boot sweep");
+    boot_sweep_with_diagnostics(&conn, &vault_dir, Some(&diagnostics))
+        .expect("failed to run boot sweep");
+    diagnostics.info("app.started", "Octarine started.");
 
     let mut builder = tauri::Builder::default().manage(AppState {
         db: Mutex::new(conn),
@@ -396,6 +417,7 @@ fn main() {
         config: Mutex::new(config),
         config_path,
         watcher: Mutex::new(None),
+        diagnostics,
     });
 
     builder = builder.invoke_handler(tauri::generate_handler![
@@ -422,8 +444,13 @@ fn main() {
         .setup(|app| {
             let state = app.state::<AppState>();
             let vault_dir = state.vault_dir.lock().unwrap().clone();
-            let watcher = build_vault_watcher(&state.db_path, &vault_dir, app.handle())
-                .map_err(std::io::Error::other)?;
+            let watcher = build_vault_watcher(
+                &state.db_path,
+                &vault_dir,
+                app.handle(),
+                state.diagnostics.clone(),
+            )
+            .map_err(std::io::Error::other)?;
             *state.watcher.lock().unwrap() = Some(watcher);
 
             Ok(())

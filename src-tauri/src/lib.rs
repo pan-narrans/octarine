@@ -1,5 +1,6 @@
 pub mod config;
 pub mod db;
+pub mod diagnostics;
 pub mod file_ops;
 pub mod parser;
 pub mod path_security;

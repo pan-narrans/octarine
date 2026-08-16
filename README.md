@@ -12,7 +12,7 @@ Octarine is an early-stage, local-first desktop task manager and Markdown worksp
 - Display task, calendar, note, journal, project, context, tag, and embedded custom-query views.
 - Apply task-level edits with location and source-content checks.
 
-Octarine is under active development. IPC contracts are still maintained manually, and structured diagnostics and write conflicts remain incomplete. See `docs/architecture.md` and `docs/roadmap.md` for the honest implementation boundary.
+Octarine is under active development. IPC contracts are still maintained manually, and structured write conflicts remain incomplete. See `docs/architecture.md` and `docs/roadmap.md` for the honest implementation boundary.
 
 ## Planned, Not Implemented
 

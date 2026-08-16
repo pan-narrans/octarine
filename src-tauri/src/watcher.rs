@@ -1,3 +1,4 @@
+use crate::diagnostics::Diagnostics;
 use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use rusqlite::Connection;
 use std::path::Path;
@@ -7,6 +8,7 @@ use std::thread;
 fn spawn_event_loop<F>(
     db_path: String,
     rx: Receiver<Result<notify::Event, notify::Error>>,
+    diagnostics: Option<Diagnostics>,
     on_change: F,
 ) where
     F: Fn() + Send + Sync + 'static,
@@ -24,16 +26,32 @@ fn spawn_event_loop<F>(
                         for path in event.paths {
                             if path.extension().is_some_and(|ext| ext == "md") {
                                 if let Some(path_str) = path.to_str() {
-                                    if let Ok(conn) = Connection::open(&db_path) {
-                                        let _ = conn.execute_batch("PRAGMA foreign_keys = ON;");
-                                        let changed = if path.exists() {
-                                            crate::db::index_single_file(&conn, path_str).is_ok()
-                                        } else {
-                                            crate::db::delete_file(&conn, path_str).is_ok()
-                                        };
+                                    match Connection::open(&db_path) {
+                                        Ok(conn) => {
+                                            let _ = conn.execute_batch("PRAGMA foreign_keys = ON;");
+                                            let changed = if path.exists() {
+                                                crate::db::index_single_file(&conn, path_str)
+                                                    .is_ok()
+                                            } else {
+                                                crate::db::delete_file(&conn, path_str).is_ok()
+                                            };
 
-                                        if changed {
-                                            on_change();
+                                            if changed {
+                                                on_change();
+                                            } else if let Some(diagnostics) = &diagnostics {
+                                                diagnostics.error(
+                                                    "watcher.index_failed",
+                                                    "A watched Markdown change could not be indexed.",
+                                                );
+                                            }
+                                        }
+                                        Err(_) => {
+                                            if let Some(diagnostics) = &diagnostics {
+                                                diagnostics.error(
+                                                    "watcher.cache_open_failed",
+                                                    "The watcher could not open the local cache.",
+                                                );
+                                            }
                                         }
                                     }
                                 }
@@ -41,7 +59,14 @@ fn spawn_event_loop<F>(
                         }
                     }
                 }
-                Err(e) => eprintln!("Watcher error: {:?}", e),
+                Err(_) => {
+                    if let Some(diagnostics) = &diagnostics {
+                        diagnostics.error(
+                            "watcher.event_failed",
+                            "The filesystem watcher reported an error.",
+                        );
+                    }
+                }
             }
         }
     });
@@ -50,6 +75,7 @@ fn spawn_event_loop<F>(
 pub fn start_watcher<P: AsRef<Path> + Send + 'static, F>(
     db_path: String,
     vault_dir: P,
+    diagnostics: Option<Diagnostics>,
     on_change: F,
 ) -> Result<RecommendedWatcher, notify::Error>
 where
@@ -60,7 +86,7 @@ where
     let mut watcher = RecommendedWatcher::new(tx, Config::default())?;
     watcher.watch(vault_dir.as_ref(), RecursiveMode::Recursive)?;
 
-    spawn_event_loop(db_path, rx, on_change);
+    spawn_event_loop(db_path, rx, diagnostics, on_change);
 
     Ok(watcher)
 }
@@ -89,7 +115,7 @@ mod tests {
             .with_compare_contents(true);
         let mut watcher = PollWatcher::new(tx, config)?;
         watcher.watch(vault_dir, RecursiveMode::Recursive)?;
-        spawn_event_loop(db_path, rx, on_change);
+        spawn_event_loop(db_path, rx, None, on_change);
         Ok(watcher)
     }
 

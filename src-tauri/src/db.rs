@@ -419,6 +419,14 @@ pub fn boot_sweep<P: AsRef<Path>>(
     conn: &Connection,
     vault_dir: P,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    boot_sweep_with_diagnostics(conn, vault_dir, None)
+}
+
+pub fn boot_sweep_with_diagnostics<P: AsRef<Path>>(
+    conn: &Connection,
+    vault_dir: P,
+    diagnostics: Option<&crate::diagnostics::Diagnostics>,
+) -> Result<(), Box<dyn std::error::Error>> {
     let vault_path = vault_dir.as_ref();
     if !vault_path.exists() {
         fs::create_dir_all(vault_path)?;
@@ -437,8 +445,10 @@ pub fn boot_sweep<P: AsRef<Path>>(
 
     // 3. Index new or modified files
     for file_path in &fs_files {
-        if let Err(e) = index_single_file(conn, file_path) {
-            eprintln!("Error indexing file {}: {}", file_path, e);
+        if index_single_file(conn, file_path).is_err() {
+            if let Some(diagnostics) = diagnostics {
+                diagnostics.error("index.file_failed", "A Markdown file could not be indexed.");
+            }
         }
     }
 

@@ -26,7 +26,7 @@ This document contains planned work. Items here are not current capabilities or 
 - [x] Reduce Tauri features and permissions to the minimum required.
 - [x] Use typed, versioned configuration in platform application directories and migrate legacy dotfiles.
 - [x] Replace the leaked startup watcher with a managed, reconfigurable watcher service.
-- Add structured local diagnostics with sensitive-data redaction and no telemetry by default.
+- [x] Add structured local diagnostics with sensitive-data redaction and no telemetry by default.
 
 ## Incremental Organization
 

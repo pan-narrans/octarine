@@ -41,6 +41,8 @@ The webview allowlist disables blanket Tauri API access. Its only optional nativ
 
 Configuration is a typed, versioned JSON document stored under the platform configuration directory for `com.octarine.app`. On first use, values from the legacy `~/.octarine_config.json` file are imported without deleting the original. Vault and journal environment overrides are applied independently at runtime and are not persisted.
 
+Native operational diagnostics are written locally as capped JSON Lines in `diagnostics.jsonl` beside the platform configuration. Events contain a timestamp, severity, stable event code, and static redacted message; note contents, queries, and filesystem paths are not recorded. The application has no diagnostic upload or telemetry path.
+
 ## Parser
 
 `src-tauri/src/parser.rs` is a Rust source-preserving structural scanner. It tracks lines, indentation, fenced code blocks, and comments, then extracts constrained inline metadata with regular expressions. It is not currently a CommonMark AST parser.
@@ -81,6 +83,6 @@ The compiler validates a complete expression tree and emits SQL made from allowl
 - Tauri commands, services, domain logic, and infrastructure are not yet separated into explicit boundaries.
 - IPC types are duplicated manually between Rust and TypeScript.
 - The disposable SQLite cache still uses a home-directory dotfile rather than a platform application-data directory.
-- Logging and user-facing errors are inconsistent.
+- User-facing errors are inconsistent.
 
 These are migration targets, not requirements to refactor unrelated code. New work should follow `CONTRIBUTING.md` and the staged roadmap.
