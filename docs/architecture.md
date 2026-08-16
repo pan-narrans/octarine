@@ -37,6 +37,8 @@ The frontend calls Tauri commands with `invoke` and listens for `vault-changed` 
 
 Commands accept path strings from the frontend but authorize them in Rust before filesystem access. Existing paths and destination parents are canonicalized and constrained to the configured vault or journal capability root. Task and vault-tree mutations are vault-only; content reads and writes may address either root. Traversal, root mutation, and symlink escapes are rejected.
 
+The webview allowlist disables blanket Tauri API access. Its only optional native API permission is opening validated HTTP or HTTPS links; command invocation and application events use Tauri's core IPC boundary.
+
 ## Parser
 
 `src-tauri/src/parser.rs` is a Rust source-preserving structural scanner. It tracks lines, indentation, fenced code blocks, and comments, then extracts constrained inline metadata with regular expressions. It is not currently a CommonMark AST parser.
