@@ -3,7 +3,9 @@ import { Task, CustomView, isTask, isCustomView } from "../types";
 import {
   getCustomViews,
   getTasks,
+  isWriteConflict,
   updateTaskStatus as updateTaskStatusOnDisk,
+  writeErrorMessage,
 } from "../features/tasks/ipc";
 
 interface TaskState {
@@ -77,7 +79,8 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       // Re-fetch immediately to align with the new cached/written state!
       await get().fetchTasks();
     } catch (e: unknown) {
-      set({ error: e instanceof Error ? e.message : String(e), loading: false });
+      if (isWriteConflict(e)) await get().fetchTasks();
+      set({ error: writeErrorMessage(e), loading: false });
     }
   },
 }));

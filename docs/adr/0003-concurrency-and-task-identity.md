@@ -6,7 +6,7 @@ Approved
 
 ## Implementation Status
 
-Partial. Commands provide the original source block, location/content hashes and ambiguity-aware nearby source matching exist, file replacement is atomic, and write commands return structured conflict codes. The frontend does not yet present every conflict through the warning-and-refresh interaction described below.
+Implemented. Commands provide the original source block, location/content hashes and ambiguity-aware nearby source matching exist, file replacement is atomic, and write commands return structured conflict codes. Frontend task-edit paths decode conflicts, refresh from the authoritative source, and present the safe failure message.
 
 ## Context
 

@@ -26,7 +26,12 @@ import {
 } from "lucide-react";
 import { open } from "@tauri-apps/api/shell";
 import { listen } from "@tauri-apps/api/event";
-import { updateEventSchedule, updateTaskMarkdown } from "./features/tasks/ipc";
+import {
+  isWriteConflict,
+  updateEventSchedule,
+  updateTaskMarkdown,
+  writeErrorMessage,
+} from "./features/tasks/ipc";
 import {
   createDirectory,
   createFile,
@@ -264,7 +269,11 @@ export function App() {
       await fetchTasks();
     } catch (e) {
       console.error("Failed to update task inline:", e);
-      alert(`Error saving task: ${e}`);
+      if (isWriteConflict(e)) {
+        setEditingTaskHash(null);
+        await fetchTasks();
+      }
+      alert(`Error saving task: ${writeErrorMessage(e)}`);
     }
   };
 
@@ -775,7 +784,11 @@ export function App() {
       fetchTasks(); // Reload local store dynamically
     } catch (e) {
       console.error("Failed to update event schedule:", e);
-      alert(`Error saving schedule: ${e}`);
+      if (isWriteConflict(e)) {
+        setEditingEventHash(null);
+        await fetchTasks();
+      }
+      alert(`Error saving schedule: ${writeErrorMessage(e)}`);
     }
   };
 
@@ -1292,7 +1305,11 @@ export function App() {
                 await fetchTasks();
               } catch (e) {
                 console.error("Failed to save full task modal:", e);
-                alert(`Error saving task: ${e}`);
+                if (isWriteConflict(e)) {
+                  setModalTask(null);
+                  await fetchTasks();
+                }
+                alert(`Error saving task: ${writeErrorMessage(e)}`);
               }
             }}
             projects={projects}

@@ -1,4 +1,36 @@
 import { invoke } from "@tauri-apps/api/tauri";
+import type { WriteError, WriteErrorCode } from "../../types";
+
+const CONFLICT_CODES: ReadonlySet<WriteErrorCode> = new Set([
+  "source_missing",
+  "source_changed",
+  "source_ambiguous",
+]);
+
+export function parseWriteError(error: unknown): WriteError | null {
+  if (typeof error !== "object" || error === null) return null;
+  const candidate = error as Record<string, unknown>;
+  if (typeof candidate.code !== "string" || typeof candidate.message !== "string") return null;
+  const knownCodes: ReadonlySet<string> = new Set([
+    ...CONFLICT_CODES,
+    "invalid_source",
+    "operation_failed",
+  ]);
+  return knownCodes.has(candidate.code)
+    ? ({ code: candidate.code, message: candidate.message } as WriteError)
+    : null;
+}
+
+export function isWriteConflict(error: unknown): boolean {
+  const parsed = parseWriteError(error);
+  return parsed !== null && CONFLICT_CODES.has(parsed.code);
+}
+
+export function writeErrorMessage(error: unknown): string {
+  return (
+    parseWriteError(error)?.message ?? (error instanceof Error ? error.message : String(error))
+  );
+}
 
 export function getTasks(filter: string | null): Promise<unknown> {
   return invoke("get_tasks", { filter });
