@@ -19,7 +19,7 @@ A worktree is an ownership boundary. At most one writing agent may own a worktre
 
 ## Current Git Model
 
-Before the first production deployment, `master` is the integration branch. Short-lived branches target `master` and use one of these forms:
+`develop` is the integration branch. Short-lived branches target `develop` and use one of these forms:
 
 - `feature/<issue>-<slug>`
 - `fix/<issue>-<slug>`
@@ -31,7 +31,7 @@ Before the first production deployment, `master` is the integration branch. Shor
 
 Omit the issue number when no issue exists. Short-lived task branches are squash-merged. See `docs/development/git.md`.
 
-Before the first production deployment, adopt the develop/release model described in `docs/roadmap.md`. From that point, `master` must represent production.
+`master` remains unchanged until the first production deployment. Releases stabilize on `release/<version>` from `develop`; after verification, the release is merged into `master`, tagged, and built. From that first deployment onward, `master` represents production.
 
 ## Verification
 

@@ -47,8 +47,8 @@ Performance numbers, platform support, encryption, and synchronization must not 
 
 Before the first production deployment:
 
-1. Create `develop` from the verified integration state.
-2. Target ongoing feature work at `develop`.
+1. [x] Create `develop` from the verified integration state.
+2. [x] Target ongoing feature work at `develop`.
 3. Stabilize a release on `release/<version>`.
 4. Run the complete release suite and update synchronized versions and `CHANGELOG.md`.
 5. Merge the verified release into `master`.

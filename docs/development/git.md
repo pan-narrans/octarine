@@ -17,9 +17,9 @@ Agents must not create or remove branches or worktrees, commit, amend, rebase, m
 - Initialize `.agents` after creating a worktree with `git submodule update --init --recursive`.
 - Remove a worktree only after its work is integrated or explicitly abandoned.
 
-## Branches Before First Production Deployment
+## Current Branch Model
 
-`master` is the integration branch. Short-lived branches target `master`:
+`develop` is the integration branch. Short-lived branches target `develop`:
 
 | Purpose           | Format                   | Example                      |
 | ----------------- | ------------------------ | ---------------------------- |
@@ -33,7 +33,7 @@ Agents must not create or remove branches or worktrees, commit, amend, rebase, m
 
 Use lowercase words separated by hyphens. Include the issue number when one exists; otherwise omit it.
 
-Before the first production deployment, activate the develop/release model in `../roadmap.md`. After that transition, `master` represents production.
+`master` remains unchanged until the first production deployment. A verified `release/<version>` branch is merged into `master`, tagged, and built; from that transition onward, `master` represents production. Hotfixes then branch from `master` and are merged back into both `master` and `develop`.
 
 ## Commits
 
