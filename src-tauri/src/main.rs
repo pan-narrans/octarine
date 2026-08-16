@@ -3,8 +3,8 @@
     windows_subsystem = "windows"
 )]
 
-use notify::RecommendedWatcher;
-use octarine::config::{expand_home, load_or_migrate_config, save_config, AppConfig};
+use octarine::app_state::AppState;
+use octarine::config::{expand_home, load_or_migrate_config, save_config};
 use octarine::db::{
     boot_sweep_with_diagnostics, delete_file, index_single_file, initialize_db, query_tasks,
 };
@@ -18,41 +18,10 @@ use octarine::path_security::{
     canonicalize_root, resolve_child_within, resolve_existing_within, resolve_new_within,
 };
 use octarine::query_dsl::compile_filter_to_sql;
-use octarine::watcher::start_watcher;
+use octarine::watcher_service::build_vault_watcher;
 use octarine::writer::{update_task_status_in_file, WriteError};
-use rusqlite::Connection;
-use std::path::PathBuf;
-use std::sync::Mutex;
 use tauri::Manager;
 use tauri::State;
-
-struct AppState {
-    db: Mutex<Connection>,
-    db_path: String,
-    vault_dir: Mutex<String>,
-    journal_dir: Mutex<String>,
-    config: Mutex<AppConfig>,
-    config_path: PathBuf,
-    watcher: Mutex<Option<RecommendedWatcher>>,
-    diagnostics: Diagnostics,
-}
-
-fn build_vault_watcher(
-    db_path: &str,
-    vault_dir: &str,
-    app: tauri::AppHandle,
-    diagnostics: Diagnostics,
-) -> Result<RecommendedWatcher, String> {
-    start_watcher(
-        db_path.to_string(),
-        vault_dir.to_string(),
-        Some(diagnostics),
-        move || {
-            let _ = app.emit_all("vault-changed", ());
-        },
-    )
-    .map_err(|e| format!("Failed to watch configured vault: {e}"))
-}
 
 fn resolve_vault_path(
     state: &State<'_, AppState>,
@@ -412,16 +381,15 @@ fn main() {
         .expect("failed to run boot sweep");
     diagnostics.info("app.started", "Octarine started.");
 
-    let mut builder = tauri::Builder::default().manage(AppState {
-        db: Mutex::new(conn),
-        db_path: db_path.clone(),
-        vault_dir: Mutex::new(vault_dir.clone()),
-        journal_dir: Mutex::new(journal_dir.clone()),
-        config: Mutex::new(config),
+    let mut builder = tauri::Builder::default().manage(AppState::new(
+        conn,
+        db_path.clone(),
+        vault_dir.clone(),
+        journal_dir.clone(),
+        config,
         config_path,
-        watcher: Mutex::new(None),
         diagnostics,
-    });
+    ));
 
     builder = builder.invoke_handler(tauri::generate_handler![
         get_tasks,

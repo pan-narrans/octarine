@@ -1,3 +1,4 @@
+pub mod app_state;
 pub mod config;
 pub mod db;
 pub mod diagnostics;
@@ -6,6 +7,7 @@ pub mod parser;
 pub mod path_security;
 pub mod query_dsl;
 pub mod watcher;
+pub mod watcher_service;
 pub mod writer;
 
 /// The central whitelisted character bracket class representing valid checklist status markers.

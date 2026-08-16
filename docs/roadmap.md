@@ -31,7 +31,7 @@ This document contains planned work. Items here are not current capabilities or 
 ## Incremental Organization
 
 - [x] Move the frontend toward feature-owned modules and typed IPC adapters.
-- Move the backend toward command, service, domain, infrastructure, and startup boundaries.
+- [x] Move the backend toward command, service, domain, infrastructure, and startup boundaries.
 - Extract code as affected features change; avoid a standalone wholesale rewrite.
 
 ## Product Roadmap

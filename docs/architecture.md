@@ -33,7 +33,7 @@ Feature-owned adapters under `src/features/*/ipc.ts` are the only frontend modul
 
 ## Tauri Command Boundary
 
-`src-tauri/src/main.rs` owns startup, application state, and command registration. Commands expose task queries and mutations, configuration, file operations, directory trees, and journal trees.
+`src-tauri/src/main.rs` owns startup and command registration. `app_state.rs` owns the shared runtime resources, while `watcher_service.rs` owns watcher construction and frontend event wiring. Commands expose task queries and mutations, configuration, file operations, directory trees, and journal trees; parser, writer, query, database, configuration, diagnostics, watcher, and filesystem modules provide the domain and infrastructure behavior behind them.
 
 Commands accept path strings from the frontend but authorize them in Rust before filesystem access. Existing paths and destination parents are canonicalized and constrained to the configured vault or journal capability root. Task and vault-tree mutations are vault-only; content reads and writes may address either root. Traversal, root mutation, and symlink escapes are rejected.
 
@@ -80,7 +80,7 @@ The compiler validates a complete expression tree and emits SQL made from allowl
 ## Current Structural Limitations
 
 - `App.tsx` contains several product features and substantial local state.
-- Tauri commands, services, domain logic, and infrastructure are not yet separated into explicit boundaries.
+- Tauri commands remain registered in the startup shell rather than feature-specific command modules.
 - IPC types are duplicated manually between Rust and TypeScript.
 - The disposable SQLite cache still uses a home-directory dotfile rather than a platform application-data directory.
 - User-facing errors are inconsistent.
