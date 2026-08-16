@@ -1,3 +1,4 @@
+pub mod config;
 pub mod db;
 pub mod file_ops;
 pub mod parser;
