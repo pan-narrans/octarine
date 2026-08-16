@@ -53,7 +53,7 @@ cargo clippy --all-targets -- -D warnings
 cargo test
 ```
 
-Run `npm run ipc:generate` after changing a shared Rust DTO and commit the generated files. These commands are green locally. CI enforcement remains roadmap work; do not describe a planned CI check as enforced until it exists. See `docs/development/testing.md` for scope-aware verification.
+Run `npm run ipc:generate` after changing a shared Rust DTO and commit the generated files. These commands are enforced by the `Quality` workflow for pull requests targeting `develop` or `master`, and on pushes to `develop`. See `docs/development/testing.md` for scope-aware verification.
 
 ## Architectural Invariants
 

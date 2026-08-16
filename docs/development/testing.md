@@ -42,4 +42,6 @@ Every change:
 - Reviews the final diff.
 - Reports checks, failures, assumptions, and remaining risks.
 
+The GitHub Actions `Quality` workflow runs the complete frontend, generated-contract, and Rust gates for pull requests targeting `develop` or `master`, and for pushes to `develop`. Local verification remains required before opening a pull request.
+
 Commits and external actions remain subject to explicit authorization; they are not part of the default definition of done.

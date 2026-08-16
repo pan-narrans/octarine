@@ -8,7 +8,7 @@ This document contains planned work. Items here are not current capabilities or 
 - [x] Make Rust formatting, Clippy, and tests green.
 - [x] Configure ESLint and Prettier and make their checks green.
 - [x] Pin Node and Rust toolchains.
-- Add pull-request CI after local gates pass.
+- [x] Add pull-request CI after local gates pass.
 
 ## Core Correctness
 
