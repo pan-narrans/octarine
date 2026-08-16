@@ -1,6 +1,7 @@
 pub mod db;
 pub mod file_ops;
 pub mod parser;
+pub mod path_security;
 pub mod query_dsl;
 pub mod watcher;
 pub mod writer;

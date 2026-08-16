@@ -6,7 +6,7 @@ These rules preserve lessons learned from concrete failures. They are project-sp
 
 Filesystem scans and native watcher events can represent the same file differently. Canonicalize paths before database comparison, indexing, or mutation so one source file cannot create duplicate cache records.
 
-Future path authorization must additionally ensure canonical paths remain inside the configured vault or journal root and must reject symlink escapes.
+Path authorization must ensure canonical paths remain inside the configured vault or journal root and reject traversal, capability-root mutation, and symlink escapes. New destinations must validate their existing canonical parent before creation or rename.
 
 ## Sanitize Metadata Extraction
 

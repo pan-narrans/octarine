@@ -22,7 +22,7 @@ This document contains planned work. Items here are not current capabilities or 
 
 ## Filesystem and Lifecycle Hardening
 
-- Enforce vault and journal directories as capability roots.
+- [x] Enforce vault and journal directories as capability roots.
 - Reduce Tauri features and permissions to the minimum required.
 - Use typed, versioned configuration in platform application directories and migrate legacy dotfiles.
 - Replace the leaked startup watcher with a managed, reconfigurable watcher service.

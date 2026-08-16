@@ -35,7 +35,7 @@ The frontend calls Tauri commands with `invoke` and listens for `vault-changed` 
 
 `src-tauri/src/main.rs` owns startup, application state, and command registration. Commands expose task queries and mutations, configuration, file operations, directory trees, and journal trees.
 
-The current commands accept path strings from the frontend. Complete validation against configured vault and journal roots is not yet centralized; this is a known security gap tracked in `roadmap.md`.
+Commands accept path strings from the frontend but authorize them in Rust before filesystem access. Existing paths and destination parents are canonicalized and constrained to the configured vault or journal capability root. Task and vault-tree mutations are vault-only; content reads and writes may address either root. Traversal, root mutation, and symlink escapes are rejected.
 
 ## Parser
 

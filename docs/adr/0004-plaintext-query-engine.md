@@ -6,7 +6,7 @@ Approved
 
 ## Implementation Status
 
-Partial. `tasks-query` blocks and a filter subset are implemented. Grouping, sorting, several documented operators/date forms, full grammar validation, and bound SQL parameters are not implemented. See `../specifications/query-dsl.md`.
+Partial. `tasks-query` blocks, a validated filter-expression tree, and bound SQL parameters are implemented. Grouping, sorting, and several proposed operators/date forms remain unimplemented. See `../specifications/query-dsl.md`.
 
 ## Context
 

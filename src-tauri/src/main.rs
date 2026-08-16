@@ -9,6 +9,9 @@ use octarine::file_ops::{
     rename_path_on_disk, scan_dir_tree, write_file_content_on_disk, FileNode,
 };
 use octarine::parser::{ParsedCustomView, ParsedTask};
+use octarine::path_security::{
+    canonicalize_root, resolve_child_within, resolve_existing_within, resolve_new_within,
+};
 use octarine::query_dsl::compile_filter_to_sql;
 use octarine::watcher::start_watcher;
 use octarine::writer::update_task_status_in_file;
@@ -22,6 +25,25 @@ struct AppState {
     _db_path: String,
     vault_dir: Mutex<String>,
     journal_dir: Mutex<String>,
+}
+
+fn resolve_vault_path(
+    state: &State<'_, AppState>,
+    path: &str,
+    allow_root: bool,
+) -> Result<String, String> {
+    let root = state.vault_dir.lock().unwrap();
+    resolve_existing_within(&*root, path, allow_root)
+        .map(|path| path.to_string_lossy().into_owned())
+}
+
+fn resolve_content_path(state: &State<'_, AppState>, path: &str) -> Result<String, String> {
+    let vault_root = state.vault_dir.lock().unwrap().clone();
+    let journal_root = state.journal_dir.lock().unwrap().clone();
+    resolve_existing_within(&vault_root, path, false)
+        .or_else(|_| resolve_existing_within(&journal_root, path, false))
+        .map(|path| path.to_string_lossy().into_owned())
+        .map_err(|_| "Path is outside the configured vault and journal roots.".to_string())
 }
 
 #[tauri::command]
@@ -69,6 +91,7 @@ fn update_task_status(
     original_raw_markdown: String,
     new_status: String,
 ) -> Result<(), String> {
+    let file_path = resolve_vault_path(&state, &file_path, false)?;
     update_task_status_in_file(&file_path, line_number, &original_raw_markdown, &new_status)?;
     let conn = state.db.lock().unwrap();
     index_single_file(&conn, &file_path).map_err(|e| e.to_string())?;
@@ -83,6 +106,7 @@ fn update_task_markdown(
     original_raw_markdown: String,
     new_raw_markdown: String,
 ) -> Result<(), String> {
+    let file_path = resolve_vault_path(&state, &file_path, false)?;
     octarine::writer::update_task_markdown_in_file(
         &file_path,
         line_number,
@@ -109,6 +133,7 @@ fn update_event_schedule(
     new_s_start: Option<String>,
     new_duration_secs: Option<i32>,
 ) -> Result<(), String> {
+    let file_path = resolve_vault_path(&state, &file_path, false)?;
     octarine::writer::update_event_schedule_in_file(
         &file_path,
         line_number,
@@ -134,6 +159,9 @@ fn set_vault_config(state: State<'_, AppState>, new_dir: String) -> Result<(), S
     // Ensure directory exists
     std::fs::create_dir_all(&resolved_dir)
         .map_err(|e| format!("Failed to create directory: {}", e))?;
+    resolved_dir = canonicalize_root(&resolved_dir)?
+        .to_string_lossy()
+        .into_owned();
 
     // Save to configuration file
     let mut config_json = if std::path::Path::new(&config_path).exists() {
@@ -189,6 +217,9 @@ fn set_journal_config(state: State<'_, AppState>, new_dir: String) -> Result<(),
     // Ensure directory exists
     std::fs::create_dir_all(&resolved_dir)
         .map_err(|e| format!("Failed to create directory: {}", e))?;
+    resolved_dir = canonicalize_root(&resolved_dir)?
+        .to_string_lossy()
+        .into_owned();
 
     // Save to configuration file
     let mut config_json = if std::path::Path::new(&config_path).exists() {
@@ -232,17 +263,32 @@ fn read_dir_tree(state: State<'_, AppState>) -> Result<FileNode, String> {
 }
 
 #[tauri::command]
-fn create_file(parent_dir: String, name: String) -> Result<String, String> {
-    create_file_on_disk(&parent_dir, &name)
+fn create_file(
+    state: State<'_, AppState>,
+    parent_dir: String,
+    name: String,
+) -> Result<String, String> {
+    let root = state.vault_dir.lock().unwrap();
+    let path = resolve_child_within(&*root, &parent_dir, &name)?;
+    let parent = path.parent().unwrap().to_string_lossy();
+    create_file_on_disk(&parent, &name)
 }
 
 #[tauri::command]
-fn create_directory(parent_dir: String, name: String) -> Result<String, String> {
-    create_directory_on_disk(&parent_dir, &name)
+fn create_directory(
+    state: State<'_, AppState>,
+    parent_dir: String,
+    name: String,
+) -> Result<String, String> {
+    let root = state.vault_dir.lock().unwrap();
+    let path = resolve_child_within(&*root, &parent_dir, &name)?;
+    let parent = path.parent().unwrap().to_string_lossy();
+    create_directory_on_disk(&parent, &name)
 }
 
 #[tauri::command]
 fn delete_path(state: State<'_, AppState>, path: String) -> Result<(), String> {
+    let path = resolve_vault_path(&state, &path, false)?;
     delete_path_on_disk(&path)?;
     let conn = state.db.lock().unwrap();
     delete_file(&conn, &path).map_err(|e| e.to_string())?;
@@ -255,6 +301,13 @@ fn rename_path(
     old_path: String,
     new_path: String,
 ) -> Result<(), String> {
+    let old_path = resolve_vault_path(&state, &old_path, false)?;
+    let new_path = {
+        let root = state.vault_dir.lock().unwrap();
+        resolve_new_within(&*root, &new_path)?
+            .to_string_lossy()
+            .into_owned()
+    };
     rename_path_on_disk(&old_path, &new_path)?;
     let conn = state.db.lock().unwrap();
 
@@ -271,7 +324,8 @@ fn rename_path(
 }
 
 #[tauri::command]
-fn read_file_content(path: String) -> Result<String, String> {
+fn read_file_content(state: State<'_, AppState>, path: String) -> Result<String, String> {
+    let path = resolve_content_path(&state, &path)?;
     read_file_content_on_disk(&path)
 }
 
@@ -281,6 +335,7 @@ fn write_file_content(
     path: String,
     content: String,
 ) -> Result<(), String> {
+    let path = resolve_content_path(&state, &path)?;
     write_file_content_on_disk(&path, &content)?;
     let conn = state.db.lock().unwrap();
     index_single_file(&conn, &path).map_err(|e| e.to_string())?;
@@ -347,6 +402,14 @@ fn main() {
     // Ensure the resolved directories physically exist on disk
     std::fs::create_dir_all(&vault_dir).expect("failed to create vault directory");
     std::fs::create_dir_all(&journal_dir).expect("failed to create journal directory");
+    vault_dir = canonicalize_root(&vault_dir)
+        .expect("failed to resolve vault directory")
+        .to_string_lossy()
+        .into_owned();
+    journal_dir = canonicalize_root(&journal_dir)
+        .expect("failed to resolve journal directory")
+        .to_string_lossy()
+        .into_owned();
 
     let conn = initialize_db(&db_path).expect("failed to initialize SQLite Cache database");
 
