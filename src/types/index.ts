@@ -1,29 +1,15 @@
-export interface Task {
-  line_number: number;
-  raw_markdown: string;
-  hash: string;
+import type { FileNode as GeneratedFileNode } from "../generated/ipc/FileNode";
+import type { ParsedCustomView } from "../generated/ipc/ParsedCustomView";
+import type { ParsedTask } from "../generated/ipc/ParsedTask";
+
+export type Task = Omit<ParsedTask, "status" | "task_type"> & {
   status: "todo" | "doing" | "done" | "cancelled";
   task_type: "task" | "event";
-  description: string;
-  project: string | null;
-  due_date: string | null;
-  s_start: string | null;
-  duration_secs: number | null;
-  recurring: string | null;
-  when_done: string | null;
-  parse_errors: string | null;
-  priority: number | null;
-  parent_hash: string | null;
-  file_path: string | null;
-  tags: string[];
-  contexts: string[];
-}
-
-export interface CustomView {
-  line_number: number;
-  title: string;
-  query_raw: string;
-}
+};
+export type CustomView = ParsedCustomView;
+export type FileNode = GeneratedFileNode;
+export type { WriteError } from "../generated/ipc/WriteError";
+export type { WriteErrorCode } from "../generated/ipc/WriteErrorCode";
 
 // Type guard to validate a Task payload from Tauri
 export function isTask(payload: unknown): payload is Task {
@@ -56,11 +42,4 @@ export function isCustomView(payload: unknown): payload is CustomView {
     typeof p.title === "string" &&
     typeof p.query_raw === "string"
   );
-}
-
-export interface FileNode {
-  name: string;
-  path: string;
-  is_dir: boolean;
-  children: FileNode[] | null;
 }

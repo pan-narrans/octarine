@@ -12,6 +12,8 @@
     "preview": "vite preview",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
+    "ipc:generate": "cargo test --manifest-path src-tauri/Cargo.toml export_bindings -- --ignored && prettier --write src/generated/ipc",
+    "ipc:check": "npm run ipc:generate && git diff --exit-code -- src/generated/ipc",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

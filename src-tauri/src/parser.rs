@@ -96,7 +96,7 @@ fn get_duration_re() -> &'static Regex {
     DURATION_RE.get_or_init(|| Regex::new(r"^(?:(\d+)h)?(?:(\d+)m)?$").unwrap())
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, ts_rs::TS)]
 pub struct ParsedTask {
     pub line_number: usize, // 1-based index
     pub raw_markdown: String,
@@ -118,7 +118,7 @@ pub struct ParsedTask {
     pub parent_hash: Option<String>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, ts_rs::TS)]
 pub struct ParsedCustomView {
     pub line_number: usize, // 1-based index
     pub title: String,

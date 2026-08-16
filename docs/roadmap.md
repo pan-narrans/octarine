@@ -13,7 +13,7 @@ This document contains planned work. Items here are not current capabilities or 
 ## Core Correctness
 
 - [x] Return complete task metadata from Rust and remove frontend reparsing.
-- Generate TypeScript IPC contracts from Rust DTOs.
+- [x] Generate TypeScript IPC contracts from Rust DTOs.
 - [x] Make source edits independent of SQLite cache timing and atomically replace files.
 - [x] Reject ambiguous source-match fallbacks.
 - [x] Return structured write conflicts.

@@ -9,7 +9,7 @@ use std::sync::OnceLock;
 static CHECKBOX_SUB_RE: OnceLock<Regex> = OnceLock::new();
 static STRIP_CHECKBOX_RE: OnceLock<Regex> = OnceLock::new();
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "snake_case")]
 pub enum WriteErrorCode {
     SourceMissing,
@@ -19,7 +19,7 @@ pub enum WriteErrorCode {
     OperationFailed,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ts_rs::TS)]
 pub struct WriteError {
     pub code: WriteErrorCode,
     pub message: &'static str,

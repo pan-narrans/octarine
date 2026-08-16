@@ -38,6 +38,7 @@ Before the first production deployment, adopt the develop/release model describe
 The required frontend gate is:
 
 ```bash
+npm run ipc:check
 npm run format:check
 npm run lint
 npm run build
@@ -52,7 +53,7 @@ cargo clippy --all-targets -- -D warnings
 cargo test
 ```
 
-These commands are green locally. CI enforcement remains roadmap work; do not describe a planned CI check as enforced until it exists. See `docs/development/testing.md` for scope-aware verification.
+Run `npm run ipc:generate` after changing a shared Rust DTO and commit the generated files. These commands are green locally. CI enforcement remains roadmap work; do not describe a planned CI check as enforced until it exists. See `docs/development/testing.md` for scope-aware verification.
 
 ## Architectural Invariants
 

@@ -4,7 +4,7 @@ use std::io::Write;
 use std::path::Path;
 use tempfile::NamedTempFile;
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ts_rs::TS)]
 pub struct FileNode {
     pub name: String,
     pub path: String,
