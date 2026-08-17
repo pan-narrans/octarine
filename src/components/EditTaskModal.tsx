@@ -67,19 +67,6 @@ const PillInput = ({
   return (
     <div className="form-group" style={{ marginBottom: "1rem" }}>
       <label>{type.toUpperCase()}S</label>
-      <div
-        className="metadata-container"
-        style={{ marginBottom: items.length > 0 ? "0.5rem" : "0" }}
-      >
-        {items.map((item) => (
-          <span key={item} className={`pill ${type}`}>
-            {item}{" "}
-            <button onClick={() => onRemove(item)} className="pill-remove">
-              <X size={12} />
-            </button>
-          </span>
-        ))}
-      </div>
       <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
         <span style={{ color: "var(--text-muted)", fontWeight: 600 }}>{prefix}</span>
         <input
@@ -98,6 +85,18 @@ const PillInput = ({
           placeholder={`Add ${type}... (Press Enter)`}
         />
       </div>
+      {items.length > 0 && (
+        <div className="metadata-container" style={{ marginTop: "0.5rem" }}>
+          {items.map((item) => (
+            <span key={item} className={`pill ${type}`}>
+              {item}{" "}
+              <button onClick={() => onRemove(item)} className="pill-remove">
+                <X size={12} />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
