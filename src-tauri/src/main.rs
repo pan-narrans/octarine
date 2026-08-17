@@ -19,7 +19,7 @@ use octarine::path_security::{
 };
 use octarine::query_dsl::compile_filter_to_sql;
 use octarine::watcher_service::build_vault_watcher;
-use octarine::writer::{update_task_status_in_file, WriteError};
+use octarine::writer::{delete_task_markdown_in_file, update_task_status_in_file, WriteError};
 use tauri::Manager;
 use tauri::State;
 
@@ -111,6 +111,21 @@ fn update_task_markdown(
         &original_raw_markdown,
         &new_raw_markdown,
     )?;
+    let conn = state.db.lock().unwrap();
+    index_single_file(&conn, &file_path).map_err(|_| WriteError::operation_failed())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn delete_task_markdown(
+    state: State<'_, AppState>,
+    file_path: String,
+    line_number: usize,
+    original_raw_markdown: String,
+) -> Result<(), WriteError> {
+    let file_path = resolve_vault_path(&state, &file_path, false)
+        .map_err(|_| WriteError::operation_failed())?;
+    delete_task_markdown_in_file(&file_path, line_number, &original_raw_markdown)?;
     let conn = state.db.lock().unwrap();
     index_single_file(&conn, &file_path).map_err(|_| WriteError::operation_failed())?;
     Ok(())
@@ -410,6 +425,7 @@ fn main() {
         update_event_schedule,
         update_task_status,
         update_task_markdown,
+        delete_task_markdown,
         read_dir_tree,
         create_file,
         create_directory,

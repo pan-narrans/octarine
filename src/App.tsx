@@ -28,6 +28,7 @@ import { open } from "@tauri-apps/api/shell";
 import { listen } from "@tauri-apps/api/event";
 import {
   isWriteConflict,
+  deleteTaskMarkdown,
   updateEventSchedule,
   updateTaskMarkdown,
   writeErrorMessage,
@@ -241,6 +242,21 @@ export function App() {
   const projects = Array.from(new Set(tasks.map((t) => t.project).filter((p): p is string => !!p)));
   const contexts = Array.from(new Set(tasks.flatMap((task) => task.contexts)));
   const tags = Array.from(new Set(tasks.flatMap((task) => task.tags)));
+
+  const getTaskMarkdownHierarchy = (task: Task) => {
+    const descendants: Task[] = [];
+    const collect = (parentHash: string) => {
+      tasks
+        .filter((candidate) => candidate.parent_hash === parentHash)
+        .sort((a, b) => a.line_number - b.line_number)
+        .forEach((child) => {
+          descendants.push(child);
+          collect(child.hash);
+        });
+    };
+    collect(task.hash);
+    return [task.raw_markdown, ...descendants.map((child) => child.raw_markdown)].join("\n");
+  };
 
   // Cyclic checklist status toggler: todo -> doing -> done -> cancelled -> todo
   const handleCheckboxClick = async (e: React.MouseEvent, task: Task) => {
@@ -1299,7 +1315,8 @@ export function App() {
                 await updateTaskMarkdown(
                   modalTask.file_path || "",
                   modalTask.line_number,
-                  modalTask.raw_markdown,
+                  tasks.find((task) => task.hash === modalTask.hash)?.raw_markdown ??
+                    modalTask.raw_markdown,
                   newRawMarkdown.trim(),
                 );
                 await fetchTasks();
@@ -1310,10 +1327,27 @@ export function App() {
                   await fetchTasks();
                 }
                 alert(`Error saving task: ${writeErrorMessage(e)}`);
+                throw e;
               }
             }}
-            projects={projects}
-            contexts={contexts}
+            onDelete={async () => {
+              try {
+                await deleteTaskMarkdown(
+                  modalTask.file_path || "",
+                  modalTask.line_number,
+                  tasks.find((task) => task.hash === modalTask.hash)?.raw_markdown ??
+                    modalTask.raw_markdown,
+                );
+                await fetchTasks();
+              } catch (e) {
+                if (isWriteConflict(e)) {
+                  setModalTask(null);
+                  await fetchTasks();
+                }
+                alert(`Error deleting task: ${writeErrorMessage(e)}`);
+                throw e;
+              }
+            }}
           />
         )}
 
@@ -1723,7 +1757,10 @@ export function App() {
                                       title="Edit Details"
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        setModalTask(task);
+                                        setModalTask({
+                                          ...task,
+                                          raw_markdown: getTaskMarkdownHierarchy(task),
+                                        });
                                       }}
                                     >
                                       <Pencil size={14} />
@@ -1985,7 +2022,10 @@ export function App() {
                               title="Edit Details"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setModalTask(task);
+                                setModalTask({
+                                  ...task,
+                                  raw_markdown: getTaskMarkdownHierarchy(task),
+                                });
                               }}
                             >
                               <Pencil size={14} />

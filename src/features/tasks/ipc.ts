@@ -68,6 +68,14 @@ export function updateTaskMarkdown(
   });
 }
 
+export function deleteTaskMarkdown(
+  filePath: string,
+  lineNumber: number,
+  originalRawMarkdown: string,
+): Promise<void> {
+  return invoke("delete_task_markdown", { filePath, lineNumber, originalRawMarkdown });
+}
+
 export function updateEventSchedule(
   filePath: string,
   lineNumber: number,

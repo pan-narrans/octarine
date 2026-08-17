@@ -297,7 +297,21 @@ pub fn update_task_markdown_in_file(
 
     let start_idx = locate_source_block(&lines, original_line_number, &original_block_lines)?;
 
-    let end_idx = start_idx + original_block_lines.len();
+    let parent_indent = lines[start_idx]
+        .chars()
+        .take_while(|c| c.is_whitespace())
+        .count();
+    let mut end_idx = start_idx + original_block_lines.len();
+    while end_idx < lines.len() {
+        let line = &lines[end_idx];
+        if line.trim().is_empty()
+            || line.chars().take_while(|c| c.is_whitespace()).count() > parent_indent
+        {
+            end_idx += 1;
+        } else {
+            break;
+        }
+    }
 
     // 4. Splice the new lines into the vector
     let new_block_lines: Vec<String> = new_raw_markdown
@@ -309,6 +323,35 @@ pub fn update_task_markdown_in_file(
     let updated_content = lines.join("\n");
     write_file_content_on_disk(file_path, &updated_content)?;
 
+    Ok(())
+}
+
+pub fn delete_task_markdown_in_file(
+    file_path: &str,
+    original_line_number: usize,
+    original_raw_markdown: &str,
+) -> Result<(), WriteError> {
+    let content = fs::read_to_string(file_path).map_err(|_| WriteError::source_missing())?;
+    let mut lines: Vec<String> = content.split('\n').map(str::to_string).collect();
+    let original_lines: Vec<&str> = original_raw_markdown.lines().collect();
+    let start_idx = locate_source_block(&lines, original_line_number, &original_lines)?;
+    let parent_indent = lines[start_idx]
+        .chars()
+        .take_while(|c| c.is_whitespace())
+        .count();
+    let mut end_idx = start_idx + original_lines.len();
+    while end_idx < lines.len() {
+        let line = &lines[end_idx];
+        if line.trim().is_empty()
+            || line.chars().take_while(|c| c.is_whitespace()).count() > parent_indent
+        {
+            end_idx += 1;
+        } else {
+            break;
+        }
+    }
+    lines.drain(start_idx..end_idx);
+    write_file_content_on_disk(file_path, &lines.join("\n"))?;
     Ok(())
 }
 
@@ -541,6 +584,32 @@ mod tests {
 
         let content_after = fs::read_to_string(&file_path).unwrap();
         assert!(content_after.contains("- [ ] (A) Implement inline editing @db due:2026-07-24"));
+    }
+
+    #[test]
+    fn test_update_parent_replaces_existing_subtask_hierarchy() {
+        let temp_dir = tempdir().unwrap();
+        let file_path = temp_dir.path().join("tasks.md");
+        fs::write(
+            &file_path,
+            "- [ ] Parent\n    - [ ] Old child\n        - [ ] Old grandchild\n- [ ] Following task\n",
+        )
+        .unwrap();
+
+        update_task_markdown_in_file(
+            file_path.to_str().unwrap(),
+            1,
+            "- [ ] Parent",
+            "- [ ] Parent updated\n    - [ ] Replacement child",
+        )
+        .unwrap();
+
+        let content = fs::read_to_string(&file_path).unwrap();
+        assert!(content.contains("Parent updated"));
+        assert!(content.contains("Replacement child"));
+        assert!(!content.contains("Old child"));
+        assert!(!content.contains("Old grandchild"));
+        assert!(content.contains("Following task"));
     }
 
     #[test]
