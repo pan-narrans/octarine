@@ -30,6 +30,10 @@ function metadataValue(header: string, key: "due" | "dur" | "recurring") {
   return match ? (match[1] ?? match[2] ?? match[3] ?? "") : "";
 }
 
+function displayDescription(lines: string[]) {
+  return lines.map((line) => line.replace(/^\s*-\s?/, "")).join("\n");
+}
+
 export function EditTaskModal({ task, onClose, onSave, onDelete }: EditTaskModalProps) {
   const [rawMarkdown, setRawMarkdown] = useState(task.raw_markdown);
   const [showMarkdown, setShowMarkdown] = useState(false);
@@ -50,22 +54,42 @@ export function EditTaskModal({ task, onClose, onSave, onDelete }: EditTaskModal
     .replace(/\([A-Da-d]\)\s*/g, "")
     .replace(METADATA, "")
     .trim();
-  const descLines: string[] = [];
-  const subtaskLines: Array<{ prefix: string; text: string; depth: number }> = [];
-  for (const line of lines.slice(1)) {
+  const parentDescriptionIndexes: number[] = [];
+  const subtaskLines: Array<{
+    prefix: string;
+    text: string;
+    depth: number;
+    lineIndex: number;
+    descriptionIndexes: number[];
+  }> = [];
+  const stack: Array<{ depth: number; subtask?: number }> = [{ depth: 0 }];
+  lines.slice(1).forEach((line, offset) => {
+    const lineIndex = offset + 1;
     const match = line.match(/^(\s*[-*+]\s+\[.*?\]\s*)(.*)$/);
+    const depth = line.match(/^\s*/)?.[0].length ?? 0;
     if (match) {
+      while (stack.length > 1 && stack[stack.length - 1].depth >= depth) stack.pop();
       subtaskLines.push({
         prefix: match[1],
         text: match[2],
-        depth: match[1].match(/^\s*/)?.[0].length ?? 0,
+        depth,
+        lineIndex,
+        descriptionIndexes: [],
       });
+      stack.push({ depth, subtask: subtaskLines.length - 1 });
     } else {
-      descLines.push(line);
+      const owner = [...stack]
+        .reverse()
+        .find((entry) => entry.subtask !== undefined && entry.depth < depth);
+      const previousSubtask = subtaskLines[subtaskLines.length - 1];
+      const fallbackOwner =
+        previousSubtask && previousSubtask.depth === depth ? previousSubtask : undefined;
+      const subtask = owner?.subtask === undefined ? fallbackOwner : subtaskLines[owner.subtask];
+      if (!subtask) parentDescriptionIndexes.push(lineIndex);
+      else subtask.descriptionIndexes.push(lineIndex);
     }
-  }
-  const rawSubtasks = () => subtaskLines.map((subtask) => `${subtask.prefix}${subtask.text}`);
-  const description = descLines.join("\n");
+  });
+  const description = displayDescription(parentDescriptionIndexes.map((index) => lines[index]));
   const updateHeader = (updater: (header: string) => string) =>
     setRawMarkdown((previous) => {
       const next = previous.split("\n");
@@ -84,16 +108,28 @@ export function EditTaskModal({ task, onClose, onSave, onDelete }: EditTaskModal
         ? header.replace(/^(\s*[-*+]\s+\[)(.)(\])/, `$1${value}$3`)
         : `- [${value}] ${header}`,
     );
-  const updateDescription = (value: string) =>
-    setRawMarkdown([headerLine, ...(value ? value.split("\n") : []), ...rawSubtasks()].join("\n"));
+  const updateDescription = (
+    indexes: number[],
+    value: string,
+    depth = 0,
+    insertionIndex?: number,
+  ) =>
+    setRawMarkdown((previous) => {
+      const next = previous.split("\n");
+      const replacement = value
+        ? value.split("\n").map((line) => (line ? `${" ".repeat(depth + 2)}- ${line}` : ""))
+        : [];
+      const start = indexes[0] ?? insertionIndex ?? (depth === 0 ? 1 : next.length);
+      const end = indexes.length ? indexes[indexes.length - 1] + 1 : start;
+      next.splice(start, end - start, ...replacement);
+      return next.join("\n");
+    });
   const updateSubtask = (index: number, value: string) => {
-    const next = [...subtaskLines];
-    next[index] = { ...next[index], text: value };
-    setRawMarkdown(
-      [headerLine, ...descLines, ...next.map((subtask) => `${subtask.prefix}${subtask.text}`)].join(
-        "\n",
-      ),
-    );
+    setRawMarkdown((previous) => {
+      const next = previous.split("\n");
+      next[subtaskLines[index].lineIndex] = `${subtaskLines[index].prefix}${value}`;
+      return next.join("\n");
+    });
   };
   const removeToken = (token: string) =>
     updateHeader((header) =>
@@ -160,24 +196,31 @@ export function EditTaskModal({ task, onClose, onSave, onDelete }: EditTaskModal
         </header>
         <div className="modal-body">
           <div className="modal-form">
-            <div className="form-group">
-              <label htmlFor="task-title">Title *</label>
-              <input
-                id="task-title"
-                value={title}
-                onChange={(event) => updateTitle(event.target.value)}
-                className="form-input"
-              />
-            </div>
-            <div className="form-group">
-              <label htmlFor="task-description">Description</label>
-              <textarea
-                id="task-description"
-                value={description}
-                onChange={(event) => updateDescription(event.target.value)}
-                className="form-textarea"
-                placeholder="Add notes..."
-              />
+            <div className="task-summary">
+              <div className="form-group task-summary-title">
+                <input
+                  id="task-title"
+                  value={title}
+                  onChange={(event) => updateTitle(event.target.value)}
+                  className="form-input"
+                />
+              </div>
+              <div className="form-group task-summary-description">
+                <textarea
+                  id="task-description"
+                  value={description}
+                  onChange={(event) =>
+                    updateDescription(
+                      parentDescriptionIndexes,
+                      event.target.value,
+                      0,
+                      subtaskLines[0]?.lineIndex ?? 1,
+                    )
+                  }
+                  className="form-textarea"
+                  placeholder="Add description..."
+                />
+              </div>
             </div>
             <div className="form-group">
               <label>Subtasks</label>
@@ -193,18 +236,32 @@ export function EditTaskModal({ task, onClose, onSave, onDelete }: EditTaskModal
                     onChange={(event) => updateSubtask(index, event.target.value)}
                     className="form-input"
                   />
+                  <textarea
+                    aria-label={`Description for subtask ${index + 1}`}
+                    value={displayDescription(
+                      subtask.descriptionIndexes.map((lineIndex) => lines[lineIndex]),
+                    )}
+                    onChange={(event) =>
+                      updateDescription(
+                        subtask.descriptionIndexes,
+                        event.target.value,
+                        subtask.depth,
+                        subtask.lineIndex + 1,
+                      )
+                    }
+                    className="form-textarea subtask-description"
+                    placeholder="Add subtask description..."
+                  />
                   <button
                     type="button"
                     onClick={() => {
-                      const next = [...subtaskLines];
-                      next.splice(index, 1);
-                      setRawMarkdown(
-                        [
-                          headerLine,
-                          ...descLines,
-                          ...next.map((item) => `${item.prefix}${item.text}`),
-                        ].join("\n"),
-                      );
+                      setRawMarkdown((previous) => {
+                        const next = previous.split("\n");
+                        const start = subtask.lineIndex;
+                        const end = subtaskLines[index + 1]?.lineIndex ?? next.length;
+                        next.splice(start, end - start);
+                        return next.join("\n");
+                      });
                     }}
                     className="btn-icon trash"
                     aria-label={`Remove subtask ${index + 1}`}
@@ -215,13 +272,7 @@ export function EditTaskModal({ task, onClose, onSave, onDelete }: EditTaskModal
               ))}
               <button
                 type="button"
-                onClick={() =>
-                  setRawMarkdown(
-                    [headerLine, ...descLines, ...rawSubtasks(), "    - [ ] New subtask"].join(
-                      "\n",
-                    ),
-                  )
-                }
+                onClick={() => setRawMarkdown((previous) => `${previous}\n    - [ ] New subtask`)}
                 className="add-subtask"
               >
                 + Add subtask
