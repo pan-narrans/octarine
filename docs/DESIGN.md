@@ -29,9 +29,10 @@ Octarine uses a dark, interstellar workspace aesthetic: deep navy surfaces, rest
 - Sidebar items are compact rounded rows. Active items use a violet-tinted surface and a violet left indicator; hover increases contrast without changing the overall dark language.
 - Search and task cards use translucent surfaces with 1px borders and 12px radii. Focus states use the violet accent and glow.
 - Shared radii are exposed as `--radius-control` (6px), `--radius-md` (8px), and `--radius-card`/`--radius-modal` (12px).
-- Metadata appears as compact colored pills with subtle tinted fill/border. Keep labels concise and preserve their status colors.
+- Metadata on task cards appears as compact colored pills with subtle tinted fill/border. In the task editor, current context, project, and tag values sit beneath their add inputs as solid semantic-color capsules with dark, readable labels. Keep labels concise and preserve their established colors.
 - Primary task checkboxes are circular; priority badges are compact square 4px-radius marks.
 - Structured task editing groups each task title and description into one compact bordered card. Root task rows align to the form width; nested rows use a small inset while preserving the same typography, surface, and delete-control placement.
+- The task editor uses the violet focus border and glow to identify the task or subtask that will receive a newly added child. With no explicit selection, new subtasks belong directly to the main task.
 - Calendar, editor, modal, and drawer surfaces retain the same dark-surface, low-contrast-border, violet-accent family.
 - Motion is brief and understated (generally 0.2s) and reinforces hover, focus, and state changes rather than adding decoration.
 

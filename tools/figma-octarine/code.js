@@ -321,15 +321,15 @@ function createBadgeSet(parent) {
     const component = componentFrame(`Kind=${kind}`);
     bindPadding(component, "spacing/1", "spacing/2");
     bindCorners(component, kind.startsWith("Priority") ? "radius/control" : "radius/full");
-    fill(component, color, kind.startsWith("Priority") ? 0.9 : 0.13);
-    stroke(component, color, 0.28);
+    fill(component, color, kind.startsWith("Priority") ? 0.9 : 1);
+    stroke(component, color, kind.startsWith("Priority") ? 0.28 : 1);
     component.appendChild(
       textNode(label, {
         name: "label",
         font: FONT.semibold,
         size: 11,
         lineHeight: 14,
-        color: kind.startsWith("Priority") ? "color/text/primary" : color,
+        color: kind.startsWith("Priority") ? "color/text/primary" : "color/bg/canvas",
       }),
     );
     variants.push(component);
@@ -705,7 +705,7 @@ function createCalendarCellSet(parent) {
 
 function createTaskEditorRowSet(parent, trashIcon) {
   const variants = [];
-  for (const { kind, depth, width, titleValue, descriptionValue } of [
+  const rows = [
     {
       kind: "Main",
       depth: "Root",
@@ -727,8 +727,14 @@ function createTaskEditorRowSet(parent, trashIcon) {
       titleValue: "Sub-task 2-1",
       descriptionValue: "Sub-task 2-1 description",
     },
-  ]) {
-    const component = componentFrame(`Kind=${kind}, Depth=${depth}`, "HORIZONTAL");
+  ];
+  for (const { kind, depth, width, titleValue, descriptionValue, selected } of rows.flatMap((row) =>
+    ["False", "True"].map((selected) => ({ ...row, selected })),
+  )) {
+    const component = componentFrame(
+      `Kind=${kind}, Depth=${depth}, Selected=${selected}`,
+      "HORIZONTAL",
+    );
     component.resize(width, 64);
     component.primaryAxisSizingMode = "FIXED";
     component.counterAxisSizingMode = "FIXED";
@@ -737,7 +743,7 @@ function createTaskEditorRowSet(parent, trashIcon) {
     bindPadding(component, "spacing/2", "spacing/3");
     bindCorners(component, "radius/control");
     fill(component, "color/bg/card");
-    stroke(component, "color/border/card");
+    stroke(component, selected === "True" ? "color/accent/violet" : "color/border/card");
 
     const content = autoFrame("Content", "VERTICAL");
     bindGap(content, "spacing/1");
@@ -769,7 +775,7 @@ function createTaskEditorRowSet(parent, trashIcon) {
   const set = figma.combineAsVariants(variants, parent);
   set.name = "Task Editor Row";
   set.description =
-    "Reusable main-task and subtask editor card with root and nested hierarchy states.";
+    "Reusable main-task and subtask editor card with root, nested, and selected insertion-parent states.";
   layoutVariants(set, 1);
   return set;
 }
@@ -805,13 +811,13 @@ function createMetadataFieldSet(parent, input, badgeSet) {
         color: "color/text/muted",
       }),
     );
-    const badge = variant(badgeSet, [badgeKind]).createInstance();
-    setInstanceText(badge, "Label", value);
-    component.appendChild(badge);
     const add = input.createInstance();
     setInstanceText(add, "Value", placeholder);
     add.resize(254, 30);
     component.appendChild(add);
+    const badge = variant(badgeSet, [badgeKind]).createInstance();
+    setInstanceText(badge, "Label", value);
+    component.appendChild(badge);
     variants.push(component);
   }
   const set = figma.combineAsVariants(variants, parent);

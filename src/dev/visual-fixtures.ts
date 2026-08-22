@@ -44,7 +44,7 @@ function populatedTasks(): Task[] {
       line_number: 3,
       description: "Task 1",
       raw_markdown:
-        "- [ ] (A) Task 1 +octarine/launch @desk\n" +
+        "- [ ] (A) Task 1 +octarine/launch @desk #frontend\n" +
         "  - Task 1 description\n" +
         "    - [ ] (B) Sub-task 1\n" +
         "    - [ ] (A) Sub-task 2\n" +

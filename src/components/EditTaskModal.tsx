@@ -38,6 +38,7 @@ export function EditTaskModal({ task, onClose, onSave, onDelete }: EditTaskModal
   const [rawMarkdown, setRawMarkdown] = useState(task.raw_markdown);
   const [showMarkdown, setShowMarkdown] = useState(false);
   const [sourceMode, setSourceMode] = useState<"raw" | "preview">("raw");
+  const [selectedTask, setSelectedTask] = useState<"main" | number | null>(null);
   const [saving, setSaving] = useState(false);
   const lines = rawMarkdown.split("\n");
   const headerLine = lines[0] ?? "";
@@ -134,6 +135,35 @@ export function EditTaskModal({ task, onClose, onSave, onDelete }: EditTaskModal
       return next.join("\n");
     });
   };
+  const addSubtask = () => {
+    const next = [...lines];
+    const selectedSubtask =
+      typeof selectedTask === "number" ? subtaskLines[selectedTask] : undefined;
+    const parentDepth = selectedSubtask?.depth;
+    const depth = parentDepth === undefined ? rootSubtaskDepth || 4 : parentDepth + 2;
+    const subtreeStart = selectedSubtask ?? subtaskLines.find((subtask) => subtask.depth === depth);
+    let insertionIndex = next.length;
+
+    if (subtreeStart) {
+      for (let index = subtreeStart.lineIndex + 1; index < next.length; index += 1) {
+        if (!next[index].trim()) continue;
+        const candidateDepth = next[index].match(/^\s*/)?.[0].length ?? 0;
+        const leavesSelectedSubtree =
+          parentDepth === undefined ? candidateDepth < depth : candidateDepth <= parentDepth;
+        if (leavesSelectedSubtree) {
+          insertionIndex = index;
+          break;
+        }
+      }
+    }
+
+    const newSubtaskIndex = subtaskLines.filter(
+      (subtask) => subtask.lineIndex < insertionIndex,
+    ).length;
+    next.splice(insertionIndex, 0, `${" ".repeat(depth)}- [ ] New subtask`);
+    setRawMarkdown(next.join("\n"));
+    setSelectedTask(newSubtaskIndex);
+  };
   const removeToken = (token: string) =>
     updateHeader((header) =>
       header
@@ -199,7 +229,12 @@ export function EditTaskModal({ task, onClose, onSave, onDelete }: EditTaskModal
         </header>
         <div className="modal-body">
           <div className="modal-form">
-            <div className="task-summary">
+            <div
+              className="task-summary"
+              data-selected={selectedTask === "main" ? "true" : undefined}
+              onPointerDown={() => setSelectedTask("main")}
+              onFocusCapture={() => setSelectedTask("main")}
+            >
               <div className="form-group task-summary-title">
                 <input
                   id="task-title"
@@ -233,6 +268,9 @@ export function EditTaskModal({ task, onClose, onSave, onDelete }: EditTaskModal
                   className="form-subtask-row"
                   key={`${index}-${subtask.prefix}-${subtask.text}`}
                   style={{ marginLeft: `${Math.max(0, subtask.depth - rootSubtaskDepth) * 10}px` }}
+                  data-selected={selectedTask === index ? "true" : undefined}
+                  onPointerDown={() => setSelectedTask(index)}
+                  onFocusCapture={() => setSelectedTask(index)}
                 >
                   <input
                     aria-label={`Subtask ${index + 1}`}
@@ -259,6 +297,7 @@ export function EditTaskModal({ task, onClose, onSave, onDelete }: EditTaskModal
                   <button
                     type="button"
                     onClick={() => {
+                      setSelectedTask(null);
                       setRawMarkdown((previous) => {
                         const next = previous.split("\n");
                         const start = subtask.lineIndex;
@@ -274,11 +313,7 @@ export function EditTaskModal({ task, onClose, onSave, onDelete }: EditTaskModal
                   </button>
                 </div>
               ))}
-              <button
-                type="button"
-                onClick={() => setRawMarkdown((previous) => `${previous}\n    - [ ] New subtask`)}
-                className="add-subtask"
-              >
+              <button type="button" onClick={addSubtask} className="add-subtask">
                 + Add subtask
               </button>
             </div>
@@ -378,15 +413,16 @@ export function EditTaskModal({ task, onClose, onSave, onDelete }: EditTaskModal
             </div>
             <div className="metadata-inputs">
               {[
-                { label: "Contexts", prefix: "@", items: contexts },
-                { label: "Projects", prefix: "+", items: projects },
-                { label: "Tags", prefix: "#", items: tags },
-              ].map(({ label, prefix, items }) => (
+                { label: "Contexts", prefix: "@", items: contexts, kind: "context" as const },
+                { label: "Projects", prefix: "+", items: projects, kind: "project" as const },
+                { label: "Tags", prefix: "#", items: tags, kind: "tag" as const },
+              ].map(({ label, prefix, items, kind }) => (
                 <MetadataInput
                   key={label}
                   label={label}
                   prefix={prefix}
                   items={items}
+                  kind={kind}
                   onAdd={(value) =>
                     updateHeader((header) =>
                       `${header} ${prefix}${value}`.replace(/\s{2,}/g, " ").trim(),
@@ -453,12 +489,14 @@ function MetadataInput({
   label,
   prefix,
   items,
+  kind,
   onAdd,
   onRemove,
 }: {
   label: string;
   prefix: string;
   items: string[];
+  kind: "context" | "project" | "tag";
   onAdd: (value: string) => void;
   onRemove: (token: string) => void;
 }) {
@@ -466,21 +504,6 @@ function MetadataInput({
   return (
     <div className="form-group">
       <label>{label}</label>
-      <div className="metadata-container">
-        {items.map((item) => (
-          <span key={item} className="pill">
-            {item}
-            <button
-              type="button"
-              className="pill-remove"
-              onClick={() => onRemove(item)}
-              aria-label={`Remove ${item}`}
-            >
-              <X size={12} />
-            </button>
-          </span>
-        ))}
-      </div>
       <input
         aria-label={`Add ${label.toLowerCase()}`}
         className="form-input"
@@ -490,11 +513,27 @@ function MetadataInput({
         onKeyDown={(event) => {
           if (event.key === "Enter" && value.trim()) {
             event.preventDefault();
-            onAdd(value.trim().replace(new RegExp(`^${prefix}`), ""));
+            const trimmedValue = value.trim();
+            onAdd(
+              trimmedValue.startsWith(prefix) ? trimmedValue.slice(prefix.length) : trimmedValue,
+            );
             setValue("");
           }
         }}
       />
+      <div className="metadata-container">
+        {items.map((item) => (
+          <button
+            key={item}
+            type="button"
+            className={`pill ${kind}`}
+            onClick={() => onRemove(item)}
+            aria-label={`Remove ${item}`}
+          >
+            {item}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
