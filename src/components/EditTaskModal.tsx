@@ -89,6 +89,9 @@ export function EditTaskModal({ task, onClose, onSave, onDelete }: EditTaskModal
       else subtask.descriptionIndexes.push(lineIndex);
     }
   });
+  const rootSubtaskDepth = subtaskLines.length
+    ? Math.min(...subtaskLines.map((subtask) => subtask.depth))
+    : 0;
   const description = displayDescription(parentDescriptionIndexes.map((index) => lines[index]));
   const updateHeader = (updater: (header: string) => string) =>
     setRawMarkdown((previous) => {
@@ -219,6 +222,7 @@ export function EditTaskModal({ task, onClose, onSave, onDelete }: EditTaskModal
                   }
                   className="form-textarea"
                   placeholder="Add description..."
+                  rows={Math.max(1, description.split("\n").length)}
                 />
               </div>
             </div>
@@ -228,7 +232,7 @@ export function EditTaskModal({ task, onClose, onSave, onDelete }: EditTaskModal
                 <div
                   className="form-subtask-row"
                   key={`${index}-${subtask.prefix}-${subtask.text}`}
-                  style={{ marginLeft: `${subtask.depth}ch` }}
+                  style={{ marginLeft: `${Math.max(0, subtask.depth - rootSubtaskDepth) * 10}px` }}
                 >
                   <input
                     aria-label={`Subtask ${index + 1}`}

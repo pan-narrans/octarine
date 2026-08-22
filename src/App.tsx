@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTaskStore } from "./hooks/use-task-store";
 import { useTauriEvents } from "./hooks/use-tauri-events";
 import { Task, FileNode } from "./types";
@@ -47,6 +47,7 @@ import {
   setVaultConfig,
   writeFileContent,
 } from "./features/workspace/ipc";
+import { getVisualScenario } from "./dev/visual-scenario";
 
 interface ProjectNode {
   name: string;
@@ -145,7 +146,10 @@ export function App() {
   const { tasks, customViews, loading, fetchTasks, fetchCustomViews, updateTaskStatus } =
     useTaskStore();
 
-  const [selectedSection, setSelectedSection] = useState<string>("all");
+  const visualScenario = getVisualScenario();
+  const [selectedSection, setSelectedSection] = useState<string>(() =>
+    visualScenario === "calendar" ? "events" : "all",
+  );
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [activeVaultPath, setActiveVaultPath] = useState<string>("Loading...");
 
@@ -186,6 +190,7 @@ export function App() {
   const [journalsExpanded, setJournalsExpanded] = useState<boolean>(false);
   const [editingTaskHash, setEditingTaskHash] = useState<string | null>(null);
   const [modalTask, setModalTask] = useState<Task | null>(null);
+  const openedVisualModal = useRef(false);
   const [todayJournalContent, setTodayJournalContent] = useState<string | null>(null);
   const [todayJournalPath, setTodayJournalPath] = useState<string>("");
   const [todayJournalLoading, setTodayJournalLoading] = useState<boolean>(true);
@@ -237,6 +242,32 @@ export function App() {
       if (unlistenFn) unlistenFn();
     };
   }, [activeJournalPath]);
+
+  useEffect(() => {
+    if (visualScenario !== "task-modal" || openedVisualModal.current || tasks.length === 0) return;
+    const task = tasks.find(
+      (candidate) => candidate.task_type === "task" && !candidate.parent_hash,
+    );
+    if (!task) return;
+    const descendants: Task[] = [];
+    const collectDescendants = (parentHash: string) => {
+      tasks
+        .filter((candidate) => candidate.parent_hash === parentHash)
+        .sort((a, b) => a.line_number - b.line_number)
+        .forEach((child) => {
+          descendants.push(child);
+          collectDescendants(child.hash);
+        });
+    };
+    collectDescendants(task.hash);
+    openedVisualModal.current = true;
+    setModalTask({
+      ...task,
+      raw_markdown: [task.raw_markdown, ...descendants.map((child) => child.raw_markdown)].join(
+        "\n",
+      ),
+    });
+  }, [tasks, visualScenario]);
 
   // Aggregate unique projects, contexts, and tags dynamically from loaded tasks
   const projects = Array.from(new Set(tasks.map((t) => t.project).filter((p): p is string => !!p)));
@@ -1579,10 +1610,7 @@ export function App() {
             className="unified-dashboard"
             style={{ display: "flex", flexDirection: "column", gap: "2rem" }}
           >
-            <div
-              className="dashboard-grid-row"
-              style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem" }}
-            >
+            <div className="dashboard-grid-row">
               {/* Left Column: Events (Today's Events & Future Events) */}
               <div
                 className="dashboard-column events"
@@ -1619,7 +1647,7 @@ export function App() {
                 </div>
 
                 {/* Future Events */}
-                <div className="events-sub-section" style={{ marginTop: "1.5rem" }}>
+                <div className="events-sub-section upcoming-events">
                   <h3>Upcoming Events</h3>
                   {(() => {
                     const todayStr = getISODateString(new Date());
@@ -1885,18 +1913,7 @@ export function App() {
               className="dashboard-daily-note-section"
               style={{ display: "flex", flexDirection: "column" }}
             >
-              <h2
-                style={{
-                  fontSize: "1.15rem",
-                  color: "var(--text-primary)",
-                  marginBottom: "1rem",
-                  fontWeight: 700,
-                  borderBottom: "1px solid var(--border-card)",
-                  paddingBottom: "0.5rem",
-                }}
-              >
-                📓 Today's Daily Journal Note
-              </h2>
+              <h2 className="dashboard-daily-note-title">📓 Today's Daily Journal Note</h2>
               {!todayJournalLoading && todayJournalContent !== null ? (
                 <div
                   style={{

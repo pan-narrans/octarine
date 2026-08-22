@@ -35,6 +35,7 @@ When instructions conflict or are materially ambiguous, stop and explain the con
 
 - Verify changes in proportion to their risk.
 - Run the project-prescribed checks relevant to the changed area.
+- **Frontend/UI work must follow `docs/visual-development.md`: a visual requirement is complete only after the rendered application has been inspected against its acceptance criteria.**
 - Do not hide, weaken, or bypass failing checks.
 - Distinguish failures introduced by the change from pre-existing or environmental failures.
 - Review the final diff for accidental and unrelated changes.
