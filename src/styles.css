@@ -516,6 +516,11 @@ body {
 }
 
 /* Calendar Weekly Grid */
+.calendar-surface {
+  container-name: calendar-surface;
+  container-type: inline-size;
+}
+
 .calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
@@ -698,7 +703,7 @@ body {
   min-height: 480px;
 }
 
-@media (max-width: 560px) {
+@container calendar-surface (max-width: 560px) {
   .calendar-controls {
     align-items: stretch;
     flex-direction: column;
@@ -2143,18 +2148,21 @@ body {
 }
 
 .unified-dashboard {
+  container-name: dashboard;
+  container-type: inline-size;
   margin-top: 0;
 }
 
 .dashboard-grid-row {
   display: grid;
-  grid-template-columns: 420px 420px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-8);
   align-items: start;
 }
 
 .dashboard-column {
-  width: 420px;
+  min-width: 0;
+  width: 100%;
 }
 
 .dashboard-column h2,
@@ -2183,7 +2191,7 @@ body {
 }
 
 .dashboard-event-card {
-  width: 420px;
+  width: 100%;
   min-height: 42px;
   padding: var(--space-2) var(--space-4);
   border-radius: var(--radius-md);
@@ -2194,7 +2202,7 @@ body {
 }
 
 .task-list.condensed .task-card {
-  width: 420px;
+  width: 100%;
   padding: var(--space-4);
   gap: var(--space-3);
   border-radius: var(--radius-card);
@@ -2227,7 +2235,7 @@ body {
 }
 
 .dashboard-daily-note-section {
-  width: 904px;
+  width: 100%;
 }
 
 .dashboard-daily-note-section > div {
@@ -2235,12 +2243,50 @@ body {
   border-radius: var(--radius-card) !important;
 }
 
+@container dashboard (max-width: 850px) {
+  .dashboard-grid-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-6);
+  }
+}
+
+@container dashboard (max-width: 560px) {
+  .dashboard-daily-note-section .editor-header {
+    gap: var(--space-2);
+    padding: var(--space-3);
+  }
+
+  .dashboard-daily-note-section .editor-meta {
+    min-width: 0;
+  }
+
+  .dashboard-daily-note-section .editor-path {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .dashboard-daily-note-section .editor-actions {
+    flex-shrink: 0;
+    gap: var(--space-1);
+  }
+
+  .dashboard-daily-note-section .editor-btn {
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    gap: 0;
+    font-size: 0;
+  }
+}
+
 .month-grid {
-  width: 860px;
-  height: 628px;
-  min-height: 0;
-  grid-template-columns: repeat(7, 116px);
-  grid-template-rows: repeat(6, 98px);
+  width: 100%;
+  height: calc(100vh - 310px);
+  min-height: 480px;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-rows: repeat(6, minmax(0, 1fr));
   gap: var(--space-2);
 }
 

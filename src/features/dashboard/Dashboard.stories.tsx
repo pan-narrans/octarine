@@ -68,7 +68,13 @@ const meta = {
   component: Dashboard,
   decorators: [
     (Story) => (
-      <div style={{ minHeight: "100vh", padding: "48px", background: "var(--bg-space)" }}>
+      <div
+        style={{
+          minHeight: "100vh",
+          padding: "clamp(16px, 4vw, 48px)",
+          background: "var(--bg-space)",
+        }}
+      >
         <Story />
       </div>
     ),
@@ -90,6 +96,18 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {};
+
+export const Tablet: Story = {
+  globals: { viewport: { value: "octarineTablet", isRotated: false } },
+};
+
+export const Mobile: Story = {
+  globals: { viewport: { value: "octarineMobile", isRotated: false } },
+};
+
+export const Narrow: Story = {
+  globals: { viewport: { value: "octarineNarrow", isRotated: false } },
+};
 
 export const Quiet: Story = {
   args: { tasks: [], journalLoading: true, journalContent: null },

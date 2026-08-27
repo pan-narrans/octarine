@@ -59,7 +59,13 @@ const meta = {
   },
   decorators: [
     (Story) => (
-      <div style={{ minHeight: "100vh", padding: "48px", background: "var(--bg-space)" }}>
+      <div
+        style={{
+          minHeight: "100vh",
+          padding: "clamp(16px, 4vw, 48px)",
+          background: "var(--bg-space)",
+        }}
+      >
         <Story />
       </div>
     ),
@@ -69,6 +75,26 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 export const Month: Story = { render: () => <Harness initialView="month" /> };
 export const Week: Story = { render: () => <Harness initialView="week" /> };
+
+export const MonthTablet: Story = {
+  render: () => <Harness initialView="month" />,
+  globals: { viewport: { value: "octarineTablet", isRotated: false } },
+};
+
+export const WeekTablet: Story = {
+  render: () => <Harness initialView="week" />,
+  globals: { viewport: { value: "octarineTablet", isRotated: false } },
+};
+
+export const MonthMobile: Story = {
+  render: () => <Harness initialView="month" />,
+  globals: { viewport: { value: "octarineMobile", isRotated: false } },
+};
+
+export const WeekMobile: Story = {
+  render: () => <Harness initialView="week" />,
+  globals: { viewport: { value: "octarineMobile", isRotated: false } },
+};
 
 export const MonthNarrow: Story = {
   render: () => <Harness initialView="month" />,
