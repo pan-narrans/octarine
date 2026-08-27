@@ -208,16 +208,27 @@ body {
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 }
 
+.task-card:focus-visible {
+  outline: none;
+  border-color: var(--color-violet);
+  box-shadow: 0 0 12px rgba(139, 92, 246, 0.4);
+}
+
 /* Task Checkboxes */
 .checkbox {
   width: 22px;
   height: 22px;
+  padding: 0;
   border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  font: inherit;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   flex-shrink: 0;
+  cursor: pointer;
   transition: all 0.2s;
 }
 
@@ -246,12 +257,19 @@ body {
   color: var(--bg-space);
 }
 
+.checkbox:focus-visible,
+.subtask-checkbox-clickable:focus-visible {
+  outline: 2px solid var(--color-violet);
+  outline-offset: 2px;
+}
+
 /* Task Details */
 .task-details {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
   flex-grow: 1;
+  min-width: 0;
 }
 
 .task-desc {
@@ -444,8 +462,10 @@ body {
 
 .metadata-left-badges {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
+  min-width: 0;
 }
 
 .subtask-counter {
@@ -502,6 +522,9 @@ body {
   gap: 1rem;
   margin-top: 1rem;
   height: calc(100vh - 250px);
+}
+
+.calendar-grid-scroll {
   overflow-x: auto;
 }
 
@@ -673,6 +696,33 @@ body {
   gap: 0.5rem;
   height: calc(100vh - 310px);
   min-height: 480px;
+}
+
+@media (max-width: 560px) {
+  .calendar-controls {
+    align-items: stretch;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .calendar-tabs {
+    justify-content: space-between;
+  }
+
+  .calendar-nav {
+    gap: var(--space-2);
+    justify-content: space-between;
+  }
+
+  .calendar-current-label {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .calendar-grid,
+  .month-grid {
+    min-width: 572px;
+  }
 }
 
 .month-cell {
@@ -1323,39 +1373,6 @@ body {
   font-size: 0.68rem;
 }
 
-/* Inline Task Card Editor */
-.task-card.editing {
-  background: rgba(255, 255, 255, 0.02) !important;
-  border: 1px solid rgba(167, 139, 250, 0.3) !important;
-  padding: 0 !important;
-}
-
-.task-inline-editor {
-  width: 100%;
-  min-height: 50px;
-  background: transparent;
-  border: none;
-  outline: none;
-  resize: vertical;
-  color: var(--text-primary);
-  font-family: monospace;
-  font-size: 0.85rem;
-  padding: 0.75rem 1rem;
-  line-height: 1.4;
-  border-radius: 6px;
-}
-
-/* Condensed task inline editor */
-.task-list.condensed .task-card.editing {
-  min-height: 0;
-}
-
-.task-list.condensed .task-inline-editor {
-  padding: 0.5rem 0.75rem;
-  font-size: 0.8rem;
-  min-height: 40px;
-}
-
 /* --- CodeMirror Autocomplete Body Portal Styles --- */
 .cm-tooltip {
   background-color: #0b1126 !important; /* Match --bg-sidebar */
@@ -1422,19 +1439,6 @@ body {
 }
 
 /* Inline Editor Overflow Overrides to prevent scrollbars and allow floating dropdown tooltips */
-.task-inline-editor-container,
-.inline-mode,
-.inline-mode .cm-editor,
-.inline-mode .cm-scroller {
-  overflow: visible !important;
-}
-
-.inline-mode {
-  min-height: 40px;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.9rem;
-}
-
 /* Nested subtasks container inside parent task cards */
 .task-subtasks-list {
   display: flex;
@@ -1450,13 +1454,22 @@ body {
   gap: 0.5rem;
   padding: 0.2rem 0;
   border-radius: 4px;
+  cursor: pointer;
+}
+
+.subtask-item:focus-visible {
+  outline: 1px solid var(--color-violet);
+  outline-offset: 2px;
 }
 
 .subtask-checkbox-clickable {
   width: 14px;
   height: 14px;
+  padding: 0;
   border: 1.5px solid var(--text-muted);
   border-radius: 3px;
+  background: transparent;
+  font: inherit;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1525,54 +1538,6 @@ body {
 
 .done-icon-top {
   color: var(--color-emerald);
-}
-
-.edit-modal-btn {
-  background: transparent;
-  border: none;
-  color: var(--text-secondary);
-  cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  transition: all 0.2s;
-  margin-left: 8px;
-}
-
-.task-card:hover .edit-modal-btn {
-  opacity: 1;
-}
-
-.edit-modal-btn:hover {
-  background-color: var(--bg-hover);
-  color: var(--color-indigo);
-}
-
-.edit-modal-btn {
-  background: transparent;
-  border: none;
-  color: var(--text-secondary);
-  cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  transition: all 0.2s;
-  margin-left: 8px;
-}
-
-.task-card:hover .edit-modal-btn {
-  opacity: 1;
-}
-
-.edit-modal-btn:hover {
-  background-color: var(--bg-hover);
-  color: var(--color-indigo);
 }
 
 /* --- Full Screen Task Edit Modal --- */
@@ -1816,7 +1781,6 @@ body {
   font-size: 0.9rem;
   font-weight: 500;
   cursor: pointer;
-  margin-right: auto;
 }
 .btn-delete:hover {
   background: rgba(239, 68, 68, 0.2);
@@ -2001,6 +1965,7 @@ body {
 }
 
 .modal-footer .btn-delete {
+  margin-right: auto;
   background: transparent;
   border: 1px solid rgba(239, 68, 68, 0.5);
   color: #ef4444;
@@ -2137,6 +2102,7 @@ body {
     border-top: 1px solid var(--border-card);
   }
 }
+
 @media (max-width: 560px) {
   .modal-header,
   .modal-form,
@@ -2258,11 +2224,6 @@ body {
   min-height: 24px;
   margin-top: 0;
   align-items: center;
-}
-
-.task-list.condensed .edit-modal-btn {
-  opacity: 1;
-  color: var(--color-indigo);
 }
 
 .dashboard-daily-note-section {
@@ -2541,4 +2502,141 @@ body {
     height: 66px;
     padding: var(--space-3) var(--space-6);
   }
+}
+
+/* Keep task titles and descriptions as one editable card at every viewport.
+ * Earlier mobile rules predate the compact task editor and split each pair
+ * into separate bordered controls. */
+@media (max-width: 850px) {
+  .task-summary {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: var(--space-1);
+    min-height: 64px;
+    margin: 0 0 var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border-card);
+    border-radius: var(--radius-control);
+    overflow: hidden;
+    background: var(--bg-card);
+  }
+
+  .task-summary .form-group {
+    padding: 0;
+  }
+
+  .task-summary-description {
+    border-top: 0;
+  }
+
+  .task-summary .form-input,
+  .task-summary .form-textarea,
+  .form-subtask-row > .form-input,
+  .form-subtask-row > .subtask-description {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .task-summary .form-input,
+  .form-subtask-row > .form-input {
+    height: 18px;
+    font-size: 0.8125rem;
+    font-weight: 400;
+    line-height: 18px;
+  }
+
+  .task-summary .form-textarea,
+  .task-summary .form-textarea:focus,
+  .form-subtask-row > .subtask-description,
+  .form-subtask-row > .subtask-description:focus {
+    height: auto;
+    min-height: 18px;
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    line-height: 18px;
+    resize: none;
+  }
+
+  .form-subtask-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 32px;
+    grid-template-rows: 18px 18px;
+    gap: var(--space-1) var(--space-3);
+    min-height: 64px;
+    margin-bottom: var(--space-1);
+    padding: var(--space-2) var(--space-3);
+    align-items: center;
+    border: 1px solid var(--border-card);
+    border-radius: var(--radius-control);
+    background: var(--bg-card);
+  }
+
+  .form-subtask-row > .form-input {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .form-subtask-row > .subtask-description {
+    grid-column: 1;
+    grid-row: 2;
+    margin: 0;
+  }
+
+  .form-subtask-row > .btn-icon,
+  .form-subtask-row > .btn-icon.trash {
+    grid-column: 2;
+    grid-row: 1 / 3;
+    width: 32px;
+    height: 32px;
+    margin: 0;
+    padding: 0;
+    align-self: center;
+    border: 0;
+    border-radius: var(--radius-control);
+  }
+}
+
+/* Task-modal metadata pills. Keep these dimensions and colors
+ * viewport-independent so the same pill component survives responsive reflow. */
+.metadata-inputs .pill {
+  height: 20px;
+  min-height: 20px;
+  padding: 2px 7px;
+  border-style: solid;
+  border-width: 1px;
+  border-radius: 6px;
+  font-family:
+    Inter,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 14px;
+  cursor: pointer;
+}
+
+.metadata-inputs .pill.context {
+  min-width: 58px;
+  border-color: #155e63;
+  background: #0b2b2e;
+  color: #5eead4;
+}
+
+.metadata-inputs .pill.project {
+  min-width: 76px;
+  border-color: #394173;
+  background: #1b2143;
+  color: #a5b4fc;
+}
+
+.metadata-inputs .pill.tag {
+  min-width: 64px;
+  border-color: #665020;
+  background: #2d2413;
+  color: #facc15;
 }

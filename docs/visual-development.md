@@ -26,7 +26,7 @@ Do not stop because TypeScript compiles. Stop to ask for direction only when the
 - The standalone Vite page does not provide real Tauri IPC. Use the development-only visual fixtures to render deterministic native-backed states in a browser: `?visual=dashboard`, `?visual=calendar`, `?visual=task-modal`, or `?visual=empty`. Fixtures are in-memory, activate only in Vite development mode, and must never be treated as proof of Rust/native behavior.
 - Use the Codex in-app browser for visual verification. It supports screenshots, DOM snapshots, selectors, read-only computed-style/layout inspection, and explicit viewport overrides for responsive checks. Prefer it before adding standalone browser tooling.
 - Capture a baseline screenshot for significant UI work and an after screenshot when it materially helps comparison. Keep screenshots as task evidence unless the task asks to retain artifacts in the repository.
-- This repository has no committed Playwright, Cypress, or Storybook setup. Add browser-test dependencies only when the existing browser workflow cannot reliably verify the task, and ask before a broad tooling or architectural change.
+- Storybook is committed for component-state review, and Playwright provides task-modal screenshot regression coverage. Cypress is not configured; add browser-test dependencies only when the documented manual review and existing automated coverage cannot reliably verify the task.
 
 Use the existing quality gate where relevant:
 
@@ -45,32 +45,61 @@ Use relative design reasoning: match the standard small/medium spacing, align wi
 
 Update `docs/DESIGN.md` once a visual convention becomes an accepted, reusable project decision. Do not add speculative rules.
 
-## Design and Figma synchronization
+## Design and implementation synchronization
 
-Use design mode for substantial new interfaces, redesigns, ambiguous hierarchy, or requested design exploration. Establish an editable reference before heavily implementing. Once a direction is approved, switch to implementation mode and reproduce it faithfully; substantial deviations need user direction.
+Octarine uses this workflow for visual interface changes:
 
-Figma is the editable source of visual intent when connected; the browser-rendered app proves implementation. For intentional visual changes made in code outside Figma, update the matching Figma reference after the final implementation is rendered and accepted. Do not sync intermediate CSS experiments. No Figma update is needed for implementation-only changes that do not alter intended appearance.
+`Storybook implementation → exact approval → app integration`
 
-Track meaningful work with one of these states when useful:
+The shared React component and design tokens are the canonical implementation. Storybook is the source of truth for its implemented visual states and viewports. The rendered app is the authority for integration, surrounding layout, native context, and end-to-end behavior.
 
-- **SYNCED** — approved design and verified implementation match.
-- **DESIGN AHEAD** — approved design is not yet implemented.
-- **CODE AHEAD** — verified intentional UI change is not yet reflected in Figma.
-- **DIVERGED** — the two differ and the current approved intent is unclear.
+OpenPencil is not part of the active workflow. The existing `design/octarine.fig` file is retained as an archived historical artifact and must not be used as a design authority, implementation input, or review gate.
 
-Never overwrite newer approved design intent with older code merely to claim synchronization. Ask the user when authority is materially ambiguous.
+Storybook and the app normally render the same React component code. “Transfer from Storybook to the app” therefore means implementing the shared component once, verifying it in Storybook first, and then verifying that same implementation in the app. Do not create a separate Storybook-only copy merely to simulate promotion between stages.
 
-Figma is connected, and the editable Octarine draft is `https://www.figma.com/design/ZgrOPUU1kN7joGK2PdQhYz/Octarine`. Use that file for substantial design work and synchronization. If access fails in a future environment, report the connection limitation instead of pretending the reference is synchronized.
+This workflow applies to visual layout, styling, hierarchy, component, and responsive changes. Nonvisual logic fixes do not require Storybook review unless they materially change visible states. Skip the design gate for a visual change only when the user explicitly requests it.
 
-If the Figma MCP quota prevents writes, use the local development plugin in `tools/figma-octarine/`. Import its `manifest.json` through Figma Desktop's **Plugins → Development → Import plugin from manifest…** menu, then run **Octarine Local Design Bridge**. The local Plugin API avoids MCP calls but remains subject to the file's Figma plan limits.
+Track visual work with these states:
+
+- **STORYBOOK REVIEW** — the shared implementation is awaiting exact visual approval.
+- **STORYBOOK APPROVED** — Storybook is the accepted component design; app verification is pending.
+- **APP VERIFIED** — the approved component works in app context.
+- **CURRENT** — Storybook is approved and the app is verified.
+
+Storybook approval is exact: it establishes the implemented design baseline and authorizes visual snapshot updates. Record it in the task handoff.
+
+Prefer one responsive flex source with breakpoint annotations over separate desktop, tablet, and mobile copies. Create separate frames only for genuinely different UI states. Reusable component masters and tokens must match the elements used in composed screens.
+
+Do not use the Figma local development plugin for new visual work. Storybook is available through `npm run storybook`; use named stories to review the actual React component states. The existing Figma bridge remains historical until its removal is approved separately.
+
+### Storybook → app loop
+
+For each visual request:
+
+1. Inspect the current Storybook states and app context. Identify the affected states and breakpoints.
+2. Implement the real shared component and named Storybook stories. For an existing app component, use a temporary non-default proposed variant when necessary so the app retains its current design during review.
+3. Render every affected Storybook state and viewport. Iterate there on implementation-level differences.
+4. Pause for explicit Storybook approval, then update the approved visual baselines.
+5. Integrate the same shared component into the app. Remove superseded variants and styles, then verify layout, scrolling, focus, keyboard behavior, and nearby responsive UI.
+6. Run the applicable quality gates and report **CURRENT** only when Storybook and app verification agree.
+
+Story coverage must name every reviewable state and affected breakpoint. Use Storybook's named viewport states instead of relying on an operator to resize the browser consistently. Stories must render the real shared component, never a permanent Storybook-only copy.
+
+### Automated visual regression
+
+Task-modal and task-card stories are covered by screenshot baselines in `tests/visual/`. Run `npm run visual:test` to compare their approved component states and viewports. The command starts Storybook when it is not already running.
+
+Use `npm run visual:update` only after an intentional visual review; it replaces the approved baselines. Review the generated image changes alongside the component and design-reference changes. Screenshot tests complement, rather than replace, rendered in-app inspection.
 
 ## Completion report
 
-For a visual task, finish concisely with the status of each criterion, a nearby regression check, and Figma sync state. Example:
+For a visual task, finish concisely with the status of each criterion, a nearby regression check, and design sync state. Example:
 
 - V1 — verified
 - V2 — verified
 - Nearby regression check — passed
-- Figma — CODE AHEAD (not connected)
+- Automated visual baseline — passed
+- Storybook — APPROVED
+- App — VERIFIED
 
 If the app cannot be rendered or inspected, state the missing capability, why verification is blocked, and the recommended remedy. Never imply visual verification occurred when it did not.

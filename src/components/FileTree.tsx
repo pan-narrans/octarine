@@ -32,6 +32,8 @@ interface FileTreeProps {
   onDelete?: (path: string) => Promise<void>;
   readOnly?: boolean;
   collapseAllTrigger?: number;
+  initialOpen?: boolean;
+  initialEditMode?: "rename" | "create_file" | "create_dir" | null;
 }
 
 export interface FileTreePropsLocal {
@@ -52,8 +54,10 @@ export function FileTree({
   onDelete,
   readOnly = false,
   collapseAllTrigger = 0,
+  initialOpen = false,
+  initialEditMode = null,
 }: FileTreeProps) {
-  const [isOpen, setIsOpen] = useState<boolean>(false);
+  const [isOpen, setIsOpen] = useState<boolean>(initialOpen);
 
   // Collapse folders on global collapse trigger
   useEffect(() => {
@@ -63,8 +67,10 @@ export function FileTree({
   }, [collapseAllTrigger, node.is_dir]);
 
   // Inline input editor state for renaming or adding
-  const [editMode, setEditMode] = useState<"rename" | "create_file" | "create_dir" | null>(null);
-  const [inputText, setInputText] = useState<string>("");
+  const [editMode, setEditMode] = useState<"rename" | "create_file" | "create_dir" | null>(
+    initialEditMode,
+  );
+  const [inputText, setInputText] = useState<string>(initialEditMode === "rename" ? node.name : "");
 
   const isSelected = selectedPath === node.path;
 

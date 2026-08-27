@@ -1,5 +1,12 @@
 import { useState } from "react";
 import { Trash, X } from "lucide-react";
+import {
+  ActionButton,
+  FormInput,
+  FormSelect,
+  FormTextarea,
+  MetadataPill,
+} from "../design-system/controls";
 import { Task } from "../types";
 
 interface EditTaskModalProps {
@@ -7,6 +14,10 @@ interface EditTaskModalProps {
   onClose: () => void;
   onSave: (newRawMarkdown: string) => Promise<void>;
   onDelete: () => Promise<void>;
+  /** Storybook-only initial states; production callers use the defaults. */
+  initialShowMarkdown?: boolean;
+  initialSelectedTask?: "main" | number | null;
+  initialSaving?: boolean;
 }
 
 const TASK_PREFIX = /^(\s*[-*+]\s+\[.*?\]\s*(?:\([A-Da-d]\)\s*)?)/i;
@@ -34,12 +45,20 @@ function displayDescription(lines: string[]) {
   return lines.map((line) => line.replace(/^\s*-\s?/, "")).join("\n");
 }
 
-export function EditTaskModal({ task, onClose, onSave, onDelete }: EditTaskModalProps) {
+export function EditTaskModal({
+  task,
+  onClose,
+  onSave,
+  onDelete,
+  initialShowMarkdown = false,
+  initialSelectedTask = null,
+  initialSaving = false,
+}: EditTaskModalProps) {
   const [rawMarkdown, setRawMarkdown] = useState(task.raw_markdown);
-  const [showMarkdown, setShowMarkdown] = useState(false);
+  const [showMarkdown, setShowMarkdown] = useState(initialShowMarkdown);
   const [sourceMode, setSourceMode] = useState<"raw" | "preview">("raw");
-  const [selectedTask, setSelectedTask] = useState<"main" | number | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<"main" | number | null>(initialSelectedTask);
+  const [saving, setSaving] = useState(initialSaving);
   const lines = rawMarkdown.split("\n");
   const headerLine = lines[0] ?? "";
   const status = headerLine.match(/^\s*[-*+]\s+\[(.)\]/)?.[1] ?? " ";
@@ -209,14 +228,14 @@ export function EditTaskModal({ task, onClose, onSave, onDelete }: EditTaskModal
         <header className="modal-header">
           <h2 id="edit-task-title">Edit Task</h2>
           <div className="modal-header-actions">
-            <button
-              className={`markdown-toggle ${showMarkdown ? "active" : ""}`}
-              type="button"
+            <ActionButton
+              variant="toggle"
+              className={showMarkdown ? "active" : ""}
               onClick={() => setShowMarkdown((open) => !open)}
               aria-pressed={showMarkdown}
             >
               Markdown
-            </button>
+            </ActionButton>
             <button
               className="modal-close"
               type="button"
@@ -236,15 +255,14 @@ export function EditTaskModal({ task, onClose, onSave, onDelete }: EditTaskModal
               onFocusCapture={() => setSelectedTask("main")}
             >
               <div className="form-group task-summary-title">
-                <input
+                <FormInput
                   id="task-title"
                   value={title}
                   onChange={(event) => updateTitle(event.target.value)}
-                  className="form-input"
                 />
               </div>
               <div className="form-group task-summary-description">
-                <textarea
+                <FormTextarea
                   id="task-description"
                   value={description}
                   onChange={(event) =>
@@ -255,7 +273,6 @@ export function EditTaskModal({ task, onClose, onSave, onDelete }: EditTaskModal
                       subtaskLines[0]?.lineIndex ?? 1,
                     )
                   }
-                  className="form-textarea"
                   placeholder="Add description..."
                   rows={Math.max(1, description.split("\n").length)}
                 />
@@ -272,13 +289,12 @@ export function EditTaskModal({ task, onClose, onSave, onDelete }: EditTaskModal
                   onPointerDown={() => setSelectedTask(index)}
                   onFocusCapture={() => setSelectedTask(index)}
                 >
-                  <input
+                  <FormInput
                     aria-label={`Subtask ${index + 1}`}
                     value={subtask.text}
                     onChange={(event) => updateSubtask(index, event.target.value)}
-                    className="form-input"
                   />
-                  <textarea
+                  <FormTextarea
                     aria-label={`Description for subtask ${index + 1}`}
                     value={displayDescription(
                       subtask.descriptionIndexes.map((lineIndex) => lines[lineIndex]),
@@ -291,7 +307,7 @@ export function EditTaskModal({ task, onClose, onSave, onDelete }: EditTaskModal
                         subtask.lineIndex + 1,
                       )
                     }
-                    className="form-textarea subtask-description"
+                    className="subtask-description"
                     placeholder="Add subtask description..."
                   />
                   <button
@@ -320,7 +336,7 @@ export function EditTaskModal({ task, onClose, onSave, onDelete }: EditTaskModal
             <div className="form-grid">
               <div className="form-group">
                 <label htmlFor="task-priority">Priority</label>
-                <select
+                <FormSelect
                   id="task-priority"
                   value={priority}
                   onChange={(event) =>
@@ -333,18 +349,17 @@ export function EditTaskModal({ task, onClose, onSave, onDelete }: EditTaskModal
                       ),
                     )
                   }
-                  className="form-select"
                 >
                   <option value="">None</option>
                   <option value="A">High (A)</option>
                   <option value="B">Medium (B)</option>
                   <option value="C">Low (C)</option>
                   <option value="D">Lowest (D)</option>
-                </select>
+                </FormSelect>
               </div>
               <div className="form-group">
                 <label htmlFor="task-due-date">Due date</label>
-                <input
+                <FormInput
                   id="task-due-date"
                   type="date"
                   value={dueDate}
@@ -357,26 +372,24 @@ export function EditTaskModal({ task, onClose, onSave, onDelete }: EditTaskModal
                       ),
                     )
                   }
-                  className="form-input"
                 />
               </div>
               <div className="form-group">
                 <label htmlFor="task-status">Status</label>
-                <select
+                <FormSelect
                   id="task-status"
                   value={status}
                   onChange={(event) => updateStatus(event.target.value)}
-                  className="form-select"
                 >
                   <option value=" ">Not started</option>
                   <option value="/">In progress</option>
                   <option value="x">Done</option>
                   <option value="-">Cancelled</option>
-                </select>
+                </FormSelect>
               </div>
               <div className="form-group">
                 <label htmlFor="task-estimate">Estimate</label>
-                <input
+                <FormInput
                   id="task-estimate"
                   value={estimate}
                   onChange={(event) =>
@@ -388,13 +401,12 @@ export function EditTaskModal({ task, onClose, onSave, onDelete }: EditTaskModal
                       ),
                     )
                   }
-                  className="form-input"
                   placeholder="e.g. 2h, 30m, 3d"
                 />
               </div>
               <div className="form-group form-grid-wide">
                 <label htmlFor="task-recurrence">Recurrence</label>
-                <input
+                <FormInput
                   id="task-recurrence"
                   value={recurrence}
                   onChange={(event) =>
@@ -406,7 +418,6 @@ export function EditTaskModal({ task, onClose, onSave, onDelete }: EditTaskModal
                       ),
                     )
                   }
-                  className="form-input"
                   placeholder="e.g. every weekday or 0 9 * * 1-5"
                 />
               </div>
@@ -468,16 +479,16 @@ export function EditTaskModal({ task, onClose, onSave, onDelete }: EditTaskModal
           )}
         </div>
         <footer className="modal-footer">
-          <button type="button" className="btn-delete" onClick={requestDelete} disabled={saving}>
+          <ActionButton variant="danger" onClick={requestDelete} disabled={saving}>
             Delete Task
-          </button>
+          </ActionButton>
           <div className="modal-footer-actions">
-            <button type="button" className="btn-cancel" onClick={onClose}>
+            <ActionButton variant="secondary" onClick={onClose}>
               Cancel
-            </button>
-            <button type="button" className="btn-save" onClick={handleSave} disabled={saving}>
+            </ActionButton>
+            <ActionButton variant="primary" onClick={handleSave} disabled={saving}>
               {saving ? "Saving..." : "Save Changes"}
-            </button>
+            </ActionButton>
           </div>
         </footer>
       </section>
@@ -504,9 +515,8 @@ function MetadataInput({
   return (
     <div className="form-group">
       <label>{label}</label>
-      <input
+      <FormInput
         aria-label={`Add ${label.toLowerCase()}`}
-        className="form-input"
         placeholder={`Add ${label.toLowerCase()}…`}
         value={value}
         onChange={(event) => setValue(event.target.value)}
@@ -523,15 +533,14 @@ function MetadataInput({
       />
       <div className="metadata-container">
         {items.map((item) => (
-          <button
+          <MetadataPill
             key={item}
-            type="button"
-            className={`pill ${kind}`}
-            onClick={() => onRemove(item)}
-            aria-label={`Remove ${item}`}
+            kind={kind}
+            onRemove={() => onRemove(item)}
+            removeLabel={`Remove ${item}`}
           >
             {item}
-          </button>
+          </MetadataPill>
         ))}
       </div>
     </div>

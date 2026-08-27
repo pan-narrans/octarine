@@ -14,7 +14,6 @@ interface MarkdownEditorProps {
   onClose: () => void;
   projects?: string[];
   contexts?: string[];
-  isInline?: boolean;
 }
 
 export function MarkdownEditor({
@@ -24,17 +23,14 @@ export function MarkdownEditor({
   onClose,
   projects = [],
   contexts = [],
-  isInline = false,
 }: MarkdownEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const onSaveRef = useRef(onSave);
-  const onCloseRef = useRef(onClose);
   const projectsRef = useRef(projects);
   const contextsRef = useRef(contexts);
 
   onSaveRef.current = onSave;
-  onCloseRef.current = onClose;
   projectsRef.current = projects;
   contextsRef.current = contexts;
 
@@ -282,16 +278,6 @@ export function MarkdownEditor({
           return true;
         },
       },
-      {
-        key: "Escape",
-        run: () => {
-          if (isInline) {
-            onCloseRef.current();
-            return true;
-          }
-          return false;
-        },
-      },
     ]);
 
     // Listener extension to track changes and mark document "dirty"
@@ -311,19 +297,9 @@ export function MarkdownEditor({
       saveKeymap,
       keymap.of([...defaultKeymap, ...historyKeymap]),
       EditorView.lineWrapping,
+      lineNumbers(),
+      highlightActiveLine(),
     ];
-
-    if (!isInline) {
-      extensions.unshift(lineNumbers(), highlightActiveLine());
-    } else {
-      extensions.push(
-        EditorView.domEventHandlers({
-          blur: () => {
-            triggerSave();
-          },
-        }),
-      );
-    }
 
     const state = EditorState.create({
       doc: initialContent,
@@ -345,11 +321,7 @@ export function MarkdownEditor({
     return () => {
       view.destroy();
     };
-  }, [customCompletionSource, filePath, initialContent, isInline, triggerSave]);
-
-  if (isInline) {
-    return <div ref={containerRef} className="editor-canvas inline-mode" />;
-  }
+  }, [customCompletionSource, filePath, initialContent, triggerSave]);
 
   return (
     <div className="editor-workspace">

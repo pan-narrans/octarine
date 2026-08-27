@@ -1,0 +1,163 @@
+.foundations-reference {
+  min-height: 100vh;
+  padding: 48px;
+  background: var(--bg-space);
+  color: var(--text-primary);
+}
+
+.foundations-header {
+  max-width: 720px;
+  margin-bottom: 48px;
+}
+
+.foundations-header h1 {
+  margin: 4px 0 8px;
+  font-size: 36px;
+  letter-spacing: -0.03em;
+}
+
+.foundations-header > p:last-child {
+  color: var(--text-secondary);
+}
+
+.foundations-eyebrow,
+.foundations-type-label {
+  color: var(--color-violet);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.foundations-section {
+  max-width: 1080px;
+  margin-bottom: 48px;
+}
+
+.foundations-section h2 {
+  margin-bottom: 20px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.foundations-color-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.foundations-color {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-card);
+  background: var(--bg-card);
+}
+
+.foundations-swatch {
+  height: 72px;
+  border-bottom: 1px solid var(--border-card);
+}
+
+.foundations-color strong,
+.foundations-color code {
+  display: block;
+  padding: 0 12px;
+  overflow-wrap: anywhere;
+}
+
+.foundations-color strong {
+  padding-top: 12px;
+  font-size: 13px;
+}
+
+.foundations-color code {
+  padding-top: 4px;
+  padding-bottom: 12px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.foundations-type-samples,
+.foundations-measure-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px;
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-card);
+  background: var(--bg-card);
+}
+
+.foundations-type-display {
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.foundations-type-heading {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.foundations-type-body {
+  color: var(--text-secondary);
+  font-size: 16px;
+}
+
+.foundations-type-samples code,
+.foundations-measure code,
+.foundations-radius-grid code {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.foundations-measure {
+  display: grid;
+  grid-template-columns: 130px 64px 48px;
+  align-items: center;
+  gap: 16px;
+}
+
+.foundations-measure-bar {
+  height: 12px;
+  min-width: 4px;
+  border-radius: 2px;
+  background: var(--color-violet);
+}
+
+.foundations-measure span,
+.foundations-radius-grid span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.foundations-radius-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  gap: 16px;
+}
+
+.foundations-radius-grid article {
+  display: grid;
+  gap: 8px;
+}
+
+.foundations-radius {
+  width: 100%;
+  height: 88px;
+  border: 1px solid var(--color-indigo);
+  background: var(--border-glow);
+}
+
+@media (max-width: 640px) {
+  .foundations-reference {
+    padding: 24px;
+  }
+
+  .foundations-radius-grid {
+    grid-template-columns: repeat(2, minmax(120px, 1fr));
+  }
+}

@@ -73,6 +73,8 @@ Run `npm run ipc:generate` after changing a shared Rust DTO and commit the gener
 - `docs/development/rust.md`
 - `docs/development/typescript.md`
 - `docs/development/testing.md`
+- `docs/visual-development.md`
+- `docs/DESIGN.md`
 
 ## Documentation Ownership
 

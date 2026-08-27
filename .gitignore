@@ -13,3 +13,7 @@ src-tauri/target/
 # Node / Frontend
 node_modules/
 dist/
+storybook-static/
+debug-storybook.log
+playwright-report/
+test-results/
