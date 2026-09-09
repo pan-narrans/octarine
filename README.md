@@ -4,12 +4,13 @@ Octarine is an early-stage, local-first desktop task manager and Markdown worksp
 
 ## Current Capabilities
 
-- Parse Markdown checklist tasks with todo (`[ ]`), doing (`[/]`), done (`[x]`), cancelled (`[-]`), and event (`[<]`) markers.
+- Parse Markdown checklist tasks with todo (`[ ]`), doing (`[/]`), deferred (`[>]`), done (`[x]`), cancelled (`[-]`), and event (`[<]`) markers.
 - Extract projects, contexts, tags, priorities, dates, schedules, durations, recurrence text, and completion behavior.
 - Index Markdown files into a local SQLite cache.
 - Refresh frontend state when the native filesystem watcher observes Markdown changes.
 - Browse, create, rename, edit, and delete Markdown files through the desktop interface.
 - Display task, calendar, note, journal, project, context, tag, and embedded custom-query views.
+- Review exact and descendant project tasks on Kanban boards grouped by primary context, with optional closed columns and source-safe movement.
 - Apply task-level edits with location and source-content checks.
 
 Octarine is under active development. See `docs/architecture.md` and `docs/roadmap.md` for the honest implementation boundary.
@@ -20,7 +21,7 @@ Octarine is under active development. See `docs/architecture.md` and `docs/roadm
 - CRDT-based merging and merge review.
 - Mobile and browser/WASM clients.
 - Parallel boot indexing and measured large-vault performance guarantees.
-- Frontend list virtualization.
+- Virtualization for unbounded non-Kanban frontend lists.
 
 ## Technology
 

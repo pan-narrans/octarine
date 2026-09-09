@@ -2,8 +2,8 @@ import { useState } from "react";
 import { Trash, X } from "lucide-react";
 import {
   ActionButton,
+  FormDropdown,
   FormInput,
-  FormSelect,
   FormTextarea,
   MetadataPill,
 } from "../design-system/controls";
@@ -336,26 +336,27 @@ export function EditTaskModal({
             <div className="form-grid">
               <div className="form-group">
                 <label htmlFor="task-priority">Priority</label>
-                <FormSelect
+                <FormDropdown
                   id="task-priority"
                   value={priority}
-                  onChange={(event) =>
+                  options={[
+                    { value: "", label: "None" },
+                    { value: "A", label: "High (A)" },
+                    { value: "B", label: "Medium (B)" },
+                    { value: "C", label: "Low (C)" },
+                    { value: "D", label: "Lowest (D)" },
+                  ]}
+                  onValueChange={(value) =>
                     setRawMarkdown((previous) =>
                       replaceHeaderMetadata(
                         previous,
                         /\([A-Da-d]\)/i,
-                        event.target.value ? `(${event.target.value})` : "",
+                        value ? `(${value})` : "",
                         true,
                       ),
                     )
                   }
-                >
-                  <option value="">None</option>
-                  <option value="A">High (A)</option>
-                  <option value="B">Medium (B)</option>
-                  <option value="C">Low (C)</option>
-                  <option value="D">Lowest (D)</option>
-                </FormSelect>
+                />
               </div>
               <div className="form-group">
                 <label htmlFor="task-due-date">Due date</label>
@@ -376,16 +377,18 @@ export function EditTaskModal({
               </div>
               <div className="form-group">
                 <label htmlFor="task-status">Status</label>
-                <FormSelect
+                <FormDropdown
                   id="task-status"
                   value={status}
-                  onChange={(event) => updateStatus(event.target.value)}
-                >
-                  <option value=" ">Not started</option>
-                  <option value="/">In progress</option>
-                  <option value="x">Done</option>
-                  <option value="-">Cancelled</option>
-                </FormSelect>
+                  options={[
+                    { value: " ", label: "Not started" },
+                    { value: "/", label: "In progress" },
+                    { value: ">", label: "Deferred" },
+                    { value: "x", label: "Done" },
+                    { value: "-", label: "Cancelled" },
+                  ]}
+                  onValueChange={updateStatus}
+                />
               </div>
               <div className="form-group">
                 <label htmlFor="task-estimate">Estimate</label>

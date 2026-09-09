@@ -240,7 +240,7 @@ fn compile_term(term: &str, params: &mut Vec<Value>) -> Result<String, String> {
     } else if let Some(context) = term.strip_prefix('@') {
         validate_identifier(context, "context")?;
         params.push(Value::Text(context.to_string()));
-        Ok("tasks.id IN (SELECT task_id FROM task_contexts JOIN contexts ON contexts.id = task_contexts.context_id WHERE contexts.name = ?)".to_string())
+        Ok("tasks.primary_context = ?".to_string())
     } else if let Some(tag) = term.strip_prefix('#') {
         validate_identifier(tag, "tag")?;
         params.push(Value::Text(tag.to_string()));
@@ -302,7 +302,7 @@ fn compile_term(term: &str, params: &mut Vec<Value>) -> Result<String, String> {
                     }
                 }
                 "status" => {
-                    if !matches!(val, "todo" | "doing" | "done" | "cancelled") {
+                    if !matches!(val, "todo" | "doing" | "deferred" | "done" | "cancelled") {
                         return Err(format!("Invalid status value in query: '{val}'"));
                     }
                     params.push(Value::Text(val.to_string()));
@@ -353,7 +353,7 @@ mod tests {
         assert!(compiled
             .sql
             .contains("(tasks.project = ? OR tasks.project LIKE ? ESCAPE '\\')"));
-        assert!(compiled.sql.contains("contexts.name = ?"));
+        assert!(compiled.sql.contains("tasks.primary_context = ?"));
         assert!(compiled.sql.contains("tags.name = ?"));
         assert_eq!(
             compiled.params,
@@ -375,6 +375,13 @@ mod tests {
             "((tasks.status = ? OR tasks.status = ?) AND (tasks.project = ? OR tasks.project LIKE ? ESCAPE '\\'))"
         );
         assert_eq!(compiled.params.len(), 4);
+    }
+
+    #[test]
+    fn test_compile_deferred_status() {
+        let compiled = compile_filter_to_sql("status = deferred").unwrap();
+        assert_eq!(compiled.sql, "tasks.status = ?");
+        assert_eq!(compiled.params, vec![Value::Text("deferred".to_string())]);
     }
 
     #[test]

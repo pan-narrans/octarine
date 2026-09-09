@@ -9,6 +9,7 @@ Tasks are Markdown list items with a recognized checkbox marker:
 ```markdown
 - [ ] Todo
 - [/] In progress
+- [>] Deferred
 - [x] Done
 - [-] Cancelled
 - [<] Calendar event
@@ -16,7 +17,7 @@ Tasks are Markdown list items with a recognized checkbox marker:
 
 Uppercase `[X]` is also accepted as done. A scheduled start (`s:`) causes an item to be treated as an event even when it uses a task marker.
 
-`[>]` is not an Octarine event marker.
+`[>]` is a deferred task marker. It remains a task unless a scheduled start (`s:`) makes it an event.
 
 ## Inline Metadata
 
@@ -43,7 +44,7 @@ Supported forms:
 
 Some values accept single or double quotes. The parser validates known date, date-time, duration, and completion-action forms; unsupported values are preserved in raw Markdown and reported through parse errors where implemented.
 
-The first project is the task's indexed project. Tags and contexts may contain letters, digits, underscores, hyphens, and slash-separated hierarchy.
+The first project is the task's indexed project. The first context in source order is the task's primary context and controls context grouping and filtering. Later contexts remain preserved and indexed in source order but are not effective filters. Tags remain multi-valued. Tags and contexts may contain letters, digits, underscores, hyphens, and slash-separated hierarchy; Kanban treats their labels as flat values.
 
 ## Multiline Tasks and Children
 

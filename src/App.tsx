@@ -6,13 +6,23 @@ import { FileTree } from "./components/FileTree";
 import { MarkdownEditor } from "./components/MarkdownEditor";
 import { WorkspaceState } from "./components/WorkspaceState";
 import { EditTaskModal } from "./components/EditTaskModal";
+import { CreateTaskModal } from "./components/CreateTaskModal";
+import { NotificationViewport } from "./components/NotificationViewport";
+import { TaskCreationSettings } from "./components/TaskCreationSettings";
 import { TaskCard } from "./features/tasks/TaskCard";
 import { SidebarNavigation } from "./features/navigation/SidebarNavigation";
 import { Dashboard } from "./features/dashboard/Dashboard";
+import { KanbanBoard } from "./features/kanban/KanbanBoard";
+import type { ClosedKanbanStatus } from "./features/kanban/model";
+import {
+  readProjectViewMode,
+  writeProjectViewMode,
+  type ProjectViewMode,
+} from "./features/kanban/preference";
 import { CalendarSurface } from "./features/calendar/CalendarSurface";
 import { DayDrawer, type ScheduleDraft } from "./features/calendar/DayDrawer";
 import { calendarDateKey, getCalendarEvents } from "./features/calendar/calendar-utils";
-import { Loader2, Search, Edit2, Check, X, BookOpen } from "lucide-react";
+import { Loader2, Search, Edit2, Check, X, BookOpen, Plus, Settings } from "lucide-react";
 import { listen } from "@tauri-apps/api/event";
 import {
   isWriteConflict,
@@ -21,6 +31,8 @@ import {
   updateTaskMarkdown,
   writeErrorMessage,
 } from "./features/tasks/ipc";
+import { useTaskCreationController } from "./features/tasks/use-task-creation-controller";
+import { useTaskCreationSettings } from "./features/settings/use-task-creation-settings";
 import {
   createDirectory,
   createFile,
@@ -31,7 +43,6 @@ import {
   readJournalTree,
   readVaultTree,
   renamePath,
-  setJournalConfig,
   setVaultConfig,
   writeFileContent,
 } from "./features/workspace/ipc";
@@ -41,14 +52,33 @@ export function App() {
   // Activate live Tauri event listener for real-time background watcher sync
   useTauriEvents();
 
-  const { tasks, customViews, loading, fetchTasks, fetchCustomViews, updateTaskStatus } =
-    useTaskStore();
+  const {
+    tasks,
+    customViews,
+    loading,
+    error,
+    pendingTaskMoves,
+    fetchTasks,
+    fetchCustomViews,
+    updateTaskStatus,
+    moveTask,
+  } = useTaskStore();
 
   const visualScenario = getVisualScenario();
   const [selectedSection, setSelectedSection] = useState<string>(() =>
-    visualScenario === "calendar" ? "events" : "all",
+    visualScenario === "calendar"
+      ? "events"
+      : visualScenario === "kanban"
+        ? "proj:octarine"
+        : visualScenario === "settings"
+          ? "settings"
+          : "all",
   );
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const [projectViewMode, setProjectViewMode] = useState<ProjectViewMode>(() =>
+    readProjectViewMode(window.localStorage),
+  );
+  const [visibleClosedStatuses, setVisibleClosedStatuses] = useState<ClosedKanbanStatus[]>([]);
   const [activeVaultPath, setActiveVaultPath] = useState<string>("Loading...");
 
   // Vault Path Inline Editor state
@@ -83,9 +113,7 @@ export function App() {
   // -----------------------------------------------------------------
   const [journalTree, setJournalTree] = useState<FileNode | null>(null);
   const [activeJournalPath, setActiveJournalPath] = useState<string>("Loading...");
-  const [isEditingJournal, setIsEditingJournal] = useState<boolean>(false);
-  const [journalInput, setJournalInput] = useState<string>("");
-  const [savingJournal, setSavingJournal] = useState<boolean>(false);
+  const [journalSetupRequired, setJournalSetupRequired] = useState(false);
   const [notesExpanded, setNotesExpanded] = useState<boolean>(false);
   const [journalsExpanded, setJournalsExpanded] = useState<boolean>(false);
   const [modalTask, setModalTask] = useState<Task | null>(null);
@@ -93,6 +121,10 @@ export function App() {
   const [todayJournalContent, setTodayJournalContent] = useState<string | null>(null);
   const [todayJournalPath, setTodayJournalPath] = useState<string>("");
   const [todayJournalLoading, setTodayJournalLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    writeProjectViewMode(window.localStorage, projectViewMode);
+  }, [projectViewMode]);
 
   // Initial Boot Fetch & Config Query
   useEffect(() => {
@@ -112,11 +144,14 @@ export function App() {
     // Fetch active journal path dynamically from Tauri state
     getJournalConfig()
       .then((path) => {
+        setJournalSetupRequired(false);
         setActiveJournalPath(path);
-        setJournalInput(path);
         fetchTodayJournal(path);
       })
-      .catch((err) => console.error("Failed to query active journal path:", err));
+      .catch((err) => {
+        setJournalSetupRequired(true);
+        console.error("Failed to query active journal path:", err);
+      });
   }, [fetchTasks, fetchCustomViews]);
 
   // Listen to background watcher change events to update directories dynamically
@@ -170,7 +205,11 @@ export function App() {
 
   // Aggregate unique projects, contexts, and tags dynamically from loaded tasks
   const projects = Array.from(new Set(tasks.map((t) => t.project).filter((p): p is string => !!p)));
-  const contexts = Array.from(new Set(tasks.flatMap((task) => task.contexts)));
+  const contexts = Array.from(
+    new Set(
+      tasks.map((task) => task.primary_context).filter((context): context is string => !!context),
+    ),
+  );
   const tags = Array.from(new Set(tasks.flatMap((task) => task.tags)));
 
   const getTaskMarkdownHierarchy = (task: Task) => {
@@ -240,7 +279,7 @@ export function App() {
     }
     if (selectedSection.startsWith("ctx:")) {
       const ctx = selectedSection.slice("ctx:".length);
-      return task.contexts.includes(ctx);
+      return task.primary_context === ctx;
     }
     if (selectedSection.startsWith("tag:")) {
       const tag = selectedSection.slice("tag:".length);
@@ -259,6 +298,14 @@ export function App() {
     } else {
       fetchTasks();
     }
+  };
+
+  const toggleClosedStatus = (status: ClosedKanbanStatus) => {
+    setVisibleClosedStatuses((current) =>
+      current.includes(status)
+        ? current.filter((candidate) => candidate !== status)
+        : [...current, status],
+    );
   };
 
   // -------------------------------------------------------------
@@ -283,22 +330,11 @@ export function App() {
     }
   };
 
-  const handleSaveJournal = async () => {
-    setSavingJournal(true);
-    try {
-      await setJournalConfig(journalInput.trim());
-      setActiveJournalPath(journalInput.trim());
-      setIsEditingJournal(false);
-      await fetchJournalTree();
-    } catch (e) {
-      console.error("Failed to save journal config:", e);
-      alert(`Error saving journal path: ${e}`);
-    } finally {
-      setSavingJournal(false);
-    }
-  };
-
   const handleOpenTodayJournal = async () => {
+    if (journalSetupRequired) {
+      handleSidebarItemClick("settings");
+      return;
+    }
     try {
       const today = new Date();
       const yyyy = today.getFullYear();
@@ -512,6 +548,22 @@ export function App() {
     }
   };
 
+  const taskCreation = useTaskCreationController({
+    selectedSection,
+    refreshTasks: fetchTasks,
+    refreshFiles: fetchDirTree,
+    openFile: handleSelectFile,
+  });
+  const taskSettings = useTaskCreationSettings({
+    enabled: selectedSection === "settings" && activeFilePath === null,
+    onSaved: async () => {
+      const journalPath = await getJournalConfig();
+      setJournalSetupRequired(false);
+      setActiveJournalPath(journalPath);
+      await Promise.all([fetchJournalTree(), fetchDirTree(), fetchTodayJournal(journalPath)]);
+    },
+  });
+
   return (
     <>
       {/* 1. SIDEBAR PANEL */}
@@ -536,7 +588,11 @@ export function App() {
                 }}
               >
                 <h4
-                  onClick={() => setJournalsExpanded(!journalsExpanded)}
+                  onClick={() =>
+                    journalSetupRequired
+                      ? handleSidebarItemClick("settings")
+                      : setJournalsExpanded(!journalsExpanded)
+                  }
                   style={{ margin: 0, cursor: "pointer", flexGrow: 1 }}
                 >
                   Journals
@@ -547,12 +603,18 @@ export function App() {
                       e.stopPropagation();
                       handleOpenTodayJournal();
                     }}
-                    title="Write Today's Entry"
+                    title={
+                      journalSetupRequired
+                        ? "Configure journal in Task settings"
+                        : "Write Today's Entry"
+                    }
+                    disabled={journalSetupRequired}
                     style={{
                       background: "none",
                       border: "none",
                       color: "var(--color-violet)",
-                      cursor: "pointer",
+                      cursor: journalSetupRequired ? "not-allowed" : "pointer",
+                      opacity: journalSetupRequired ? 0.45 : 1,
                       display: "flex",
                       alignItems: "center",
                       padding: 0,
@@ -561,10 +623,18 @@ export function App() {
                     <BookOpen size={14} />
                   </button>
                   <span
-                    onClick={() => setJournalsExpanded(!journalsExpanded)}
+                    onClick={() =>
+                      journalSetupRequired
+                        ? handleSidebarItemClick("settings")
+                        : setJournalsExpanded(!journalsExpanded)
+                    }
                     style={{ fontSize: "0.7rem", color: "var(--text-muted)", cursor: "pointer" }}
                   >
-                    {journalsExpanded ? "Collapse" : "Expand"}
+                    {journalSetupRequired
+                      ? "Setup required"
+                      : journalsExpanded
+                        ? "Collapse"
+                        : "Expand"}
                   </span>
                 </div>
               </div>
@@ -646,11 +716,24 @@ export function App() {
           </>
         }
         footer={
-          <>
+          <div className="sidebar-footer">
+            <ul className="sidebar-list sidebar-settings-link">
+              <li>
+                <button
+                  type="button"
+                  className={`sidebar-item ${
+                    activeFilePath === null && selectedSection === "settings" ? "active" : ""
+                  }`}
+                  onClick={() => handleSidebarItemClick("settings")}
+                >
+                  <Settings size={16} /> Task settings
+                </button>
+              </li>
+            </ul>
+
             {/* Active Vault Location indicator with Inline Editor */}
             <div
               style={{
-                marginTop: "auto",
                 borderTop: "1px solid var(--border-card)",
                 paddingTop: "1.5rem",
               }}
@@ -770,136 +853,28 @@ export function App() {
                 </div>
               )}
             </div>
-
-            {/* Active Journal Location indicator with Inline Editor */}
-            <div
-              style={{
-                marginTop: "1rem",
-                borderTop: "1px solid rgba(255,255,255,0.03)",
-                paddingTop: "1rem",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  marginBottom: "0.5rem",
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: "0.75rem",
-                    textTransform: "uppercase",
-                    color: "var(--text-muted)",
-                    fontWeight: 600,
-                    letterSpacing: "0.05em",
-                  }}
-                >
-                  Active Journal Path
-                </span>
-                {!isEditingJournal && (
-                  <button
-                    onClick={() => setIsEditingJournal(true)}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      color: "var(--color-violet)",
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      padding: 0,
-                    }}
-                  >
-                    <Edit2 size={12} />
-                  </button>
-                )}
-              </div>
-
-              {isEditingJournal ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                  <input
-                    type="text"
-                    value={journalInput}
-                    onChange={(e) => setJournalInput(e.target.value)}
-                    style={{
-                      width: "100%",
-                      background: "rgba(255, 255, 255, 0.05)",
-                      border: "1px solid var(--border-card)",
-                      borderRadius: "6px",
-                      color: "var(--text-primary)",
-                      padding: "0.4rem 0.6rem",
-                      fontSize: "0.8rem",
-                      fontFamily: "monospace",
-                    }}
-                    placeholder="~/octarine_journal"
-                    disabled={savingJournal}
-                  />
-                  <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
-                    <button
-                      onClick={() => setIsEditingJournal(false)}
-                      style={{
-                        background: "rgba(255, 255, 255, 0.05)",
-                        border: "1px solid var(--border-card)",
-                        color: "var(--text-muted)",
-                        padding: "0.25rem 0.5rem",
-                        borderRadius: "4px",
-                        cursor: "pointer",
-                        fontSize: "0.75rem",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "0.25rem",
-                      }}
-                      disabled={savingJournal}
-                    >
-                      <X size={10} /> Cancel
-                    </button>
-                    <button
-                      onClick={handleSaveJournal}
-                      style={{
-                        background: "var(--color-violet)",
-                        border: "none",
-                        color: "white",
-                        padding: "0.25rem 0.5rem",
-                        borderRadius: "4px",
-                        cursor: "pointer",
-                        fontSize: "0.75rem",
-                        fontWeight: 600,
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "0.25rem",
-                      }}
-                      disabled={savingJournal}
-                    >
-                      {savingJournal ? (
-                        <Loader2 size={10} className="animate-spin" />
-                      ) : (
-                        <Check size={10} />
-                      )}{" "}
-                      Save
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div
-                  style={{
-                    fontSize: "0.8rem",
-                    color: "var(--text-secondary)",
-                    wordBreak: "break-all",
-                    fontStyle: "italic",
-                    lineHeight: 1.4,
-                  }}
-                >
-                  {activeJournalPath}
-                </div>
-              )}
-            </div>
-          </>
+          </div>
         }
       />
 
       {/* 2. MAIN WORKSPACE PANEL */}
       <div className="main-content">
+        {taskCreation.isOpen && (
+          <CreateTaskModal
+            input={taskCreation.input}
+            preview={taskCreation.preview}
+            expanded={taskCreation.expanded}
+            creating={taskCreation.creating}
+            validationMessage={taskCreation.validationMessage}
+            onInputChange={taskCreation.setInput}
+            onDraftChange={taskCreation.setPreview}
+            onRawMarkdownChange={taskCreation.setRawMarkdown}
+            onExpandedChange={taskCreation.setExpanded}
+            onCreate={() => void taskCreation.create()}
+            onClose={taskCreation.close}
+          />
+        )}
+
         {modalTask && (
           <EditTaskModal
             task={modalTask}
@@ -945,50 +920,96 @@ export function App() {
           />
         )}
 
-        <div className="main-header">
-          <div className="main-title">
-            <h1>
-              {activeFilePath !== null && "Plaintext Note Editor"}
-              {activeFilePath === null && selectedSection === "all" && "Inbox Dashboard"}
-              {activeFilePath === null && selectedSection === "todo" && "Inbox: Todo"}
-              {activeFilePath === null && selectedSection === "doing" && "Active Sprints"}
-              {activeFilePath === null && selectedSection === "events" && "Calendar Timeline"}
-              {activeFilePath === null &&
-                selectedSection.startsWith("proj:") &&
-                `Project: ${selectedSection.slice(5)}`}
-              {activeFilePath === null &&
-                selectedSection.startsWith("ctx:") &&
-                `Context: @${selectedSection.slice(4)}`}
-              {activeFilePath === null &&
-                selectedSection.startsWith("tag:") &&
-                `Tag: #${selectedSection.slice(4)}`}
-              {activeFilePath === null &&
-                selectedSection.startsWith("view:") &&
-                `Query: ${selectedSection.slice(5)}`}
-            </h1>
-            <p>
-              {activeFilePath !== null
-                ? "Direct Markdown Editor Workspace"
-                : "Sub-millisecond plaintext organization"}
-            </p>
+        {!(activeFilePath === null && selectedSection === "settings") && (
+          <div className="main-header">
+            <div className="main-title">
+              <h1>
+                {activeFilePath !== null && "Plaintext Note Editor"}
+                {activeFilePath === null && selectedSection === "all" && "Inbox Dashboard"}
+                {activeFilePath === null && selectedSection === "todo" && "Inbox: Todo"}
+                {activeFilePath === null && selectedSection === "doing" && "Active Sprints"}
+                {activeFilePath === null && selectedSection === "events" && "Calendar Timeline"}
+                {activeFilePath === null &&
+                  selectedSection.startsWith("proj:") &&
+                  `Project: ${selectedSection.slice(5)}`}
+                {activeFilePath === null &&
+                  selectedSection.startsWith("ctx:") &&
+                  `Context: @${selectedSection.slice(4)}`}
+                {activeFilePath === null &&
+                  selectedSection.startsWith("tag:") &&
+                  `Tag: #${selectedSection.slice(4)}`}
+                {activeFilePath === null &&
+                  selectedSection.startsWith("view:") &&
+                  `Query: ${selectedSection.slice(5)}`}
+              </h1>
+              <p>
+                {activeFilePath !== null
+                  ? "Direct Markdown Editor Workspace"
+                  : "Sub-millisecond plaintext organization"}
+              </p>
+            </div>
+            <button
+              ref={taskCreation.triggerRef}
+              type="button"
+              className="new-task-button"
+              onClick={taskCreation.open}
+            >
+              <Plus size={16} /> New task
+            </button>
           </div>
-        </div>
+        )}
 
         {/* Search Inputs (only displayed in dashboard mode) */}
-        {activeFilePath === null && (
-          <div className="search-container">
-            <Search size={18} color="#6b7280" />
-            <input
-              type="text"
-              placeholder="Search tasks, descriptions or projects..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+        {activeFilePath === null && selectedSection !== "settings" && (
+          <div className="workspace-toolbar">
+            <div className="search-container">
+              <Search size={18} color="#6b7280" />
+              <input
+                type="text"
+                placeholder="Search tasks, descriptions or projects..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            {selectedSection.startsWith("proj:") && (
+              <div className="project-view-controls" aria-label="Project view controls">
+                <div className="project-view-switch" aria-label="Project presentation">
+                  {(["board", "list"] as const).map((mode) => (
+                    <button
+                      type="button"
+                      key={mode}
+                      className={projectViewMode === mode ? "active" : ""}
+                      aria-pressed={projectViewMode === mode}
+                      onClick={() => setProjectViewMode(mode)}
+                    >
+                      {mode === "board" ? "Board" : "List"}
+                    </button>
+                  ))}
+                </div>
+                {projectViewMode === "board" && (
+                  <div className="project-status-filters" aria-label="Closed status columns">
+                    {(["done", "cancelled"] as const).map((status) => (
+                      <button
+                        type="button"
+                        key={status}
+                        className={visibleClosedStatuses.includes(status) ? "active" : ""}
+                        aria-pressed={visibleClosedStatuses.includes(status)}
+                        onClick={() => toggleClosedStatus(status)}
+                      >
+                        {status === "done" ? "Done" : "Cancelled"}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
         {/* Active Loader */}
-        {loading && tasks.length === 0 && <WorkspaceState kind="loading" />}
+        {loading && tasks.length === 0 && selectedSection !== "settings" && (
+          <WorkspaceState kind="loading" />
+        )}
 
         {/* Render Notes Editor Mode or Normal Task Dashboard Content */}
         {activeFilePath !== null && activeFileContent !== null ? (
@@ -1009,6 +1030,30 @@ export function App() {
               contexts={contexts}
             />
           </div>
+        ) : selectedSection === "settings" ? (
+          taskSettings.value ? (
+            <div className="task-settings-app-surface">
+              <TaskCreationSettings
+                value={taskSettings.value}
+                errors={taskSettings.errors}
+                migrationSource={taskSettings.migrationSource}
+                saving={taskSettings.saving}
+                saved={taskSettings.saved}
+                onChange={taskSettings.setValue}
+                onSave={() => void taskSettings.save()}
+              />
+            </div>
+          ) : taskSettings.loading ? (
+            <WorkspaceState kind="loading" />
+          ) : (
+            <div className="empty-state">
+              <h3>Task settings unavailable</h3>
+              <p>{taskSettings.loadError}</p>
+              <button className="new-task-button" onClick={() => void taskSettings.load()}>
+                Retry
+              </button>
+            </div>
+          )
         ) : !loading && selectedSection === "events" ? (
           <CalendarSurface
             tasks={tasks}
@@ -1034,6 +1079,18 @@ export function App() {
             onOpenTask={openTaskModal}
             onStatusChange={handleTaskStatusChange}
           />
+        ) : selectedSection.startsWith("proj:") && projectViewMode === "board" ? (
+          <KanbanBoard
+            tasks={tasks}
+            selectedProject={selectedSection.slice("proj:".length)}
+            searchQuery={searchQuery}
+            visibleClosedStatuses={visibleClosedStatuses}
+            errorMessage={error}
+            pendingTaskMoves={pendingTaskMoves}
+            onOpenTask={openTaskModal}
+            onStatusChange={handleTaskStatusChange}
+            onMoveTask={moveTask}
+          />
         ) : !loading && filteredTasks.length === 0 ? (
           <WorkspaceState kind="empty" />
         ) : (
@@ -1058,6 +1115,11 @@ export function App() {
           </div>
         )}
       </div>
+
+      <NotificationViewport
+        notifications={taskCreation.notifications}
+        onDismiss={taskCreation.dismissNotification}
+      />
 
       {showDrawer && drawerDate && (
         <DayDrawer

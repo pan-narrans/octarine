@@ -6,8 +6,8 @@ use std::fs;
 use std::path::Path;
 use std::time::UNIX_EPOCH;
 
-const CACHE_SCHEMA_VERSION: i64 = 1;
-const INDEX_FORMAT_VERSION: i64 = 1;
+const CACHE_SCHEMA_VERSION: i64 = 2;
+const INDEX_FORMAT_VERSION: i64 = 2;
 
 pub fn initialize_db<P: AsRef<Path>>(db_path: P) -> Result<Connection> {
     let conn = Connection::open(db_path)?;
@@ -49,6 +49,7 @@ pub fn initialize_db<P: AsRef<Path>>(db_path: P) -> Result<Connection> {
             parse_errors TEXT,
             priority INTEGER,
             parent_hash TEXT,
+            primary_context TEXT,
             FOREIGN KEY(file_id) REFERENCES files(id) ON DELETE CASCADE
         );
         CREATE INDEX IF NOT EXISTS idx_tasks_hash ON tasks(hash);
@@ -79,7 +80,8 @@ pub fn initialize_db<P: AsRef<Path>>(db_path: P) -> Result<Connection> {
         CREATE TABLE IF NOT EXISTS task_contexts (
             task_id INTEGER NOT NULL,
             context_id INTEGER NOT NULL,
-            PRIMARY KEY (task_id, context_id),
+            position INTEGER NOT NULL,
+            PRIMARY KEY (task_id, position),
             FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE,
             FOREIGN KEY(context_id) REFERENCES contexts(id) ON DELETE CASCADE
         );
@@ -125,11 +127,41 @@ pub fn initialize_db<P: AsRef<Path>>(db_path: P) -> Result<Connection> {
         if !columns.contains(&"parent_hash".to_string()) {
             conn.execute("ALTER TABLE tasks ADD COLUMN parent_hash TEXT", [])?;
         }
+        if !columns.contains(&"primary_context".to_string()) {
+            conn.execute("ALTER TABLE tasks ADD COLUMN primary_context TEXT", [])?;
+        }
+    }
+
+    // Context rows are derived data. Recreate the association table when upgrading from the
+    // unordered schema so source positions and duplicate tokens can be represented exactly.
+    {
+        let mut stmt = conn.prepare("PRAGMA table_info(task_contexts)")?;
+        let columns: Vec<String> = stmt
+            .query_map([], |row| row.get(1))?
+            .filter_map(|r| r.ok())
+            .collect();
+        if !columns.contains(&"position".to_string()) {
+            conn.execute_batch(
+                "DROP TABLE task_contexts;
+                 CREATE TABLE task_contexts (
+                    task_id INTEGER NOT NULL,
+                    context_id INTEGER NOT NULL,
+                    position INTEGER NOT NULL,
+                    PRIMARY KEY (task_id, position),
+                    FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+                    FOREIGN KEY(context_id) REFERENCES contexts(id) ON DELETE CASCADE
+                 );",
+            )?;
+        }
     }
 
     // Ensure index on parent_hash is created after column migration is complete
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_tasks_parent_hash ON tasks(parent_hash);",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_tasks_primary_context ON tasks(primary_context);",
         [],
     )?;
 
@@ -228,6 +260,7 @@ pub fn query_tasks(
             tasks.priority,
             files.path,
             tasks.parent_hash,
+            tasks.primary_context,
             COALESCE((
                 SELECT json_group_array(tags.name)
                 FROM task_tags
@@ -235,10 +268,14 @@ pub fn query_tasks(
                 WHERE task_tags.task_id = tasks.id
             ), '[]'),
             COALESCE((
-                SELECT json_group_array(contexts.name)
-                FROM task_contexts
-                JOIN contexts ON contexts.id = task_contexts.context_id
-                WHERE task_contexts.task_id = tasks.id
+                SELECT json_group_array(ordered_contexts.name)
+                FROM (
+                    SELECT contexts.name AS name
+                    FROM task_contexts
+                    JOIN contexts ON contexts.id = task_contexts.context_id
+                    WHERE task_contexts.task_id = tasks.id
+                    ORDER BY task_contexts.position
+                ) AS ordered_contexts
             ), '[]')
          FROM tasks
          JOIN files ON files.id = tasks.file_id
@@ -247,8 +284,8 @@ pub fn query_tasks(
 
     let mut stmt = conn.prepare(&query)?;
     let rows = stmt.query_map(params_from_iter(query_params.iter()), |row| {
-        let tags_json: String = row.get(16)?;
-        let contexts_json: String = row.get(17)?;
+        let tags_json: String = row.get(17)?;
+        let contexts_json: String = row.get(18)?;
 
         Ok(parser::ParsedTask {
             line_number: row.get(0)?,
@@ -267,6 +304,7 @@ pub fn query_tasks(
             priority: row.get(13)?,
             file_path: Some(row.get(14)?),
             parent_hash: row.get(15)?,
+            primary_context: row.get(16)?,
             tags: serde_json::from_str(&tags_json).unwrap_or_default(),
             contexts: serde_json::from_str(&contexts_json).unwrap_or_default(),
         })
@@ -330,8 +368,9 @@ pub fn index_single_file(conn: &Connection, path: &str) -> Result<(), Box<dyn st
         tx.execute(
             "INSERT INTO tasks (
                 file_id, line_number, raw_markdown, hash, status, type, description,
-                project, due_date, s_start, duration_secs, recurring, when_done, parse_errors, priority, parent_hash
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+                project, due_date, s_start, duration_secs, recurring, when_done, parse_errors,
+                priority, parent_hash, primary_context
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
             params![
                 file_id,
                 task.line_number,
@@ -348,7 +387,8 @@ pub fn index_single_file(conn: &Connection, path: &str) -> Result<(), Box<dyn st
                 task.when_done,
                 task.parse_errors,
                 task.priority,
-                task.parent_hash
+                task.parent_hash,
+                task.primary_context
             ],
         )?;
         let task_id: i64 = tx.last_insert_rowid();
@@ -367,7 +407,7 @@ pub fn index_single_file(conn: &Connection, path: &str) -> Result<(), Box<dyn st
         }
 
         // Handle Contexts
-        for context in task.contexts {
+        for (position, context) in task.contexts.into_iter().enumerate() {
             tx.execute(
                 "INSERT OR IGNORE INTO contexts (name) VALUES (?)",
                 params![context],
@@ -378,8 +418,8 @@ pub fn index_single_file(conn: &Connection, path: &str) -> Result<(), Box<dyn st
                 |r| r.get(0),
             )?;
             tx.execute(
-                "INSERT OR IGNORE INTO task_contexts (task_id, context_id) VALUES (?, ?)",
-                params![task_id, context_id],
+                "INSERT INTO task_contexts (task_id, context_id, position) VALUES (?, ?, ?)",
+                params![task_id, context_id, position as i64],
             )?;
         }
     }
@@ -396,18 +436,24 @@ pub fn index_single_file(conn: &Connection, path: &str) -> Result<(), Box<dyn st
     Ok(())
 }
 
-fn scan_directory_recursive(dir: &Path, files: &mut Vec<String>) -> std::io::Result<()> {
+fn scan_directory_recursive(
+    dir: &Path,
+    filter: &crate::vault_ignore::VaultPathFilter,
+    files: &mut Vec<String>,
+) -> std::io::Result<()> {
     if dir.is_dir() {
         for entry in fs::read_dir(dir)? {
             let entry = entry?;
             let path = entry.path();
-            if path.is_dir() {
-                scan_directory_recursive(&path, files)?;
-            } else if let Some(ext) = path.extension() {
-                if ext == "md" {
-                    if let Ok(canonical) = fs::canonicalize(&path) {
-                        files.push(canonical.to_string_lossy().to_string());
-                    }
+            let file_type = entry.file_type()?;
+            if file_type.is_symlink() || filter.is_ignored(&path, file_type.is_dir()) {
+                continue;
+            }
+            if file_type.is_dir() {
+                scan_directory_recursive(&path, filter, files)?;
+            } else if filter.is_indexable_markdown(&path) {
+                if let Ok(canonical) = fs::canonicalize(&path) {
+                    files.push(canonical.to_string_lossy().to_string());
                 }
             }
         }
@@ -432,9 +478,11 @@ pub fn boot_sweep_with_diagnostics<P: AsRef<Path>>(
         fs::create_dir_all(vault_path)?;
     }
 
-    // 1. Scan filesystem for all .md files
+    // 1. Scan filesystem for all non-ignored .md files.
+    let filter =
+        crate::vault_ignore::VaultPathFilter::load(vault_path).map_err(std::io::Error::other)?;
     let mut fs_files = Vec::new();
-    scan_directory_recursive(vault_path, &mut fs_files)?;
+    scan_directory_recursive(vault_path, &filter, &mut fs_files)?;
 
     // 2. Fetch all cached file paths from DB
     let mut stmt = conn.prepare("SELECT path FROM files")?;
@@ -553,6 +601,98 @@ mod tests {
             .query_row("SELECT count(*) FROM tasks", [], |row| row.get(0))
             .unwrap();
         assert_eq!(rebuilt_task_count, 1);
+    }
+
+    #[test]
+    fn test_migrates_unordered_context_associations() {
+        let temp_dir = tempdir().unwrap();
+        let db_path = temp_dir.path().join("cache.db");
+        let conn = initialize_db(&db_path).unwrap();
+        conn.execute_batch(
+            "DROP TABLE task_contexts;
+             CREATE TABLE task_contexts (
+                task_id INTEGER NOT NULL,
+                context_id INTEGER NOT NULL,
+                PRIMARY KEY (task_id, context_id),
+                FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+                FOREIGN KEY(context_id) REFERENCES contexts(id) ON DELETE CASCADE
+             );
+             UPDATE cache_metadata SET value = 1 WHERE key IN ('schema_version', 'index_format_version');",
+        )
+        .unwrap();
+        drop(conn);
+
+        let migrated = initialize_db(&db_path).unwrap();
+        let columns: Vec<String> = migrated
+            .prepare("PRAGMA table_info(task_contexts)")
+            .unwrap()
+            .query_map([], |row| row.get(1))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect();
+
+        assert!(columns.contains(&"position".to_string()));
+        let schema_version: i64 = migrated
+            .query_row(
+                "SELECT value FROM cache_metadata WHERE key = 'schema_version'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(schema_version, CACHE_SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn test_primary_context_and_source_order_are_indexed() {
+        let temp_dir = tempdir().unwrap();
+        let db_path = temp_dir.path().join("cache.db");
+        let vault_dir = temp_dir.path().join("vault");
+        fs::create_dir_all(&vault_dir).unwrap();
+        let file_path = vault_dir.join("tasks.md");
+        fs::write(
+            &file_path,
+            "- [ ] Coordinate launch @call @ana @call +work\n- [ ] Work independently +work\n",
+        )
+        .unwrap();
+
+        let conn = initialize_db(&db_path).unwrap();
+        index_single_file(&conn, file_path.to_str().unwrap()).unwrap();
+
+        let tasks = query_tasks(
+            &conn,
+            "tasks.description = ?",
+            &[Value::Text("Coordinate launch".into())],
+        )
+        .unwrap();
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].primary_context.as_deref(), Some("call"));
+        assert_eq!(tasks[0].contexts, vec!["call", "ana", "call"]);
+
+        let positions: Vec<i64> = conn
+            .prepare(
+                "SELECT position FROM task_contexts
+                 JOIN tasks ON tasks.id = task_contexts.task_id
+                 WHERE tasks.description = 'Coordinate launch'
+                 ORDER BY position",
+            )
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect();
+        assert_eq!(positions, vec![0, 1, 2]);
+
+        let primary = crate::query_dsl::compile_filter_to_sql("@call").unwrap();
+        assert_eq!(
+            query_tasks(&conn, &primary.sql, &primary.params)
+                .unwrap()
+                .len(),
+            1
+        );
+        let secondary = crate::query_dsl::compile_filter_to_sql("@ana").unwrap();
+        assert!(query_tasks(&conn, &secondary.sql, &secondary.params)
+            .unwrap()
+            .is_empty());
     }
 
     #[test]
@@ -781,5 +921,58 @@ mod tests {
 
         assert_eq!(results[2].0, "Default task without priority");
         assert_eq!(results[2].1, None);
+    }
+
+    #[test]
+    fn test_boot_sweep_reconciles_octarineignore_changes() {
+        let temp_dir = tempdir().unwrap();
+        let db_path = temp_dir.path().join("cache.db");
+        let vault_dir = temp_dir.path().join("vault");
+        fs::create_dir_all(&vault_dir).unwrap();
+        fs::write(vault_dir.join("visible.md"), "- [ ] Visible task\n").unwrap();
+        fs::write(vault_dir.join("archive.md"), "- [ ] Archived task\n").unwrap();
+
+        let conn = initialize_db(&db_path).unwrap();
+        boot_sweep(&conn, &vault_dir).unwrap();
+        let initial_count: i64 = conn
+            .query_row("SELECT count(*) FROM tasks", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(initial_count, 2);
+
+        fs::write(vault_dir.join(".octarineignore"), "archive.md\n").unwrap();
+        boot_sweep(&conn, &vault_dir).unwrap();
+
+        let remaining: Vec<String> = conn
+            .prepare("SELECT description FROM tasks ORDER BY description")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(remaining, vec!["Visible task"]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_boot_sweep_skips_hidden_and_symlinked_directories() {
+        use std::os::unix::fs::symlink;
+
+        let temp_dir = tempdir().unwrap();
+        let db_path = temp_dir.path().join("cache.db");
+        let vault_dir = temp_dir.path().join("vault");
+        let outside_dir = temp_dir.path().join("outside");
+        fs::create_dir_all(vault_dir.join(".hidden")).unwrap();
+        fs::create_dir(&outside_dir).unwrap();
+        fs::write(vault_dir.join(".hidden/task.md"), "- [ ] Hidden task\n").unwrap();
+        fs::write(outside_dir.join("task.md"), "- [ ] Outside task\n").unwrap();
+        symlink(&outside_dir, vault_dir.join("linked")).unwrap();
+
+        let conn = initialize_db(&db_path).unwrap();
+        boot_sweep(&conn, &vault_dir).unwrap();
+
+        let count: i64 = conn
+            .query_row("SELECT count(*) FROM tasks", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 0);
     }
 }

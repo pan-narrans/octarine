@@ -13,6 +13,34 @@ test.describe("EditTaskModal visual regression", () => {
     await expectStoryScreenshot(page, "default", "default-desktop.png");
   });
 
+  test("native window keeps save action reachable", async ({ page }) => {
+    await page.setViewportSize({ width: 1200, height: 800 });
+    await page.goto(storyUrl("default"));
+
+    await expect(page.getByRole("button", { name: "Save Changes" })).toBeInViewport();
+    await expect(page.getByRole("dialog", { name: "Edit Task" })).toHaveScreenshot(
+      "native-window.png",
+    );
+  });
+
+  test("opens DOM dropdowns and changes values", async ({ page }) => {
+    await page.goto(storyUrl("default"));
+
+    const status = page.getByLabel("Status", { exact: true });
+    await status.click();
+    await expect(page.getByRole("listbox")).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "Edit Task" })).toHaveScreenshot(
+      "dropdown-open.png",
+    );
+    await page.getByRole("option", { name: "Deferred" }).click();
+    await expect(status).toHaveText("Deferred");
+
+    const priority = page.getByLabel("Priority", { exact: true });
+    await priority.click();
+    await page.getByRole("option", { name: "Medium (B)" }).click();
+    await expect(priority).toHaveText("Medium (B)");
+  });
+
   test("empty task", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 1024 });
     await expectStoryScreenshot(page, "empty-task", "empty-task-desktop.png");

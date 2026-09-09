@@ -4,7 +4,9 @@
 )]
 
 use octarine::app_state::AppState;
-use octarine::config::{expand_home, load_or_migrate_config, save_config};
+use octarine::config::{
+    expand_home, load_or_migrate_config, save_config, validate_config_for_vault, TaskCreationConfig,
+};
 use octarine::db::{
     boot_sweep_with_diagnostics, delete_file, index_single_file, initialize_db, query_tasks,
 };
@@ -15,11 +17,18 @@ use octarine::file_ops::{
 };
 use octarine::parser::{ParsedCustomView, ParsedTask};
 use octarine::path_security::{
-    canonicalize_root, resolve_child_within, resolve_existing_within, resolve_new_within,
+    canonicalize_root, resolve_child_within, resolve_descendant_within, resolve_existing_within,
+    resolve_new_within,
 };
 use octarine::query_dsl::compile_filter_to_sql;
+use octarine::task_creation::{CaptureContext, TaskDraft, TaskDraftPreview};
+use octarine::task_service::{
+    CreateTaskError, CreateTaskErrorCode, CreateTaskResult, UndoCreateReceipt,
+};
 use octarine::watcher_service::build_vault_watcher;
-use octarine::writer::{delete_task_markdown_in_file, update_task_status_in_file, WriteError};
+use octarine::writer::{
+    delete_task_markdown_in_file, move_task_in_file, update_task_status_in_file, WriteError,
+};
 use tauri::Manager;
 use tauri::State;
 
@@ -35,11 +44,9 @@ fn resolve_vault_path(
 
 fn resolve_content_path(state: &State<'_, AppState>, path: &str) -> Result<String, String> {
     let vault_root = state.vault_dir.lock().unwrap().clone();
-    let journal_root = state.journal_dir.lock().unwrap().clone();
     resolve_existing_within(&vault_root, path, false)
-        .or_else(|_| resolve_existing_within(&journal_root, path, false))
         .map(|path| path.to_string_lossy().into_owned())
-        .map_err(|_| "Path is outside the configured vault and journal roots.".to_string())
+        .map_err(|_| "Path is outside the configured vault root.".to_string())
 }
 
 #[tauri::command]
@@ -80,6 +87,98 @@ fn get_custom_views(state: State<'_, AppState>) -> Result<Vec<ParsedCustomView>,
 }
 
 #[tauri::command]
+fn preview_task_draft(
+    state: State<'_, AppState>,
+    input: String,
+    capture_context: CaptureContext,
+) -> Result<TaskDraftPreview, CreateTaskError> {
+    let vault = state.vault_dir.lock().unwrap().clone();
+    let config = state.config.lock().unwrap().clone();
+    let connection = state.db.lock().unwrap();
+    state.task_creation.preview_task_draft(
+        std::path::Path::new(&vault),
+        &config,
+        &connection,
+        &input,
+        &capture_context,
+        chrono::Local::now().fixed_offset(),
+    )
+}
+
+#[tauri::command]
+fn create_task(
+    state: State<'_, AppState>,
+    operation_id: String,
+    draft: TaskDraft,
+) -> Result<CreateTaskResult, CreateTaskError> {
+    let vault = state.vault_dir.lock().unwrap().clone();
+    let config = state.config.lock().unwrap().clone();
+    let connection = state.db.lock().unwrap();
+    let result = state.task_creation.create_task(
+        std::path::Path::new(&vault),
+        &config,
+        &connection,
+        &operation_id,
+        &draft,
+        chrono::Local::now().fixed_offset(),
+    );
+    if let Err(error) = &result {
+        record_create_failure(&state.diagnostics, error.code);
+    }
+    result
+}
+
+#[tauri::command]
+fn undo_created_task(
+    state: State<'_, AppState>,
+    receipt: UndoCreateReceipt,
+) -> Result<(), WriteError> {
+    let vault = state.vault_dir.lock().unwrap().clone();
+    let connection = state.db.lock().unwrap();
+    let result =
+        state
+            .task_creation
+            .undo_created_task(std::path::Path::new(&vault), &connection, &receipt);
+    if result.is_err() {
+        state.diagnostics.error(
+            "task_create.undo_failed",
+            "Created task could not be undone safely.",
+        );
+    }
+    result
+}
+
+fn record_create_failure(diagnostics: &Diagnostics, code: CreateTaskErrorCode) {
+    let (event, message) = match code {
+        CreateTaskErrorCode::InvalidDraft => (
+            "task_create.invalid_draft",
+            "Task creation draft validation failed.",
+        ),
+        CreateTaskErrorCode::InvalidDestination => (
+            "task_create.invalid_destination",
+            "Task creation destination validation failed.",
+        ),
+        CreateTaskErrorCode::ProjectCollision => (
+            "task_create.project_collision",
+            "Task creation found a project identity collision.",
+        ),
+        CreateTaskErrorCode::DestinationConflict => (
+            "task_create.destination_conflict",
+            "Task creation stopped after repeated destination changes.",
+        ),
+        CreateTaskErrorCode::IndexFailed => (
+            "task_create.index_failed",
+            "Task creation derived index refresh failed.",
+        ),
+        CreateTaskErrorCode::OperationFailed => (
+            "task_create.operation_failed",
+            "Task creation filesystem operation failed.",
+        ),
+    };
+    diagnostics.error(event, message);
+}
+
+#[tauri::command]
 fn update_task_status(
     state: State<'_, AppState>,
     file_path: String,
@@ -90,6 +189,29 @@ fn update_task_status(
     let file_path = resolve_vault_path(&state, &file_path, false)
         .map_err(|_| WriteError::operation_failed())?;
     update_task_status_in_file(&file_path, line_number, &original_raw_markdown, &new_status)?;
+    let conn = state.db.lock().unwrap();
+    index_single_file(&conn, &file_path).map_err(|_| WriteError::operation_failed())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn move_task(
+    state: State<'_, AppState>,
+    file_path: String,
+    line_number: usize,
+    original_raw_markdown: String,
+    new_status: String,
+    new_primary_context: Option<String>,
+) -> Result<(), WriteError> {
+    let file_path = resolve_vault_path(&state, &file_path, false)
+        .map_err(|_| WriteError::operation_failed())?;
+    move_task_in_file(
+        &file_path,
+        line_number,
+        &original_raw_markdown,
+        &new_status,
+        new_primary_context.as_deref(),
+    )?;
     let conn = state.db.lock().unwrap();
     index_single_file(&conn, &file_path).map_err(|_| WriteError::operation_failed())?;
     Ok(())
@@ -138,6 +260,36 @@ fn get_vault_config(state: State<'_, AppState>) -> Result<String, String> {
 }
 
 #[tauri::command]
+fn get_task_creation_config(state: State<'_, AppState>) -> Result<TaskCreationConfig, String> {
+    Ok(state.config.lock().unwrap().task_creation_config())
+}
+
+#[tauri::command]
+fn set_task_creation_config(
+    state: State<'_, AppState>,
+    settings: TaskCreationConfig,
+) -> Result<TaskCreationConfig, String> {
+    let vault_dir = state.vault_dir.lock().unwrap().clone();
+    let mut updated = state.config.lock().unwrap().clone();
+    updated.apply_task_creation_config(settings);
+    validate_config_for_vault(&updated, std::path::Path::new(&vault_dir))?;
+
+    let journal_dir = resolve_descendant_within(&vault_dir, &updated.journal_folder, false)?;
+    std::fs::create_dir_all(&journal_dir)
+        .map_err(|error| format!("Failed to create journal directory: {error}"))?;
+    let journal_dir = canonicalize_root(&journal_dir)?;
+
+    {
+        let mut config = state.config.lock().unwrap();
+        save_config(&state.config_path, &updated)?;
+        *config = updated.clone();
+    }
+    *state.journal_dir.lock().unwrap() = Some(journal_dir.to_string_lossy().into_owned());
+
+    Ok(updated.task_creation_config())
+}
+
+#[tauri::command]
 fn update_event_schedule(
     state: State<'_, AppState>,
     file_path: String,
@@ -177,6 +329,16 @@ fn set_vault_config(
     resolved_dir = canonicalize_root(&resolved_dir)?
         .to_string_lossy()
         .into_owned();
+    let current_config = state.config.lock().unwrap().clone();
+    validate_config_for_vault(&current_config, std::path::Path::new(&resolved_dir))?;
+    let replacement_journal = if current_config.journal_migration.is_none() {
+        let path = resolve_descendant_within(&resolved_dir, &current_config.journal_folder, false)?;
+        std::fs::create_dir_all(&path)
+            .map_err(|e| format!("Failed to create journal directory: {e}"))?;
+        Some(canonicalize_root(&path)?.to_string_lossy().into_owned())
+    } else {
+        None
+    };
     let replacement_watcher = build_vault_watcher(
         &state.db_path,
         &resolved_dir,
@@ -186,7 +348,7 @@ fn set_vault_config(
 
     {
         let mut config = state.config.lock().unwrap();
-        let mut updated = config.clone();
+        let mut updated = current_config;
         updated.vault_dir = new_dir;
         save_config(&state.config_path, &updated)?;
         *config = updated;
@@ -208,7 +370,10 @@ fn set_vault_config(
 
     {
         let mut vault_lock = state.vault_dir.lock().unwrap();
-        *vault_lock = resolved_dir;
+        *vault_lock = resolved_dir.clone();
+    }
+    {
+        *state.journal_dir.lock().unwrap() = replacement_journal;
     }
     *state.watcher.lock().unwrap() = Some(replacement_watcher);
 
@@ -218,27 +383,34 @@ fn set_vault_config(
 #[tauri::command]
 fn get_journal_config(state: State<'_, AppState>) -> Result<String, String> {
     let journal_dir = state.journal_dir.lock().unwrap();
-    Ok(journal_dir.clone())
+    journal_dir.clone().ok_or_else(|| {
+        "Journal setup requires a folder inside the configured vault; no files were moved."
+            .to_string()
+    })
 }
 
 #[tauri::command]
 fn set_journal_config(state: State<'_, AppState>, new_dir: String) -> Result<(), String> {
+    let vault_dir = state.vault_dir.lock().unwrap().clone();
     let home_dir = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    let mut resolved_dir = expand_home(&new_dir, std::path::Path::new(&home_dir))
+    let requested_dir = expand_home(&new_dir, std::path::Path::new(&home_dir));
+    let resolved_dir = resolve_descendant_within(&vault_dir, &requested_dir, false)?;
+    let canonical_vault = canonicalize_root(&vault_dir)?;
+    let relative_dir = resolved_dir
+        .strip_prefix(&canonical_vault)
+        .map_err(|_| "Journal folder must be inside the configured vault.".to_string())?
         .to_string_lossy()
         .into_owned();
-
-    // Ensure directory exists
+    let mut updated = state.config.lock().unwrap().clone();
+    updated.journal_folder = relative_dir;
+    updated.journal_migration = None;
+    validate_config_for_vault(&updated, &canonical_vault)?;
     std::fs::create_dir_all(&resolved_dir)
-        .map_err(|e| format!("Failed to create directory: {}", e))?;
-    resolved_dir = canonicalize_root(&resolved_dir)?
-        .to_string_lossy()
-        .into_owned();
+        .map_err(|e| format!("Failed to create directory: {e}"))?;
+    let resolved_dir = canonicalize_root(&resolved_dir)?;
 
     {
         let mut config = state.config.lock().unwrap();
-        let mut updated = config.clone();
-        updated.journal_dir = new_dir;
         save_config(&state.config_path, &updated)?;
         *config = updated;
     }
@@ -246,7 +418,7 @@ fn set_journal_config(state: State<'_, AppState>, new_dir: String) -> Result<(),
     // Update active journal_dir inside AppState under lock
     {
         let mut journal_lock = state.journal_dir.lock().unwrap();
-        *journal_lock = resolved_dir;
+        *journal_lock = Some(resolved_dir.to_string_lossy().into_owned());
     }
 
     Ok(())
@@ -255,7 +427,11 @@ fn set_journal_config(state: State<'_, AppState>, new_dir: String) -> Result<(),
 #[tauri::command]
 fn read_journal_tree(state: State<'_, AppState>) -> Result<FileNode, String> {
     let journal_dir = state.journal_dir.lock().unwrap();
-    let path = std::path::Path::new(&*journal_dir);
+    let journal_dir = journal_dir.as_ref().ok_or_else(|| {
+        "Journal setup requires a folder inside the configured vault; no files were moved."
+            .to_string()
+    })?;
+    let path = std::path::Path::new(journal_dir);
     octarine::file_ops::build_journal_tree(path)
 }
 
@@ -375,28 +551,43 @@ fn main() {
         .ok()
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| config.vault_dir.clone());
-    let journal_setting = std::env::var("OCTARINE_JOURNAL_DIR")
-        .ok()
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| config.journal_dir.clone());
     let mut vault_dir = expand_home(&vault_setting, home_path)
         .to_string_lossy()
         .into_owned();
-    let mut journal_dir = expand_home(&journal_setting, home_path)
-        .to_string_lossy()
-        .into_owned();
 
-    // Ensure the resolved directories physically exist on disk
+    // Ensure the resolved vault physically exists on disk.
     std::fs::create_dir_all(&vault_dir).expect("failed to create vault directory");
-    std::fs::create_dir_all(&journal_dir).expect("failed to create journal directory");
     vault_dir = canonicalize_root(&vault_dir)
         .expect("failed to resolve vault directory")
         .to_string_lossy()
         .into_owned();
-    journal_dir = canonicalize_root(&journal_dir)
-        .expect("failed to resolve journal directory")
-        .to_string_lossy()
-        .into_owned();
+    validate_config_for_vault(&config, std::path::Path::new(&vault_dir))
+        .expect("application configuration contains an invalid vault destination");
+    let journal_override = std::env::var("OCTARINE_JOURNAL_FOLDER")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| {
+            std::env::var("OCTARINE_JOURNAL_DIR")
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+        });
+    let journal_dir = if config.journal_migration.is_none() || journal_override.is_some() {
+        let journal_setting = journal_override
+            .as_deref()
+            .unwrap_or(&config.journal_folder);
+        let requested_journal = expand_home(journal_setting, home_path);
+        let journal_path = resolve_descendant_within(&vault_dir, requested_journal, false)
+            .expect("journal folder must resolve inside vault");
+        std::fs::create_dir_all(&journal_path).expect("failed to create journal directory");
+        Some(
+            canonicalize_root(&journal_path)
+                .expect("failed to resolve journal directory")
+                .to_string_lossy()
+                .into_owned(),
+        )
+    } else {
+        None
+    };
 
     let conn = initialize_db(&db_path).expect("failed to initialize SQLite Cache database");
 
@@ -417,13 +608,19 @@ fn main() {
     builder = builder.invoke_handler(tauri::generate_handler![
         get_tasks,
         get_custom_views,
+        preview_task_draft,
+        create_task,
+        undo_created_task,
         get_vault_config,
         set_vault_config,
         get_journal_config,
         set_journal_config,
+        get_task_creation_config,
+        set_task_creation_config,
         read_journal_tree,
         update_event_schedule,
         update_task_status,
+        move_task,
         update_task_markdown,
         delete_task_markdown,
         read_dir_tree,

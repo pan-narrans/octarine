@@ -20,6 +20,7 @@ const task: Task = {
   priority: 2,
   tags: ["responsive"],
   contexts: ["laptop"],
+  primary_context: "laptop",
   parse_errors: null,
   file_path: "/example/tasks.md",
   parent_hash: null,
@@ -36,6 +37,7 @@ const subtask: Task = {
   priority: null,
   tags: [],
   contexts: [],
+  primary_context: null,
   parent_hash: task.hash,
 };
 
@@ -88,6 +90,18 @@ export const Done: Story = {
       due_date: null,
       raw_markdown:
         "- [x] (B) Audit the calendar at compact widths +octarine/ui @laptop #responsive done:2026-08-24",
+    },
+    tasks: [],
+  },
+};
+
+export const Deferred: Story = {
+  args: {
+    task: {
+      ...task,
+      status: "deferred",
+      raw_markdown:
+        "- [>] (B) Audit the calendar at compact widths +octarine/ui @laptop #responsive",
     },
     tasks: [],
   },

@@ -1,5 +1,6 @@
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
-import type { CustomView, FileNode, Task } from "../types";
+import type { CaptureContext, CustomView, FileNode, Task, TaskDraft } from "../types";
+import type { TaskCreationConfig } from "../generated/ipc/TaskCreationConfig";
 import type { VisualScenario } from "./visual-scenario";
 
 function localDate(offsetDays = 0): string {
@@ -26,6 +27,7 @@ function task(overrides: Partial<Task> & Pick<Task, "hash" | "description">): Ta
     priority: null,
     tags: [],
     contexts: [],
+    primary_context: overrides.primary_context ?? overrides.contexts?.[0] ?? null,
     parse_errors: null,
     file_path: "/visual/vault/inbox.md",
     parent_hash: null,
@@ -164,12 +166,47 @@ const journalTree: FileNode = {
 };
 
 function replaceTaskMarker(rawMarkdown: string, status: Task["status"]): string {
-  const marker = { todo: " ", doing: "/", done: "x", cancelled: "-" }[status];
+  const marker = { todo: " ", doing: "/", deferred: ">", done: "x", cancelled: "-" }[status];
   return rawMarkdown.replace(/^(\s*[-*+]\s+\[).(\])/, `$1${marker}$2`);
+}
+
+export function taskStatusFromMarkdown(rawMarkdown: string): Task["status"] {
+  const marker = rawMarkdown.match(/^\s*[-*+]\s+\[(.)\]/)?.[1];
+  return marker === "/"
+    ? "doing"
+    : marker === ">"
+      ? "deferred"
+      : marker === "x" || marker === "X"
+        ? "done"
+        : marker === "-"
+          ? "cancelled"
+          : "todo";
 }
 
 export function installVisualFixtures(scenario: VisualScenario): void {
   let tasks = scenario === "empty" ? [] : populatedTasks();
+  let taskCreationConfig: TaskCreationConfig = {
+    defaultDestination: "inbox",
+    inboxFile: "inbox.md",
+    journalFolder: "journals",
+    dailyFilenamePattern: "YYYY-MM-DD.md",
+    projectFolder: "projects",
+    templates: {
+      inbox: {
+        template: "# Inbox\n\n## Tasks\n",
+        insertion: { mode: "heading", target: "## Tasks" },
+      },
+      daily_note: {
+        template: "# {{date}}\n\n## Tasks\n",
+        insertion: { mode: "heading", target: "## Tasks" },
+      },
+      project: {
+        template: "# {{project_name}}\n\nProject: +{{project}}\n\n## Tasks\n",
+        insertion: { mode: "heading", target: "## Tasks" },
+      },
+    },
+    migrationSource: null,
+  };
   let eventListenerId = 0;
   const files = new Map<string, string>([
     [
@@ -196,6 +233,84 @@ export function installVisualFixtures(scenario: VisualScenario): void {
         return "/visual/vault";
       case "get_journal_config":
         return "/visual/journal";
+      case "get_task_creation_config":
+        return structuredClone(taskCreationConfig);
+      case "set_task_creation_config":
+        taskCreationConfig = {
+          ...(args.settings as TaskCreationConfig),
+          migrationSource: null,
+        };
+        return structuredClone(taskCreationConfig);
+      case "preview_task_draft": {
+        const input = String(args.input).trim();
+        if (!input) throw { code: "invalid_draft", message: "Task title is required." };
+        const context = args.captureContext as CaptureContext;
+        const projectMatch = input.match(/(?:^|\s)\+([\p{L}\p{N}_/-]+)/u);
+        const project = projectMatch?.[1] ?? context.project;
+        const draft: TaskDraft = {
+          title: input.replace(/(?:^|\s)[+@#][^\s]+/gu, "").trim(),
+          notes: "",
+          status: "todo",
+          priority: null,
+          dueDate: null,
+          duration: null,
+          recurrence: null,
+          project,
+          contexts: context.contexts,
+          tags: context.tags,
+          subtasks: [],
+          rawMarkdown: `- [ ] ${input}`,
+        };
+        return {
+          draft,
+          taskType: "task",
+          destinationPath: project
+            ? `/visual/vault/projects/${project}.md`
+            : "/visual/vault/inbox.md",
+          inheritedProject: context.project,
+        };
+      }
+      case "create_task": {
+        const draft = args.draft as TaskDraft;
+        const created = task({
+          hash: `visual-created-${tasks.length}`,
+          line_number: tasks.length + 20,
+          description: draft.title,
+          raw_markdown: draft.rawMarkdown,
+          project: draft.project,
+          contexts: draft.contexts,
+          tags: draft.tags,
+          primary_context: draft.contexts[0] ?? null,
+        });
+        const destinationPath = draft.project
+          ? `/visual/vault/projects/${draft.project}.md`
+          : "/visual/vault/inbox.md";
+        created.file_path = destinationPath;
+        tasks = [created, ...tasks];
+        files.set(
+          destinationPath,
+          `${files.get(destinationPath) ?? ""}${files.has(destinationPath) ? "\n" : ""}${draft.rawMarkdown}\n`,
+        );
+        return {
+          task: created,
+          destinationPath,
+          warning: null,
+          undoReceipt: {
+            filePath: destinationPath,
+            lineNumber: created.line_number,
+            rawMarkdown: created.raw_markdown,
+            sourceFingerprint: "visual-fingerprint",
+          },
+        };
+      }
+      case "undo_created_task": {
+        const receipt = args.receipt as { lineNumber: number; filePath: string };
+        tasks = tasks.filter(
+          (entry) =>
+            entry.line_number !== receipt.lineNumber || entry.file_path !== receipt.filePath,
+        );
+        return undefined;
+      }
       case "read_dir_tree":
         return vaultTree;
       case "read_journal_tree":
@@ -218,11 +333,39 @@ export function installVisualFixtures(scenario: VisualScenario): void {
         );
         return undefined;
       }
+      case "move_task": {
+        const lineNumber = Number(args.lineNumber);
+        const status = String(args.newStatus) as Task["status"];
+        const newPrimaryContext =
+          args.newPrimaryContext === undefined ? undefined : String(args.newPrimaryContext);
+        tasks = tasks.map((entry) => {
+          if (entry.line_number !== lineNumber) return entry;
+          const contexts =
+            newPrimaryContext === undefined
+              ? entry.contexts
+              : entry.contexts.length === 0
+                ? [newPrimaryContext]
+                : [newPrimaryContext, ...entry.contexts.slice(1)];
+          return {
+            ...entry,
+            status,
+            contexts,
+            primary_context: contexts[0] ?? null,
+            raw_markdown: replaceTaskMarker(entry.raw_markdown, status),
+          };
+        });
+        return undefined;
+      }
       case "update_task_markdown": {
         const lineNumber = Number(args.lineNumber);
+        const rawMarkdown = String(args.newRawMarkdown);
         tasks = tasks.map((entry) =>
           entry.line_number === lineNumber
-            ? { ...entry, raw_markdown: String(args.newRawMarkdown) }
+            ? {
+                ...entry,
+                raw_markdown: rawMarkdown,
+                status: taskStatusFromMarkdown(rawMarkdown),
+              }
             : entry,
         );
         return undefined;

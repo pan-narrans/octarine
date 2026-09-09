@@ -101,7 +101,7 @@ pub struct ParsedTask {
     pub line_number: usize, // 1-based index
     pub raw_markdown: String,
     pub hash: String,
-    pub status: String,    // "todo", "doing", "done", "cancelled"
+    pub status: String,    // "todo", "doing", "deferred", "done", "cancelled"
     pub task_type: String, // "task" or "event"
     pub description: String,
     pub project: Option<String>,
@@ -113,6 +113,7 @@ pub struct ParsedTask {
     pub priority: Option<i32>,
     pub tags: Vec<String>,
     pub contexts: Vec<String>,
+    pub primary_context: Option<String>,
     pub parse_errors: Option<String>, // JSON string array of error messages, or None
     pub file_path: Option<String>,
     pub parent_hash: Option<String>,
@@ -282,6 +283,7 @@ pub fn parse_markdown_content(
             let (status, mut task_type) = match marker {
                 " " => ("todo".to_string(), "task".to_string()),
                 "/" => ("doing".to_string(), "task".to_string()),
+                ">" => ("deferred".to_string(), "task".to_string()),
                 "x" | "X" => ("done".to_string(), "task".to_string()),
                 "-" => ("cancelled".to_string(), "task".to_string()),
                 "<" => ("todo".to_string(), "event".to_string()),
@@ -346,6 +348,7 @@ pub fn parse_markdown_content(
             for c_cap in context_re.captures_iter(&metadata_text) {
                 contexts.push(c_cap.get(1).unwrap().as_str().to_string());
             }
+            let primary_context = contexts.first().cloned();
 
             let mut tags = Vec::new();
             for t_cap in tag_re.captures_iter(&metadata_text) {
@@ -556,6 +559,7 @@ pub fn parse_markdown_content(
                 priority,
                 tags,
                 contexts,
+                primary_context,
                 parse_errors,
                 file_path: Some(file_path.to_string()),
                 parent_hash,
@@ -590,6 +594,32 @@ mod tests {
         assert!(task.tags.contains(&"urgent".to_string()));
         assert_eq!(task.description, "Call client");
         assert_eq!(task.parse_errors, None);
+    }
+
+    #[test]
+    fn test_preserves_context_order_and_derives_primary_context() {
+        let content = "- [ ] Coordinate launch @call @ana @call";
+        let (tasks, _) = parse_markdown_content("test.md", content);
+
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].contexts, vec!["call", "ana", "call"]);
+        assert_eq!(tasks[0].primary_context.as_deref(), Some("call"));
+
+        let (without_context, _) = parse_markdown_content("test.md", "- [ ] Work independently");
+        assert_eq!(without_context[0].primary_context, None);
+    }
+
+    #[test]
+    fn test_parse_deferred_task_and_scheduled_deferred_event() {
+        let content = "- [>] Revisit navigation +octarine\n- [>] Scheduled follow-up s:2026-09-12";
+        let (tasks, _) = parse_markdown_content("test.md", content);
+
+        assert_eq!(tasks.len(), 2);
+        assert_eq!(tasks[0].status, "deferred");
+        assert_eq!(tasks[0].task_type, "task");
+        assert_eq!(tasks[0].description, "Revisit navigation");
+        assert_eq!(tasks[1].status, "deferred");
+        assert_eq!(tasks[1].task_type, "event");
     }
 
     #[test]

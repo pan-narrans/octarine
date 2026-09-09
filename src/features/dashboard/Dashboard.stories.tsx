@@ -27,6 +27,7 @@ const baseTask: Task = {
   priority: 1,
   tags: ["design"],
   contexts: ["desk"],
+  primary_context: "desk",
   parse_errors: null,
   file_path: "/example/tasks.md",
   parent_hash: null,

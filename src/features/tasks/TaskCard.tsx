@@ -10,6 +10,10 @@ interface TaskCardProps {
   onOpen: (task: Task) => void;
   onStatusChange: (task: Task, status: Task["status"]) => void;
   showScheduleMetadata?: boolean;
+  showStatusControl?: boolean;
+  showDoneLabel?: boolean;
+  showContexts?: boolean;
+  projectLabel?: string | null;
 }
 
 function formatDueDate(dateStr: string): string {
@@ -94,14 +98,18 @@ function renderTaskNotesAndSubtasks(notes: string) {
   return (
     <div className="task-notes">
       {notes.split("\n").map((line, index) => {
-        const subtaskMatch = line.match(/^(\s*)-\s*\[([ xX/])\]\s*(.*)$/);
+        const subtaskMatch = line.match(/^(\s*)-\s*\[([ xX/>-])\]\s*(.*)$/);
         if (subtaskMatch) {
           const statusClass =
             subtaskMatch[2] === "x" || subtaskMatch[2] === "X"
               ? "done"
               : subtaskMatch[2] === "/"
                 ? "doing"
-                : "todo";
+                : subtaskMatch[2] === ">"
+                  ? "deferred"
+                  : subtaskMatch[2] === "-"
+                    ? "cancelled"
+                    : "todo";
           return (
             <div
               key={index}
@@ -129,8 +137,14 @@ function renderTaskNotesAndSubtasks(notes: string) {
 }
 
 function nextTaskStatus(status: Task["status"]): Task["status"] {
-  const statuses: Task["status"][] = ["todo", "doing", "done", "cancelled"];
-  return statuses[(statuses.indexOf(status) + 1) % statuses.length];
+  const nextStatus: Record<Task["status"], Task["status"]> = {
+    todo: "doing",
+    doing: "done",
+    deferred: "todo",
+    done: "cancelled",
+    cancelled: "todo",
+  };
+  return nextStatus[status];
 }
 
 export function TaskCard({
@@ -139,6 +153,10 @@ export function TaskCard({
   onOpen,
   onStatusChange,
   showScheduleMetadata = true,
+  showStatusControl = true,
+  showDoneLabel = true,
+  showContexts = true,
+  projectLabel,
 }: TaskCardProps) {
   const rawLines = task.raw_markdown.split("\n");
   const hasNotes = rawLines.length > 1;
@@ -176,12 +194,14 @@ export function TaskCard({
       onClick={() => onOpen(task)}
       onKeyDown={(event) => openFromKeyboard(event, task)}
     >
-      <StatusControl
-        status={task.status}
-        label={`Change status for ${description}`}
-        onClick={(event) => changeStatus(event, task)}
-        onKeyDown={(event) => changeStatusFromKeyboard(event, task)}
-      />
+      {showStatusControl && (
+        <StatusControl
+          status={task.status}
+          label={`Change status for ${description}`}
+          onClick={(event) => changeStatus(event, task)}
+          onKeyDown={(event) => changeStatusFromKeyboard(event, task)}
+        />
+      )}
 
       <div className="task-details">
         <div className="task-header-row">
@@ -197,7 +217,10 @@ export function TaskCard({
               {doneDate && (
                 <div className="task-done-top">
                   <CheckCircle2 size={14} className="done-icon-top" />
-                  <span>Done {formatDueDate(doneDate)}</span>
+                  <span>
+                    {showDoneLabel ? "Done " : ""}
+                    {formatDueDate(doneDate)}
+                  </span>
                 </div>
               )}
             </div>
@@ -247,12 +270,15 @@ export function TaskCard({
             {task.priority !== null && task.priority !== undefined && (
               <PriorityBadge priority={task.priority} />
             )}
-            {task.project && <MetadataPill kind="project">{`+${task.project}`}</MetadataPill>}
-            {task.contexts.map((context) => (
-              <MetadataPill key={context} kind="context">
-                {`@${context}`}
-              </MetadataPill>
-            ))}
+            {(projectLabel === undefined ? task.project : projectLabel) && (
+              <MetadataPill kind="project">{`+${projectLabel ?? task.project}`}</MetadataPill>
+            )}
+            {showContexts &&
+              task.contexts.map((context, index) => (
+                <MetadataPill key={`${context}-${index}`} kind="context">
+                  {`@${context}`}
+                </MetadataPill>
+              ))}
             {task.tags.map((tag) => (
               <MetadataPill key={tag} kind="tag">
                 {`#${tag}`}

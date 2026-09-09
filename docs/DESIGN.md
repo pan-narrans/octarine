@@ -36,7 +36,19 @@ Octarine uses a dark, interstellar workspace aesthetic: deep navy surfaces, rest
 - The task editor keeps the title and description together in their shared compact card at desktop, tablet, and mobile breakpoints; responsive layout must not reintroduce a divider or separate input borders between them.
 - The task editor uses the violet focus border and glow to identify the task or subtask that will receive a newly added child. With no explicit selection, new subtasks belong directly to the main task.
 - Calendar, editor, modal, and drawer surfaces retain the same dark-surface, low-contrast-border, violet-accent family.
+- Global `New task` action sits in main header across application surfaces. Compact capture expands in
+  place to structured composer while preserving draft and inherited metadata.
+- Operation feedback uses global notification viewport, not modal body. Desktop notifications stack
+  newest-first at top right; narrow viewports span top below application header. Success and
+  informational messages dismiss automatically, warnings remain longer, errors remain until
+  dismissed. Maximum three render. Field validation remains adjacent to affected input.
+- Successful task creation closes capture and returns focus to `New task`. Write failure keeps modal
+  and draft open. Notification actions use compact text controls for Undo, Open file, and Retry
+  refresh.
 - At narrow viewports, calendar controls stack while the seven-day calendar grid scrolls horizontally as a single bounded region. The day drawer is viewport-width constrained, and file-tree labels truncate rather than forcing page overflow.
+- Project views place compact Board/List presentation switch beside search. Board is default; Done and Cancelled column toggles appear only in Board mode.
+- Kanban columns keep fixed readable width and scroll inside board region instead of stacking or shrinking. Each column groups cards under flat uppercase context headings; No context appears first. Card context pills are omitted because group heading owns that information, while descendant project pills show only relative path.
+- Kanban drop feedback states both status and context effect. Violet outline marks active target; pending cards fade and stop accepting repeat movement until native reconciliation completes.
 - Motion is brief and understated (generally 0.2s) and reinforces hover, focus, and state changes rather than adding decoration.
 
 ## Maintenance

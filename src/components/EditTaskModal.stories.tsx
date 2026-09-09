@@ -21,6 +21,7 @@ const task: Task = {
   priority: 1,
   tags: ["design"],
   contexts: ["desk"],
+  primary_context: "desk",
   parse_errors: null,
   file_path: "/example/tasks.md",
   parent_hash: null,
@@ -55,6 +56,7 @@ export const EmptyTask: Story = {
       priority: null,
       tags: [],
       contexts: [],
+      primary_context: null,
     },
 
     initialShowMarkdown: false,

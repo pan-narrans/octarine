@@ -7,7 +7,7 @@ This document defines the implemented filter subset. Unsupported syntax belongs 
 - Boolean operators: `AND`, `OR`, and `NOT`.
 - Parentheses.
 - Hierarchical projects: `+work` matches `work` and descendants.
-- Contexts: `@phone`.
+- Primary contexts: `@phone`.
 - Tags: `#urgent`.
 - Priority: `p:A` through `p:D`, with numeric equivalents.
 - Comparisons on `due`, `status`, and `type` using `=`, `!=`, `<`, `<=`, `>`, or `>=`.
@@ -19,9 +19,12 @@ Examples:
 status = todo AND +work
 (due <= today OR p:A) AND NOT #blocked
 type = event AND @office
+status = deferred AND +work
 ```
 
 Projects match the exact path or a slash-separated descendant.
+Status values are `todo`, `doing`, `deferred`, `done`, and `cancelled`.
+Context terms match only the first context token in source order. Later context tokens remain preserved but do not satisfy context filters.
 
 ## Embedded View Form
 

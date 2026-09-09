@@ -19,6 +19,7 @@ const task: Task = {
   priority: null,
   tags: [],
   contexts: [],
+  primary_context: null,
   parse_errors: null,
   file_path: "/example.md",
   parent_hash: null,

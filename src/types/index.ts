@@ -1,15 +1,31 @@
 import type { FileNode as GeneratedFileNode } from "../generated/ipc/FileNode";
 import type { ParsedCustomView } from "../generated/ipc/ParsedCustomView";
 import type { ParsedTask } from "../generated/ipc/ParsedTask";
+import type { CreateTaskResult as GeneratedCreateTaskResult } from "../generated/ipc/CreateTaskResult";
 
 export type Task = Omit<ParsedTask, "status" | "task_type"> & {
-  status: "todo" | "doing" | "done" | "cancelled";
+  status: "todo" | "doing" | "deferred" | "done" | "cancelled";
   task_type: "task" | "event";
 };
+export type CreateTaskResult = Omit<GeneratedCreateTaskResult, "task"> & { task: Task };
 export type CustomView = ParsedCustomView;
 export type FileNode = GeneratedFileNode;
 export type { WriteError } from "../generated/ipc/WriteError";
 export type { WriteErrorCode } from "../generated/ipc/WriteErrorCode";
+export type { CaptureContext } from "../generated/ipc/CaptureContext";
+export type { CreateWarning } from "../generated/ipc/CreateWarning";
+export type { CreateWarningCode } from "../generated/ipc/CreateWarningCode";
+export type { CreateTaskError } from "../generated/ipc/CreateTaskError";
+export type { CreateTaskErrorCode } from "../generated/ipc/CreateTaskErrorCode";
+export type { InsertionResult } from "../generated/ipc/InsertionResult";
+export type { TaskDraft } from "../generated/ipc/TaskDraft";
+export type { TaskDraftError } from "../generated/ipc/TaskDraftError";
+export type { TaskDraftErrorCode } from "../generated/ipc/TaskDraftErrorCode";
+export type { TaskDraftPreview } from "../generated/ipc/TaskDraftPreview";
+export type { TaskPriority } from "../generated/ipc/TaskPriority";
+export type { TaskStatus } from "../generated/ipc/TaskStatus";
+export type { TaskType } from "../generated/ipc/TaskType";
+export type { UndoCreateReceipt } from "../generated/ipc/UndoCreateReceipt";
 
 // Type guard to validate a Task payload from Tauri
 export function isTask(payload: unknown): payload is Task {
@@ -21,6 +37,7 @@ export function isTask(payload: unknown): payload is Task {
     typeof p.hash === "string" &&
     (p.status === "todo" ||
       p.status === "doing" ||
+      p.status === "deferred" ||
       p.status === "done" ||
       p.status === "cancelled") &&
     (p.task_type === "task" || p.task_type === "event") &&
@@ -29,7 +46,8 @@ export function isTask(payload: unknown): payload is Task {
     Array.isArray(p.tags) &&
     p.tags.every((tag) => typeof tag === "string") &&
     Array.isArray(p.contexts) &&
-    p.contexts.every((context) => typeof context === "string")
+    p.contexts.every((context) => typeof context === "string") &&
+    (typeof p.primary_context === "string" || p.primary_context === null)
   );
 }
 

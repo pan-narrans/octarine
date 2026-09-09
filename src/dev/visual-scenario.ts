@@ -1,4 +1,11 @@
-export const visualScenarios = ["dashboard", "calendar", "task-modal", "empty"] as const;
+export const visualScenarios = [
+  "dashboard",
+  "calendar",
+  "task-modal",
+  "kanban",
+  "settings",
+  "empty",
+] as const;
 
 export type VisualScenario = (typeof visualScenarios)[number];
 

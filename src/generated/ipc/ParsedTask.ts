@@ -16,6 +16,7 @@ export type ParsedTask = {
   priority: number | null;
   tags: Array<string>;
   contexts: Array<string>;
+  primary_context: string | null;
   parse_errors: string | null;
   file_path: string | null;
   parent_hash: string | null;

@@ -22,9 +22,12 @@ chrono = { version = "0.4", features = ["serde"] }
 regex = "1.10"
 sha2 = "0.10"
 hex = "0.4"
+ignore = "0.4"
 tauri = { version = "1.6", features = ["shell-open"] }
 tempfile = "3.10"
 ts-rs = { version = "12.0.1", features = ["serde-compat"] }
+unicode-normalization = "0.1"
+unicase = "2.9"
 
 [build-dependencies]
 tauri-build = { version = "1.5", features = [] }

@@ -36,8 +36,11 @@ This document contains planned work. Items here are not current capabilities or 
 
 ## Product Roadmap
 
+- [x] Add project Kanban with Deferred status, primary-context grouping, source-safe drag movement, closed filters, and large-group virtualization.
+- [x] Add global task capture with vault-aware routing, configurable insertion, structured composer,
+      global result feedback, Open file, and bounded Undo.
 - Measured large-vault performance work, including batching or parallelism where profiling supports it.
-- Frontend list virtualization where measured view size requires it.
+- Extend virtualization to other unbounded frontend lists where measured view size requires it.
 - Mobile and browser targets.
 - CRDT-based, end-to-end encrypted peer synchronization and auditable merge review.
 

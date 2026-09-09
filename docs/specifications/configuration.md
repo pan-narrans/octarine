@@ -1,26 +1,95 @@
 # Configuration Specification
 
-Octarine stores `config.json` beneath the operating system's platform configuration directory in the `com.octarine.app` subdirectory.
+Octarine stores `config.json` beneath operating system platform configuration directory in
+`com.octarine.app` subdirectory. Configuration saves use same-directory temporary file and atomic
+replacement.
 
-The current document is version 1:
+## Version 2
+
+Version 2 uses one absolute vault capability. Journal, project, and inbox locations are relative to
+vault.
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "vault_dir": "~/octarine_vault",
-  "journal_dir": "~/octarine_journal"
+  "journal_folder": "journals",
+  "daily_filename_pattern": "YYYY-MM-DD.md",
+  "project_folder": "projects",
+  "inbox_file": "inbox.md",
+  "default_unprojected_destination": "inbox",
+  "templates": {
+    "inbox": {
+      "template": "# Inbox\n\n## Tasks\n",
+      "insertion": { "mode": "heading", "target": "## Tasks" }
+    },
+    "daily_note": {
+      "template": "# {{date}}\n\n## Tasks\n",
+      "insertion": { "mode": "heading", "target": "## Tasks" }
+    },
+    "project": {
+      "template": "# {{project_name}}\n\nProject: +{{project}}\n\n## Tasks\n",
+      "insertion": { "mode": "heading", "target": "## Tasks" }
+    }
+  }
 }
 ```
 
-Unknown fields and unsupported versions are rejected. Configuration saves use a same-directory temporary file and atomic replacement.
+Unknown fields and unsupported versions are rejected. Insertion mode is `heading`, `marker`, or
+`eof`. Task settings load and save through typed native commands. Saves validate relative paths,
+`.octarineignore`, destination kinds, templates, and insertion targets before atomic replacement.
+Saving migrated journal settings creates configured internal journal directory and clears migration
+metadata; external source remains untouched.
 
-## Legacy Migration
+## Version 1 Migration
 
-When the versioned file does not yet exist, Octarine imports `vault_dir` and `journal_dir` from `~/.octarine_config.json`. Missing values receive current defaults. The legacy file is retained for recovery but is ignored after the versioned file has been created.
+Version 1 stores independent `vault_dir` and `journal_dir` values. Migration never moves user files.
+
+- Journal beneath vault converts to normalized relative `journal_folder`.
+- Journal outside vault remains untouched.
+- External journal produces `journal_migration.external_journal_dir` recovery metadata and disables
+  journal commands until user selects folder beneath vault.
+- Original version 1 config is copied once to `config.v1.backup.json` beside current config.
+- Repeated version 2 loads do not rewrite backup.
+
+Pending migration example:
+
+```json
+{
+  "version": 2,
+  "vault_dir": "~/octarine_vault",
+  "journal_folder": "journals",
+  "daily_filename_pattern": "YYYY-MM-DD.md",
+  "project_folder": "projects",
+  "inbox_file": "inbox.md",
+  "default_unprojected_destination": "inbox",
+  "templates": {
+    "inbox": {
+      "template": "# Inbox\n\n## Tasks\n",
+      "insertion": { "mode": "heading", "target": "## Tasks" }
+    },
+    "daily_note": {
+      "template": "# {{date}}\n\n## Tasks\n",
+      "insertion": { "mode": "heading", "target": "## Tasks" }
+    },
+    "project": {
+      "template": "# {{project_name}}\n\nProject: +{{project}}\n\n## Tasks\n",
+      "insertion": { "mode": "heading", "target": "## Tasks" }
+    }
+  },
+  "journal_migration": {
+    "external_journal_dir": "~/octarine_journal"
+  }
+}
+```
+
+Legacy `~/.octarine_config.json` import follows same migration rules. Legacy file remains untouched.
 
 ## Runtime Overrides
 
-- `OCTARINE_VAULT_DIR` overrides the configured vault directory.
-- `OCTARINE_JOURNAL_DIR` overrides the configured journal directory.
+- `OCTARINE_VAULT_DIR` overrides configured vault root without persisting change.
+- `OCTARINE_JOURNAL_FOLDER` overrides configured relative journal folder without persisting change.
+- Legacy `OCTARINE_JOURNAL_DIR` remains temporary compatibility alias but must resolve beneath active
+  vault.
 
-Overrides are independent and are not written into `config.json`. A path beginning with `~/` is expanded against the current home directory before the capability root is created and canonicalized.
+Runtime overrides never expand filesystem capability beyond active vault.

@@ -7,9 +7,9 @@ The database file is `com.octarine.app/index.sqlite3` under the platform cache d
 ## Current Tables
 
 - `files`: canonical path, modification time, and file-content hash.
-- `tasks`: source location, raw block, hash, status/type, description, metadata, priority, parse errors, and derived parent hash.
+- `tasks`: source location, raw block, hash, status/type, description, metadata, priority, parse errors, derived parent hash, and indexed primary context.
 - `tags` and `task_tags`: normalized tag dictionary and task relationships.
-- `contexts` and `task_contexts`: normalized context dictionary and task relationships.
+- `contexts` and `task_contexts`: normalized context dictionary and source-ordered task relationships.
 - `custom_views`: indexed `tasks-query` blocks.
 - `merge_reviews`: reserved by a future sync ADR; it is not an implemented user feature.
 - `cache_metadata`: schema and index-format versions used for cache lifecycle decisions.
@@ -26,6 +26,8 @@ For one Markdown file:
 4. Skip parsing when cached modification time and content hash both match.
 5. Parse the file.
 6. In a transaction, upsert the file, replace its derived tasks/views, and insert tag/context relationships.
+
+The first parsed context is copied to `tasks.primary_context`. Every context relationship stores its source position so task DTOs reconstruct all tokens in original order. Context queries use only `primary_context`; later tokens remain derived source metadata.
 
 The boot sweep indexes Markdown files found recursively and removes cache records for missing files.
 

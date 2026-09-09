@@ -19,6 +19,7 @@ test.describe("TaskCard visual regression", () => {
   });
 
   for (const [story, snapshot] of [
+    ["deferred", "deferred.png"],
     ["done", "done.png"],
     ["cancelled", "cancelled.png"],
     ["notes", "notes.png"],

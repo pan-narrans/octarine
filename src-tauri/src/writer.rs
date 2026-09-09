@@ -8,6 +8,11 @@ use std::sync::OnceLock;
 
 static CHECKBOX_SUB_RE: OnceLock<Regex> = OnceLock::new();
 static STRIP_CHECKBOX_RE: OnceLock<Regex> = OnceLock::new();
+static CONTEXT_RE: OnceLock<Regex> = OnceLock::new();
+static VALID_CONTEXT_RE: OnceLock<Regex> = OnceLock::new();
+static LINK_RE: OnceLock<Regex> = OnceLock::new();
+static URL_RE: OnceLock<Regex> = OnceLock::new();
+static CODE_RE: OnceLock<Regex> = OnceLock::new();
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "snake_case")]
@@ -61,6 +66,26 @@ fn get_strip_checkbox_re() -> &'static Regex {
     })
 }
 
+fn get_context_re() -> &'static Regex {
+    CONTEXT_RE.get_or_init(|| Regex::new(r"@[\w\-/]+").unwrap())
+}
+
+fn get_valid_context_re() -> &'static Regex {
+    VALID_CONTEXT_RE.get_or_init(|| Regex::new(r"^[\w\-/]+$").unwrap())
+}
+
+fn get_link_re() -> &'static Regex {
+    LINK_RE.get_or_init(|| Regex::new(r"\[[^\]]*\]\([^)]*\)").unwrap())
+}
+
+fn get_url_re() -> &'static Regex {
+    URL_RE.get_or_init(|| Regex::new(r"https?://[^\s]+").unwrap())
+}
+
+fn get_code_re() -> &'static Regex {
+    CODE_RE.get_or_init(|| Regex::new(r"``[^`]+``|`[^`]+`").unwrap())
+}
+
 static RE_S: OnceLock<Regex> = OnceLock::new();
 static RE_DUR: OnceLock<Regex> = OnceLock::new();
 static RE_DONE: OnceLock<Regex> = OnceLock::new();
@@ -77,11 +102,74 @@ fn get_re_done() -> &'static Regex {
     RE_DONE.get_or_init(|| Regex::new(r"\s+done:\d{4}-\d{2}-\d{2}").unwrap())
 }
 
-pub fn update_task_status_in_file(
+fn mask_range(masked: &mut [u8], start: usize, end: usize) {
+    for byte in &mut masked[start..end] {
+        *byte = b' ';
+    }
+}
+
+fn primary_context_range(line: &str) -> Option<std::ops::Range<usize>> {
+    let mut masked = line.as_bytes().to_vec();
+    for expression in [get_link_re(), get_url_re(), get_code_re()] {
+        for matched in expression.find_iter(line) {
+            mask_range(&mut masked, matched.start(), matched.end());
+        }
+    }
+
+    let mut search_start = 0;
+    let mut comment_start = None;
+    while let Some(offset) = line[search_start..].find("%%") {
+        let delimiter = search_start + offset;
+        if let Some(start) = comment_start.take() {
+            mask_range(&mut masked, start, delimiter + 2);
+        } else {
+            comment_start = Some(delimiter);
+        }
+        search_start = delimiter + 2;
+    }
+    if let Some(start) = comment_start {
+        mask_range(&mut masked, start, line.len());
+    }
+
+    let searchable = std::str::from_utf8(&masked).ok()?;
+    get_context_re()
+        .find(searchable)
+        .map(|matched| matched.start()..matched.end())
+}
+
+fn replace_or_insert_primary_context(
+    line: &str,
+    new_primary_context: &str,
+) -> Result<String, WriteError> {
+    if !get_valid_context_re().is_match(new_primary_context) {
+        return Err(WriteError {
+            code: WriteErrorCode::InvalidSource,
+            message: "The requested primary context is not valid.",
+        });
+    }
+
+    let replacement = format!("@{new_primary_context}");
+    if let Some(range) = primary_context_range(line) {
+        let mut updated = line.to_string();
+        updated.replace_range(range, &replacement);
+        Ok(updated)
+    } else {
+        let content_end = line.trim_end().len();
+        Ok(format!(
+            "{} {}{}",
+            &line[..content_end],
+            replacement,
+            &line[content_end..]
+        ))
+    }
+}
+
+pub fn move_task_in_file(
     file_path: &str,
     original_line_number: usize, // 1-based
     original_raw_markdown: &str,
-    new_status: &str, // "todo", "doing", "done", "cancelled"
+    new_status: &str, // "todo", "doing", "deferred", "done", "cancelled"
+    new_primary_context: Option<&str>,
 ) -> Result<(), WriteError> {
     if !Path::new(file_path).exists() {
         return Err(WriteError::source_missing());
@@ -106,9 +194,15 @@ pub fn update_task_status_in_file(
     let status_char = match new_status {
         "todo" => " ",
         "doing" => "/",
+        "deferred" => ">",
         "done" => "x",
         "cancelled" => "-",
-        _ => " ",
+        _ => {
+            return Err(WriteError {
+                code: WriteErrorCode::InvalidSource,
+                message: "The requested task status is not supported.",
+            });
+        }
     };
 
     // Substitute checkbox using regex
@@ -128,7 +222,10 @@ pub fn update_task_status_in_file(
             rest.push_str(&format!(" done:{}", local_date));
         }
 
-        let new_line = format!("{}{}{}{}", prefix, status_char, suffix, rest);
+        let mut new_line = format!("{}{}{}{}", prefix, status_char, suffix, rest);
+        if let Some(context) = new_primary_context {
+            new_line = replace_or_insert_primary_context(&new_line, context)?;
+        }
         edited_lines[line_idx] = new_line;
     } else {
         return Err(WriteError {
@@ -141,6 +238,21 @@ pub fn update_task_status_in_file(
     write_file_content_on_disk(file_path, &updated_content)?;
 
     Ok(())
+}
+
+pub fn update_task_status_in_file(
+    file_path: &str,
+    original_line_number: usize,
+    original_raw_markdown: &str,
+    new_status: &str,
+) -> Result<(), WriteError> {
+    move_task_in_file(
+        file_path,
+        original_line_number,
+        original_raw_markdown,
+        new_status,
+        None,
+    )
 }
 
 fn is_match_at_line(file_lines: &[String], start_idx: usize, original_lines: &[&str]) -> bool {
@@ -431,6 +543,116 @@ mod tests {
         let content_after_shift = fs::read_to_string(&file_path).unwrap();
         assert!(content_after_shift.contains("- [x] Implement safe writer @db"));
         assert!(content_after_shift.ends_with('\n'));
+    }
+
+    #[test]
+    fn test_update_task_to_deferred_and_reject_unknown_status() {
+        let temp_dir = tempdir().unwrap();
+        let file_path = temp_dir.path().join("tasks.md");
+        fs::write(&file_path, "- [ ] Revisit navigation @desk\n").unwrap();
+
+        update_task_status_in_file(
+            file_path.to_str().unwrap(),
+            1,
+            "- [ ] Revisit navigation @desk",
+            "deferred",
+        )
+        .unwrap();
+        assert_eq!(
+            fs::read_to_string(&file_path).unwrap(),
+            "- [>] Revisit navigation @desk\n"
+        );
+
+        let error = update_task_status_in_file(
+            file_path.to_str().unwrap(),
+            1,
+            "- [>] Revisit navigation @desk",
+            "unknown",
+        )
+        .unwrap_err();
+        assert_eq!(error.code, WriteErrorCode::InvalidSource);
+        assert_eq!(
+            fs::read_to_string(&file_path).unwrap(),
+            "- [>] Revisit navigation @desk\n"
+        );
+    }
+
+    #[test]
+    fn test_move_task_replaces_only_primary_context() {
+        let temp_dir = tempdir().unwrap();
+        let file_path = temp_dir.path().join("tasks.md");
+        let original = "- [ ] Coordinate [Ana](https://example.com/@linked) `@code` %% @comment %% @call @legacy";
+        fs::write(&file_path, format!("{original}\n")).unwrap();
+
+        move_task_in_file(
+            file_path.to_str().unwrap(),
+            1,
+            original,
+            "doing",
+            Some("ana"),
+        )
+        .unwrap();
+
+        assert_eq!(
+            fs::read_to_string(&file_path).unwrap(),
+            "- [/] Coordinate [Ana](https://example.com/@linked) `@code` %% @comment %% @ana @legacy\n"
+        );
+    }
+
+    #[test]
+    fn test_move_task_status_only_preserves_all_contexts() {
+        let temp_dir = tempdir().unwrap();
+        let file_path = temp_dir.path().join("tasks.md");
+        let original = "- [ ] Coordinate @ana @call";
+        fs::write(&file_path, format!("{original}\n")).unwrap();
+
+        move_task_in_file(file_path.to_str().unwrap(), 1, original, "deferred", None).unwrap();
+
+        assert_eq!(
+            fs::read_to_string(&file_path).unwrap(),
+            "- [>] Coordinate @ana @call\n"
+        );
+    }
+
+    #[test]
+    fn test_move_task_inserts_context_and_preserves_trailing_space() {
+        let temp_dir = tempdir().unwrap();
+        let file_path = temp_dir.path().join("tasks.md");
+        fs::write(&file_path, "- [>] Revisit navigation  \n").unwrap();
+
+        move_task_in_file(
+            file_path.to_str().unwrap(),
+            1,
+            "- [>] Revisit navigation  ",
+            "todo",
+            Some("desk"),
+        )
+        .unwrap();
+
+        assert_eq!(
+            fs::read_to_string(&file_path).unwrap(),
+            "- [ ] Revisit navigation @desk  \n"
+        );
+    }
+
+    #[test]
+    fn test_move_task_rejects_invalid_context_without_writing() {
+        let temp_dir = tempdir().unwrap();
+        let file_path = temp_dir.path().join("tasks.md");
+        let original = "- [ ] Revisit navigation @desk\n";
+        fs::write(&file_path, original).unwrap();
+
+        let error = move_task_in_file(
+            file_path.to_str().unwrap(),
+            1,
+            original.trim_end(),
+            "doing",
+            Some("not valid"),
+        )
+        .unwrap_err();
+
+        assert_eq!(error.code, WriteErrorCode::InvalidSource);
+        assert_eq!(fs::read_to_string(&file_path).unwrap(), original);
     }
 
     #[test]

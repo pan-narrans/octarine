@@ -1,87 +1,65 @@
-# ADR 0006: Hierarchical Kanban Navigation & Dynamic Project Tagging
+# ADR 0006: Hierarchical Kanban Navigation and Primary Contexts
 
 ## Status
 
-Proposed
+Accepted
 
 ## Implementation Status
 
-Partial. Hierarchical project extraction and descendant query matching exist. The complete relative Kanban navigation and display contract has not been implemented or verified as described.
+Current. Project routes provide Board and List presentations. Board behavior, source mutations, primary-context indexing, and large-group virtualization are implemented and covered by Rust, frontend, Storybook, and browser checks.
 
 ## Context
 
-Octarine utilizes a plaintext hierarchical project pathing syntax (e.g., `+work/client-1/project-a`) as defined in ADR 0001.
+Octarine uses slash-delimited project paths such as `+work/client/project-a`. Project review must include tasks assigned directly to selected project plus every descendant without repeating selected ancestor on every card.
 
-Users need an intuitive Kanban board interface to manage and track task states. A standard Kanban view groups tasks into columns representing statuses (Todo, In Progress, Completed, Cancelled) matching task checkbox states (`[ ]`, `[/]`, `[x]`, `[-]`).
-
-When browsing hierarchical projects, users navigate to specific nodes in the path tree (e.g., `+work`, `+work/client-1`, or `+work/client-1/project-a`).
-They expect:
-
-1. To see tasks belonging to the current node and all downstream descendants.
-2. Clear, decluttered card layouts. Displaying the full hierarchical project path (e.g., `work/client-1/project-a`) on every card in the Kanban view generates visual clutter and excessive cognitive load, especially when the user has already navigated to the parent node.
+Tasks may contain multiple flat context tokens. Kanban needs one stable grouping dimension while preserving remaining Markdown metadata. Work can also be deliberately stashed without marking it complete.
 
 ## Decision
 
-We will implement an automated, relative context-based scoping and tagging system for Kanban board visualization.
+### Columns and visibility
 
-### 1. Kanban Column Mapping
+Active columns use fixed order:
 
-Kanban boards will automatically group task cards into columns based on their parsed plaintext checkbox status:
+1. Todo — `[ ]`
+2. Doing — `[/]`
+3. Deferred — `[>]`
 
-- **Todo Column:** Matches standard tasks marked with `- [ ]` (Not Started).
-- **In Progress Column:** Matches tasks marked with `- [/]` (In Progress).
-- **Done Column:** Matches completed tasks marked with `- [x]` (Completed).
-- **Cancelled Column:** Matches cancelled tasks marked with `- [-]` (Cancelled).
-- _Exclusion Rule:_ Calendar events (`- [<]`) are excluded from standard Kanban task lanes by default to prevent schedule pollution, but can be toggled on as a dedicated timeline track.
+Done (`[x]`) and Cancelled (`[-]`) columns are hidden by default and may be enabled independently. Enabled closed columns append after Deferred in fixed order. Calendar events (`[<]`) never enter Kanban columns.
 
-### 2. Hierarchical Scoping (Filtering Rule)
+Project routes default to Board for fresh profiles. One client-local preference switches all project routes between Board and existing List presentation. Search and selected project survive presentation changes.
 
-Let $V$ represent the currently selected/viewed project path (e.g., `["work"]` for `+work`).
-Let $P$ represent a task's full parsed project path attribute (e.g., `["work", "client-1", "project-a"]`).
+### Hierarchical project scope
 
-A task is scoped as **visible** on the board if and only if $V$ is a prefix of $P$.
+Task project is visible when it equals selected project or begins with selected project followed by `/`. Plain string-prefix collisions do not match.
 
-- Mathematical formulation:
-  $$\text{Visible}(t) \iff \forall i \in [0, |V| - 1]: P[i] = V[i]$$
-- SQLite Index Query compilation:
-  ```sql
-  SELECT * FROM tasks
-  WHERE project = ?1 OR project LIKE ?1 || '/%';
-  ```
+Direct-project cards omit project badge. Descendant cards strip selected prefix and display only remaining relative path. For selected `+work`, task `+work/client/project-a` displays `+client/project-a`.
 
-### 3. Relative Sub-Project Tagging (Display Rule)
+### Primary context
 
-To maximize card real estate and declutter the board, task cards will dynamically display project badges relative to the currently navigated node $V$.
+First context token in source order is `primary_context`. It alone controls Kanban grouping and context navigation/filtering. Later contexts remain ordered and preserved but are inert for grouping and filtering. Context labels stay flat; slash characters do not create nested context navigation.
 
-Let $R$ be the remaining subpath array after stripping prefix $V$ from $P$:
-$$R = P[|V| \dots]$$
+Each column places populated No context group first, then named groups in locale-aware alphabetical order.
 
-- **Direct Match Level ($|R| = 0$):**
-  If the task belongs directly to the viewed project ($P = V$), **no project tag is displayed** on the card.
-- **Descendant Level ($|R| > 0$):**
-  The card displays a dynamic sub-project tag representing the relative downstream path $R$ formatted with slashes:
-  $$\text{DisplayTag} = \text{Join}(R, "/")$$
+### Movement contract
 
-#### Logical Verification against User Scenarios:
+Dragging to status header or No context group changes status only and preserves every context. Dragging to named context group changes status and replaces first context token, or inserts one when absent. It never clears context, changes project, changes child tasks, or persists card order.
 
-Using project structure `+work/client-1/project-a` and a task $t_1$ containing project attribute `+work/client-1/project-a`:
+Frontend applies move optimistically, blocks repeat movement for pending card, and invokes one `move_task` command. Native writer validates original source and performs status plus optional primary-context change atomically. Success reindexes before reconciliation. Failure rolls back targeted card; conflicts refresh source-derived state.
 
-1. **Viewing node `+work` ($V = \text{["work"]}$):**
-   - $V$ is a prefix of $P$ ($t_1$ is visible).
-   - Prefix `["work"]` is removed. $R = \text{["client-1", "project-a"]}$.
-   - **Result:** $t_1$ displays a sub-project tag: `client-1/project-a`.
+### Ordering and scale
 
-2. **Viewing node `+work/client-1` ($V = \text{["work", "client-1"]}$):**
-   - $V$ is a prefix of $P$ ($t_1$ is visible).
-   - Prefix `["work", "client-1"]` is removed. $R = \text{["project-a"]}$.
-   - **Result:** $t_1$ displays a sub-project tag: `project-a`.
+Cards sort by priority, due date, file path, line number, then task hash. Null priority and due date sort last. Manual order does not exist.
 
-3. **Viewing node `+work/client-1/project-a` ($V = \text{["work", "client-1", "project-a"]}$):**
-   - $V$ matches $P$ exactly ($t_1$ is visible).
-   - Prefix is completely removed. $R = []$ ($|R| = 0$).
-   - **Result:** No sub-project tag is displayed on $t_1$.
+Groups above 50 root cards use `@tanstack/react-virtual` with dynamic measurement and overscan. Smaller groups render directly. Board owns horizontal overflow so columns retain readable width at narrow viewports.
 
 ## Consequences
 
-- **Positive:** Declutters UI dynamically as the user explores the vault. Preserves full downstream structural context while eliminating redundant ancestor labels. Matches natural cognitive expectations.
-- **Negative:** Requires dynamic UI rendering computations of path subsets based on routing state, slightly increasing frontend card rendering logic (trivial overhead, $O(d)$ where depth $d \le 10$).
+- Project review exposes active and intentionally deferred work without treating review as workflow status.
+- Markdown remains authoritative; board state adds no ordering or context hierarchy metadata.
+- Secondary contexts survive every status-only move and primary-context replacement.
+- Native drag has pointer semantics only; existing task editor remains non-pointer path for changing status and contexts.
+- Closed-column visibility is session presentation state; Board/List mode alone persists globally.
+
+## Superseded Proposal Details
+
+Original proposal used Todo, In Progress, Done, and Cancelled as always-visible columns and considered optional event track. Implemented design adds Deferred, hides closed columns by default, and excludes events unconditionally. These changes reflect approved project-review workflow.

@@ -27,9 +27,17 @@ Markdown is durable user data. SQLite is a derived cache.
 
 ## Frontend
 
-The React frontend lives in `src/`. `App.tsx` currently coordinates most navigation, filtering, calendar, note, journal, and configuration behavior. Zustand stores task and custom-view state, while several components manage file-tree and editor presentation.
+The React frontend lives in `src/`. `App.tsx` currently coordinates most navigation, filtering, calendar, note, journal, project-presentation, and configuration behavior. Zustand stores task and custom-view state, performs targeted optimistic Kanban movement, and reconciles from native indexed state. Several components manage file-tree and editor presentation.
+
+Project routes reuse `src/features/kanban/KanbanBoard.tsx`. One globally persisted client-local preference selects Board or List; fresh profiles use Board. Pure projection logic scopes exact and descendant projects, removes events and child cards, groups by indexed primary context, and sorts deterministically. Groups above 50 cards use `@tanstack/react-virtual`; board container owns horizontal overflow.
 
 Feature-owned adapters under `src/features/*/ipc.ts` are the only frontend modules that call Tauri commands. Rust returns normalized task metadata, including tags, contexts, and source file paths, so the frontend does not reinterpret raw Markdown. Shared response and error DTOs are generated from Rust into `src/generated/ipc`; frontend aliases and runtime guards live in `src/types`.
+
+Task creation orchestration lives in `src/features/tasks/use-task-creation-controller.ts` and its
+bounded Zustand state. Main application mounts global action and shared modal. Controller derives
+capture context from current project/context/tag view, requests native preview, deduplicates writes,
+and reconciles returned indexed task directly. Reusable notification store owns newest-first bounded
+feedback, timed dismissal, persistent failures, Open file, Undo, and index-refresh recovery actions.
 
 ## Tauri Command Boundary
 
@@ -55,7 +63,7 @@ The canonical implemented syntax is documented in `specifications/task-syntax.md
 
 `src-tauri/src/db.rs` initializes SQLite in WAL mode with foreign keys enabled. It stores files, tasks, tags, contexts, and custom views. File content and timestamps support change detection.
 
-Task queries join the normalized tag and context associations and return them with each task, together with the source file path.
+Task queries join normalized tag and ordered context associations and return them with each task, together with source file path. `tasks.primary_context` stores first source-order context for effective context queries and Kanban grouping; complete ordered context arrays remain available for preservation and editing.
 
 The cache stores separate schema and index-format versions. Startup preserves indexed rows when both versions match, skips unchanged files by modification time plus content hash, and removes records for files no longer present. A version mismatch clears derived rows once so the following sweep rebuilds them from Markdown.
 
@@ -69,9 +77,15 @@ The active native watcher is owned by application state. Reconfiguring the vault
 
 ## Source Writes
 
-`src-tauri/src/writer.rs` supports task status, schedule, and raw-block updates. Each command supplies the original source block, so mutation does not depend on SQLite cache timing. The writer checks the expected location and searches nearby after line shifts, rejecting a fallback when multiple nearby blocks match. Task and full-file edits use a temporary file in the source directory, preserve permissions, flush its contents, and atomically replace the original.
+`src-tauri/src/writer.rs` supports task status, atomic Kanban status/primary-context moves, schedule, and raw-block updates. Each command supplies original source block, so mutation does not depend on SQLite cache timing. Writer checks expected location and searches nearby after line shifts, rejecting fallback when multiple nearby blocks match. Task and full-file edits use temporary file in source directory, preserve permissions, flush contents, and atomically replace original.
 
 Task write commands return structured errors with stable codes for missing, changed, ambiguous, invalid, and operational failures. Frontend task-edit paths distinguish concurrency conflicts without interpreting human-readable error text, refresh task state, and present the redacted message.
+
+Task creation uses preview/create/undo commands backed by one serialized native service. Rust resolves
+configured vault-relative destination, renders template, inserts full task subtree atomically,
+reindexes written file, and returns indexed task plus bounded Undo receipt. Missing or duplicate
+heading/marker targets fall back to EOF with stable warning code. Index failure is reported only after
+durable Markdown write, allowing frontend to close capture and offer explicit refresh recovery.
 
 ## Query Language
 

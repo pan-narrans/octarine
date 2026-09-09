@@ -88,7 +88,7 @@ function SharedControls() {
       <section aria-labelledby="status-heading">
         <h2 id="status-heading">Task status</h2>
         <div className="controls-statuses">
-          {(["todo", "doing", "done", "cancelled"] as const).map((status) => (
+          {(["todo", "doing", "deferred", "done", "cancelled"] as const).map((status) => (
             <label key={status}>
               <StatusControl status={status} label={`${status} task`} />
               <span>{status}</span>
