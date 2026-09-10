@@ -39,6 +39,9 @@ This document contains planned work. Items here are not current capabilities or 
 - [x] Add project Kanban with Deferred status, primary-context grouping, source-safe drag movement, closed filters, and large-group virtualization.
 - [x] Add global task capture with vault-aware routing, configurable insertion, structured composer,
       global result feedback, Open file, and bounded Undo.
+- [x] Add confirmed existing-task project moves with whole-subtree preservation and guarded recovery.
+- [x] Add guarded hierarchical project rename with preflight, collision detection, case-only macOS
+      handling, task-token rewrites, filesystem moves, and partial-failure recovery.
 - Measured large-vault performance work, including batching or parallelism where profiling supports it.
 - Extend virtualization to other unbounded frontend lists where measured view size requires it.
 - Mobile and browser targets.

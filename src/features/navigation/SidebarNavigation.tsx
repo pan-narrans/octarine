@@ -1,5 +1,16 @@
-import type { ReactNode } from "react";
-import { Calendar, CheckCircle2, Hash, Inbox, Layers, Loader2, Tag } from "lucide-react";
+import { useState, type FormEvent, type ReactNode } from "react";
+import {
+  Calendar,
+  Check,
+  CheckCircle2,
+  Hash,
+  Inbox,
+  Layers,
+  Loader2,
+  Pencil,
+  Tag,
+  X,
+} from "lucide-react";
 import type { CustomView } from "../../types";
 
 interface ProjectNode {
@@ -16,6 +27,7 @@ interface SidebarNavigationProps {
   contexts: string[];
   tags: string[];
   onSelectSection: (section: string, filter?: string) => void;
+  onRenameProject?: (sourceProject: string, destinationProject: string) => Promise<void> | void;
   beforeCollections?: ReactNode;
   footer?: ReactNode;
 }
@@ -46,11 +58,47 @@ export function SidebarNavigation({
   contexts,
   tags,
   onSelectSection,
+  onRenameProject,
   beforeCollections,
   footer,
 }: SidebarNavigationProps) {
+  const [editingProject, setEditingProject] = useState<string | null>(null);
+  const [projectNameDraft, setProjectNameDraft] = useState("");
+  const [renamingProject, setRenamingProject] = useState(false);
   const projectTree = buildProjectTree(projects);
   const isActive = (section: string) => activeFilePath === null && selectedSection === section;
+
+  const startProjectRename = (node: ProjectNode) => {
+    setEditingProject(node.fullPath);
+    setProjectNameDraft(node.name);
+  };
+
+  const cancelProjectRename = () => {
+    if (renamingProject) return;
+    setEditingProject(null);
+    setProjectNameDraft("");
+  };
+
+  const submitProjectRename = async (event: FormEvent, node: ProjectNode) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const nextSegment = projectNameDraft.trim();
+    if (!onRenameProject || !nextSegment || nextSegment === node.name || renamingProject) return;
+    const parent = node.fullPath.includes("/")
+      ? node.fullPath.slice(0, node.fullPath.lastIndexOf("/"))
+      : "";
+    const destination = parent ? `${parent}/${nextSegment}` : nextSegment;
+    setRenamingProject(true);
+    try {
+      await onRenameProject(node.fullPath, destination);
+      setEditingProject(null);
+      setProjectNameDraft("");
+    } catch {
+      return;
+    } finally {
+      setRenamingProject(false);
+    }
+  };
 
   const renderProjectNode = (node: ProjectNode, level = 0): ReactNode => {
     const childNodes = Object.values(node.children);
@@ -59,7 +107,9 @@ export function SidebarNavigation({
       <div key={node.fullPath} style={{ display: "flex", flexDirection: "column" }}>
         <li
           className={`sidebar-item ${isActive(`proj:${node.fullPath}`) ? "active" : ""}`}
-          onClick={() => onSelectSection(`proj:${node.fullPath}`)}
+          onClick={() =>
+            editingProject !== node.fullPath && onSelectSection(`proj:${node.fullPath}`)
+          }
           style={{ paddingLeft: `${Math.min(level * 10 + 8, 48)}px`, fontSize: "0.82rem" }}
         >
           <span
@@ -72,7 +122,65 @@ export function SidebarNavigation({
           >
             +
           </span>
-          <span>{node.name}</span>
+          {editingProject === node.fullPath ? (
+            <form
+              className="sidebar-project-rename"
+              onClick={(event) => event.stopPropagation()}
+              onSubmit={(event) => void submitProjectRename(event, node)}
+            >
+              <input
+                aria-label={`New name for +${node.fullPath}`}
+                value={projectNameDraft}
+                onChange={(event) => setProjectNameDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") cancelProjectRename();
+                }}
+                autoFocus
+                disabled={renamingProject}
+              />
+              <button
+                type="submit"
+                aria-label={`Confirm rename of +${node.fullPath}`}
+                disabled={
+                  renamingProject ||
+                  !projectNameDraft.trim() ||
+                  projectNameDraft.trim() === node.name
+                }
+              >
+                {renamingProject ? (
+                  <Loader2 size={12} className="animate-spin" />
+                ) : (
+                  <Check size={12} />
+                )}
+              </button>
+              <button
+                type="button"
+                aria-label={`Cancel rename of +${node.fullPath}`}
+                onClick={cancelProjectRename}
+                disabled={renamingProject}
+              >
+                <X size={12} />
+              </button>
+            </form>
+          ) : (
+            <>
+              <span className="sidebar-project-name">{node.name}</span>
+              {onRenameProject && (
+                <button
+                  type="button"
+                  className="sidebar-project-rename-trigger"
+                  aria-label={`Rename +${node.fullPath}`}
+                  title={`Rename +${node.fullPath}`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    startProjectRename(node);
+                  }}
+                >
+                  <Pencil size={12} />
+                </button>
+              )}
+            </>
+          )}
         </li>
         {childNodes.map((child) => renderProjectNode(child, level + 1))}
       </div>

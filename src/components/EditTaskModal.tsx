@@ -12,7 +12,7 @@ import { Task } from "../types";
 interface EditTaskModalProps {
   task: Task;
   onClose: () => void;
-  onSave: (newRawMarkdown: string) => Promise<void>;
+  onSave: (newRawMarkdown: string) => Promise<void | boolean>;
   onDelete: () => Promise<void>;
   /** Storybook-only initial states; production callers use the defaults. */
   initialShowMarkdown?: boolean;
@@ -209,8 +209,8 @@ export function EditTaskModal({
     if (!rawMarkdown.trim()) return requestDelete();
     setSaving(true);
     try {
-      await onSave(rawMarkdown);
-      onClose();
+      const shouldClose = await onSave(rawMarkdown);
+      if (shouldClose !== false) onClose();
     } finally {
       setSaving(false);
     }

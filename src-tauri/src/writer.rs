@@ -325,6 +325,30 @@ fn locate_source_block(
     }
 }
 
+pub fn validate_task_markdown_in_file(
+    file_path: &str,
+    original_line_number: usize,
+    original_raw_markdown: &str,
+) -> Result<(), WriteError> {
+    let content = fs::read_to_string(file_path).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            WriteError::source_missing()
+        } else {
+            WriteError::operation_failed()
+        }
+    })?;
+    let lines: Vec<String> = content.split('\n').map(str::to_string).collect();
+    let original_lines: Vec<&str> = original_raw_markdown.lines().collect();
+    if original_lines.is_empty() {
+        return Err(WriteError {
+            code: WriteErrorCode::InvalidSource,
+            message: "The original task source is empty.",
+        });
+    }
+    locate_source_block(&lines, original_line_number, &original_lines)?;
+    Ok(())
+}
+
 pub fn update_event_schedule_in_file(
     file_path: &str,
     original_line_number: usize,

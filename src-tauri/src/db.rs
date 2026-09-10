@@ -314,6 +314,25 @@ pub fn query_tasks(
 }
 
 pub fn index_single_file(conn: &Connection, path: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let tx = conn.unchecked_transaction()?;
+    index_file_in_connection(&tx, path)?;
+    tx.commit()?;
+    Ok(())
+}
+
+pub fn index_files(conn: &Connection, paths: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let tx = conn.unchecked_transaction()?;
+    for path in paths {
+        index_file_in_connection(&tx, path)?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
+fn index_file_in_connection(
+    conn: &Connection,
+    path: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
     let path_buf = fs::canonicalize(path)?;
     let canonical_path = path_buf.to_string_lossy().to_string();
 
@@ -336,36 +355,28 @@ pub fn index_single_file(conn: &Connection, path: &str) -> Result<(), Box<dyn st
     // Parse
     let (tasks, views) = parser::parse_markdown_content(&canonical_path, &content);
 
-    // Save to DB in transaction
-    let mut tx_conn = Connection::open_with_flags(
-        conn.path().unwrap_or(""),
-        rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE,
-    )?;
-    tx_conn.execute_batch("PRAGMA foreign_keys = ON;")?;
-    let tx = tx_conn.transaction()?;
-
     // Insert file
-    tx.execute(
+    conn.execute(
         "INSERT INTO files (path, mtime, hash) VALUES (?1, ?2, ?3)
          ON CONFLICT(path) DO UPDATE SET mtime = ?2, hash = ?3",
         params![&canonical_path, mtime, file_hash],
     )?;
-    let file_id: i64 = tx.query_row(
+    let file_id: i64 = conn.query_row(
         "SELECT id FROM files WHERE path = ?",
         params![&canonical_path],
         |r| r.get(0),
     )?;
 
     // Delete existing tasks & views for file
-    tx.execute("DELETE FROM tasks WHERE file_id = ?", params![file_id])?;
-    tx.execute(
+    conn.execute("DELETE FROM tasks WHERE file_id = ?", params![file_id])?;
+    conn.execute(
         "DELETE FROM custom_views WHERE file_id = ?",
         params![file_id],
     )?;
 
     // Insert newly parsed tasks
     for task in tasks {
-        tx.execute(
+        conn.execute(
             "INSERT INTO tasks (
                 file_id, line_number, raw_markdown, hash, status, type, description,
                 project, due_date, s_start, duration_secs, recurring, when_done, parse_errors,
@@ -391,16 +402,16 @@ pub fn index_single_file(conn: &Connection, path: &str) -> Result<(), Box<dyn st
                 task.primary_context
             ],
         )?;
-        let task_id: i64 = tx.last_insert_rowid();
+        let task_id: i64 = conn.last_insert_rowid();
 
         // Handle Tags
         for tag in task.tags {
-            tx.execute("INSERT OR IGNORE INTO tags (name) VALUES (?)", params![tag])?;
+            conn.execute("INSERT OR IGNORE INTO tags (name) VALUES (?)", params![tag])?;
             let tag_id: i64 =
-                tx.query_row("SELECT id FROM tags WHERE name = ?", params![tag], |r| {
+                conn.query_row("SELECT id FROM tags WHERE name = ?", params![tag], |r| {
                     r.get(0)
                 })?;
-            tx.execute(
+            conn.execute(
                 "INSERT OR IGNORE INTO task_tags (task_id, tag_id) VALUES (?, ?)",
                 params![task_id, tag_id],
             )?;
@@ -408,16 +419,16 @@ pub fn index_single_file(conn: &Connection, path: &str) -> Result<(), Box<dyn st
 
         // Handle Contexts
         for (position, context) in task.contexts.into_iter().enumerate() {
-            tx.execute(
+            conn.execute(
                 "INSERT OR IGNORE INTO contexts (name) VALUES (?)",
                 params![context],
             )?;
-            let context_id: i64 = tx.query_row(
+            let context_id: i64 = conn.query_row(
                 "SELECT id FROM contexts WHERE name = ?",
                 params![context],
                 |r| r.get(0),
             )?;
-            tx.execute(
+            conn.execute(
                 "INSERT INTO task_contexts (task_id, context_id, position) VALUES (?, ?, ?)",
                 params![task_id, context_id, position as i64],
             )?;
@@ -426,13 +437,12 @@ pub fn index_single_file(conn: &Connection, path: &str) -> Result<(), Box<dyn st
 
     // Insert custom views
     for view in views {
-        tx.execute(
+        conn.execute(
             "INSERT INTO custom_views (file_id, line_number, title, query_raw) VALUES (?, ?, ?, ?)",
             params![file_id, view.line_number, view.title, view.query_raw],
         )?;
     }
 
-    tx.commit()?;
     Ok(())
 }
 

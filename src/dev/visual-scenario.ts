@@ -2,6 +2,7 @@ export const visualScenarios = [
   "dashboard",
   "calendar",
   "task-modal",
+  "project-rename",
   "kanban",
   "settings",
   "empty",

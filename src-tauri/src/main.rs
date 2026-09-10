@@ -20,10 +20,12 @@ use octarine::path_security::{
     canonicalize_root, resolve_child_within, resolve_descendant_within, resolve_existing_within,
     resolve_new_within,
 };
+use octarine::project_rename::{ProjectRenameError, ProjectRenamePlan, ProjectRenameResult};
 use octarine::query_dsl::compile_filter_to_sql;
 use octarine::task_creation::{CaptureContext, TaskDraft, TaskDraftPreview};
 use octarine::task_service::{
-    CreateTaskError, CreateTaskErrorCode, CreateTaskResult, UndoCreateReceipt,
+    CreateTaskError, CreateTaskErrorCode, CreateTaskResult, MoveTaskProjectError,
+    MoveTaskProjectResult, UndoCreateReceipt,
 };
 use octarine::watcher_service::build_vault_watcher;
 use octarine::writer::{
@@ -146,6 +148,61 @@ fn undo_created_task(
         );
     }
     result
+}
+
+#[tauri::command]
+fn move_task_project(
+    state: State<'_, AppState>,
+    source_file_path: String,
+    original_line_number: usize,
+    original_raw_markdown: String,
+    new_raw_markdown: String,
+) -> Result<MoveTaskProjectResult, MoveTaskProjectError> {
+    let vault = state.vault_dir.lock().unwrap().clone();
+    let config = state.config.lock().unwrap().clone();
+    let connection = state.db.lock().unwrap();
+    state.task_creation.move_task_project(
+        std::path::Path::new(&vault),
+        &config,
+        &connection,
+        &source_file_path,
+        original_line_number,
+        &original_raw_markdown,
+        &new_raw_markdown,
+        chrono::Local::now().fixed_offset(),
+    )
+}
+
+#[tauri::command]
+fn preflight_project_rename(
+    state: State<'_, AppState>,
+    source_project: String,
+    destination_project: String,
+) -> Result<ProjectRenamePlan, ProjectRenameError> {
+    let vault = state.vault_dir.lock().unwrap().clone();
+    let config = state.config.lock().unwrap().clone();
+    state.task_creation.preflight_project_rename(
+        std::path::Path::new(&vault),
+        &config,
+        &source_project,
+        &destination_project,
+    )
+}
+
+#[tauri::command]
+fn execute_project_rename(
+    state: State<'_, AppState>,
+    plan_token: String,
+) -> Result<ProjectRenameResult, ProjectRenameError> {
+    let vault = state.vault_dir.lock().unwrap().clone();
+    let config = state.config.lock().unwrap().clone();
+    let connection = state.db.lock().unwrap();
+    state.task_creation.execute_project_rename(
+        std::path::Path::new(&vault),
+        &config,
+        &connection,
+        &plan_token,
+    )
 }
 
 fn record_create_failure(diagnostics: &Diagnostics, code: CreateTaskErrorCode) {
@@ -611,6 +668,9 @@ fn main() {
         preview_task_draft,
         create_task,
         undo_created_task,
+        move_task_project,
+        preflight_project_rename,
+        execute_project_rename,
         get_vault_config,
         set_vault_config,
         get_journal_config,

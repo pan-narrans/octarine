@@ -28,7 +28,7 @@ interface FileTreeProps {
   onSelectFile: (path: string) => void;
   onCreateFile?: (parentPath: string, name: string) => Promise<void>;
   onCreateFolder?: (parentPath: string, name: string) => Promise<void>;
-  onRename?: (oldPath: string, newPath: string) => Promise<void>;
+  onRename?: (oldPath: string, newPath: string, node: FileNode) => Promise<void>;
   onDelete?: (path: string) => Promise<void>;
   readOnly?: boolean;
   collapseAllTrigger?: number;
@@ -106,7 +106,7 @@ export function FileTree({
         const parentParts = node.path.split("/");
         parentParts.pop();
         const newPath = [...parentParts, inputText.trim()].join("/");
-        await onRename(node.path, newPath);
+        await onRename(node.path, newPath, node);
       } else if (editMode === "create_file" && onCreateFile) {
         await onCreateFile(node.path, inputText.trim());
         setIsOpen(true); // Ensure expanded to show new file

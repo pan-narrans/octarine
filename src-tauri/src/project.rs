@@ -88,6 +88,32 @@ impl ProjectPath {
         destination
     }
 
+    pub fn relative_directory_path(&self, project_folder: &str) -> PathBuf {
+        let mut destination = PathBuf::from(project_folder);
+        for segment in &self.segments {
+            destination.push(segment);
+        }
+        destination
+    }
+
+    pub fn renamed_descendant(&self, old: &Self, new: &Self) -> Option<String> {
+        let old_len = old.segments.len();
+        if self.segments.len() < old_len
+            || self.segments[..old_len]
+                .iter()
+                .zip(&old.segments)
+                .any(|(candidate, expected)| {
+                    folded_identity(candidate) != folded_identity(expected)
+                })
+        {
+            return None;
+        }
+
+        let mut segments = new.segments.clone();
+        segments.extend(self.segments[old_len..].iter().cloned());
+        Some(segments.join("/"))
+    }
+
     pub fn case_collision<'a, I>(&self, existing: I) -> Result<Option<String>, ProjectNameError>
     where
         I: IntoIterator<Item = &'a str>,
@@ -278,6 +304,25 @@ mod tests {
         let exact = ProjectPath::parse("Work/STRASSE").unwrap();
         assert_eq!(
             filesystem_case_collision(&vault, "projects", &exact).unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn renames_exact_and_descendant_segments_without_matching_prefixes() {
+        let old = ProjectPath::parse("work").unwrap();
+        let new = ProjectPath::parse("job").unwrap();
+
+        assert_eq!(
+            ProjectPath::parse("Work/Client")
+                .unwrap()
+                .renamed_descendant(&old, &new),
+            Some("job/Client".to_string())
+        );
+        assert_eq!(
+            ProjectPath::parse("workshop")
+                .unwrap()
+                .renamed_descendant(&old, &new),
             None
         );
     }

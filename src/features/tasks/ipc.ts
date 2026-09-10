@@ -5,6 +5,13 @@ import {
   type CreateTaskError,
   type CreateTaskErrorCode,
   type CreateTaskResult,
+  type MoveTaskProjectError,
+  type MoveTaskProjectErrorCode,
+  type MoveTaskProjectResult,
+  type ProjectRenameError,
+  type ProjectRenameErrorCode,
+  type ProjectRenamePlan,
+  type ProjectRenameResult,
   type TaskDraft,
   type TaskDraftPreview,
   type UndoCreateReceipt,
@@ -183,20 +190,20 @@ export function isCreateTaskResult(value: unknown): value is CreateTaskResult {
   if (!isRecord(value) || !isTask(value.task) || typeof value.destinationPath !== "string") {
     return false;
   }
-  if (
-    value.warning !== null &&
-    (!isRecord(value.warning) ||
-      !WARNING_CODES.has(String(value.warning.code)) ||
-      typeof value.warning.message !== "string")
-  ) {
-    return false;
-  }
+  if (!isCreateWarning(value.warning)) return false;
   return (
     isRecord(value.undoReceipt) &&
     typeof value.undoReceipt.filePath === "string" &&
     typeof value.undoReceipt.lineNumber === "number" &&
     typeof value.undoReceipt.rawMarkdown === "string" &&
     typeof value.undoReceipt.sourceFingerprint === "string"
+  );
+}
+
+function isCreateWarning(value: unknown): boolean {
+  return (
+    value === null ||
+    (isRecord(value) && WARNING_CODES.has(String(value.code)) && typeof value.message === "string")
   );
 }
 
@@ -224,4 +231,130 @@ export async function createTask(operationId: string, draft: TaskDraft): Promise
 
 export function undoCreatedTask(receipt: UndoCreateReceipt): Promise<void> {
   return invoke("undo_created_task", { receipt });
+}
+
+const MOVE_PROJECT_ERROR_CODES: ReadonlySet<MoveTaskProjectErrorCode> = new Set([
+  "invalid_source",
+  "invalid_destination",
+  "project_collision",
+  "destination_conflict",
+  "source_removal_failed",
+  "rollback_failed",
+  "index_failed",
+  "operation_failed",
+]);
+
+export function parseMoveTaskProjectError(error: unknown): MoveTaskProjectError | null {
+  if (!isRecord(error) || typeof error.message !== "string") return null;
+  if (
+    typeof error.code !== "string" ||
+    !MOVE_PROJECT_ERROR_CODES.has(error.code as MoveTaskProjectErrorCode) ||
+    typeof error.recoveryRequired !== "boolean"
+  ) {
+    return null;
+  }
+  return error as unknown as MoveTaskProjectError;
+}
+
+export async function moveTaskProject(
+  sourceFilePath: string,
+  originalLineNumber: number,
+  originalRawMarkdown: string,
+  newRawMarkdown: string,
+): Promise<MoveTaskProjectResult> {
+  const result: unknown = await invoke("move_task_project", {
+    sourceFilePath,
+    originalLineNumber,
+    originalRawMarkdown,
+    newRawMarkdown,
+  });
+  if (
+    !isRecord(result) ||
+    !isTask(result.task) ||
+    typeof result.sourcePath !== "string" ||
+    typeof result.destinationPath !== "string" ||
+    !isCreateWarning(result.warning)
+  ) {
+    throw new Error("Invalid project move response.");
+  }
+  return result as unknown as MoveTaskProjectResult;
+}
+
+const PROJECT_RENAME_ERROR_CODES: ReadonlySet<ProjectRenameErrorCode> = new Set([
+  "invalid_request",
+  "collision",
+  "unknown_plan",
+  "stale_plan",
+  "busy",
+  "operation_failed",
+  "partial_failure",
+]);
+
+export function parseProjectRenameError(error: unknown): ProjectRenameError | null {
+  if (!isRecord(error) || typeof error.message !== "string") return null;
+  if (
+    typeof error.code !== "string" ||
+    !PROJECT_RENAME_ERROR_CODES.has(error.code as ProjectRenameErrorCode)
+  ) {
+    return null;
+  }
+  if (error.recovery !== null) {
+    if (
+      !isRecord(error.recovery) ||
+      !isStringArray(error.recovery.completedOperations) ||
+      !isStringArray(error.recovery.pendingOperations) ||
+      !isStringArray(error.recovery.inspectPaths) ||
+      typeof error.recovery.guidance !== "string"
+    ) {
+      return null;
+    }
+  }
+  return error as unknown as ProjectRenameError;
+}
+
+function isProjectRenamePlan(value: unknown): value is ProjectRenamePlan {
+  return (
+    isRecord(value) &&
+    typeof value.planToken === "string" &&
+    typeof value.sourceProject === "string" &&
+    typeof value.destinationProject === "string" &&
+    typeof value.caseOnly === "boolean" &&
+    Array.isArray(value.rewrites) &&
+    Array.isArray(value.moves) &&
+    Array.isArray(value.indexUpdates) &&
+    Array.isArray(value.collisions) &&
+    isRecord(value.impact) &&
+    typeof value.impact.rewrittenFiles === "number" &&
+    typeof value.impact.rewrittenTokens === "number" &&
+    typeof value.impact.filesystemMoves === "number" &&
+    typeof value.impact.descendantProjects === "number" &&
+    isStringArray(value.warnings)
+  );
+}
+
+export async function preflightProjectRename(
+  sourceProject: string,
+  destinationProject: string,
+): Promise<ProjectRenamePlan> {
+  const result: unknown = await invoke("preflight_project_rename", {
+    sourceProject,
+    destinationProject,
+  });
+  if (!isProjectRenamePlan(result)) throw new Error("Invalid project rename plan response.");
+  return result;
+}
+
+export async function executeProjectRename(planToken: string): Promise<ProjectRenameResult> {
+  const result: unknown = await invoke("execute_project_rename", { planToken });
+  if (
+    !isRecord(result) ||
+    typeof result.planToken !== "string" ||
+    !isStringArray(result.completedOperations) ||
+    typeof result.rewrittenFiles !== "number" ||
+    typeof result.rewrittenTokens !== "number" ||
+    typeof result.movedPaths !== "number"
+  ) {
+    throw new Error("Invalid project rename result response.");
+  }
+  return result as unknown as ProjectRenameResult;
 }

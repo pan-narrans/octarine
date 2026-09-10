@@ -13,7 +13,7 @@ function localDate(offsetDays = 0): string {
 }
 
 function task(overrides: Partial<Task> & Pick<Task, "hash" | "description">): Task {
-  return {
+  const value: Task = {
     line_number: 1,
     raw_markdown: `- [ ] ${overrides.description}`,
     status: "todo",
@@ -33,6 +33,10 @@ function task(overrides: Partial<Task> & Pick<Task, "hash" | "description">): Ta
     parent_hash: null,
     ...overrides,
   };
+  if (overrides.file_path === undefined && overrides.project) {
+    value.file_path = `/visual/vault/projects/${overrides.project}.md`;
+  }
+  return value;
 }
 
 function populatedTasks(): Task[] {
@@ -185,6 +189,7 @@ export function taskStatusFromMarkdown(rawMarkdown: string): Task["status"] {
 
 export function installVisualFixtures(scenario: VisualScenario): void {
   let tasks = scenario === "empty" ? [] : populatedTasks();
+  let pendingRename = { source: "octarine", destination: "product" };
   let taskCreationConfig: TaskCreationConfig = {
     defaultDestination: "inbox",
     inboxFile: "inbox.md",
@@ -370,6 +375,98 @@ export function installVisualFixtures(scenario: VisualScenario): void {
         );
         return undefined;
       }
+      case "move_task_project": {
+        const lineNumber = Number(args.originalLineNumber);
+        const rawMarkdown = String(args.newRawMarkdown);
+        const project = rootProjects(rawMarkdown)[0] ?? null;
+        const destinationPath = project
+          ? `/visual/vault/projects/${project}.md`
+          : "/visual/vault/inbox.md";
+        let movedTask: Task | undefined;
+        tasks = tasks.map((entry) => {
+          if (entry.line_number !== lineNumber) return entry;
+          movedTask = {
+            ...entry,
+            raw_markdown: rawMarkdown,
+            project,
+            file_path: destinationPath,
+            status: taskStatusFromMarkdown(rawMarkdown),
+          };
+          return movedTask;
+        });
+        if (!movedTask) throw new Error("Visual fixture task not found.");
+        return {
+          task: movedTask,
+          sourcePath: String(args.sourceFilePath),
+          destinationPath,
+          warning: null,
+        };
+      }
+      case "preflight_project_rename": {
+        const sourceProject = String(args.sourceProject);
+        const destinationProject = String(args.destinationProject);
+        pendingRename = { source: sourceProject, destination: destinationProject };
+        return {
+          planToken: "visual-project-rename-plan",
+          sourceProject,
+          destinationProject,
+          caseOnly: sourceProject.toLocaleLowerCase() === destinationProject.toLocaleLowerCase(),
+          rewrites: [
+            {
+              path: `projects/${sourceProject}.md`,
+              sourceFingerprint: "visual-source",
+              replacementCount: tasks.filter(
+                (entry) =>
+                  entry.project &&
+                  renamedProject(entry.project, sourceProject, destinationProject) !==
+                    entry.project,
+              ).length,
+            },
+          ],
+          moves: [
+            {
+              kind: "project_file",
+              sourcePath: `projects/${sourceProject}.md`,
+              destinationPath: `projects/${destinationProject}.md`,
+              sourceFingerprint: "visual-source",
+            },
+          ],
+          indexUpdates: [],
+          collisions: [],
+          impact: {
+            rewrittenFiles: 1,
+            rewrittenTokens: tasks.filter(
+              (entry) =>
+                entry.project &&
+                renamedProject(entry.project, sourceProject, destinationProject) !== entry.project,
+            ).length,
+            filesystemMoves: 1,
+            descendantProjects: 0,
+          },
+          warnings: ["Markdown links are not updated by project rename."],
+        };
+      }
+      case "execute_project_rename": {
+        tasks = tasks.map((entry) =>
+          entry.project
+            ? {
+                ...entry,
+                project: renamedProject(
+                  entry.project,
+                  pendingRename.source,
+                  pendingRename.destination,
+                ),
+              }
+            : entry,
+        );
+        return {
+          planToken: String(args.planToken),
+          completedOperations: ["Rename visual project"],
+          rewrittenFiles: 1,
+          rewrittenTokens: 5,
+          movedPaths: 1,
+        };
+      }
       case "delete_task_markdown":
         tasks = tasks.filter((entry) => entry.line_number !== Number(args.lineNumber));
         return undefined;
@@ -398,4 +495,18 @@ export function installVisualFixtures(scenario: VisualScenario): void {
         throw new Error(`Unhandled visual fixture command: ${command}`);
     }
   });
+}
+
+function rootProjects(rawMarkdown: string): string[] {
+  return (rawMarkdown.split("\n")[0] ?? "")
+    .split(/\s+/)
+    .filter((token) => token.startsWith("+") && token.length > 1)
+    .map((token) => token.slice(1));
+}
+
+function renamedProject(project: string, source: string, destination: string): string {
+  if (project.toLocaleLowerCase() === source.toLocaleLowerCase()) return destination;
+  return project.toLocaleLowerCase().startsWith(`${source.toLocaleLowerCase()}/`)
+    ? `${destination}/${project.slice(source.length + 1)}`
+    : project;
 }

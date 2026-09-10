@@ -1,14 +1,20 @@
 use crate::config::{AppConfig, DestinationTemplate, UnprojectedDestination};
 use crate::db::{index_single_file, query_tasks};
-use crate::parser::ParsedTask;
+use crate::parser::{parse_markdown_content, ParsedTask};
 use crate::path_security::resolve_descendant_within;
 use crate::project::{filesystem_case_collision, resolve_project_file, ProjectPath};
+use crate::project_rename::{
+    execute_project_rename_plan, plan_project_rename, ProjectRenameError, ProjectRenameErrorCode,
+    ProjectRenamePlan, ProjectRenameResult,
+};
 use crate::task_creation::{
     parse_compact_task, serialize_task_draft, CaptureContext, TaskDraft, TaskDraftPreview,
 };
 use crate::task_writer::{write_task_block, CreateWarning, TaskFileWriteError};
 use crate::template::{render_template, TemplateContext};
-use crate::writer::{delete_task_markdown_in_file, WriteError, WriteErrorCode};
+use crate::writer::{
+    delete_task_markdown_in_file, validate_task_markdown_in_file, WriteError, WriteErrorCode,
+};
 use chrono::{DateTime, Datelike, FixedOffset};
 use rusqlite::types::Value;
 use rusqlite::Connection;
@@ -64,13 +70,140 @@ pub struct CreateTaskResult {
     pub undo_receipt: UndoCreateReceipt,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "snake_case")]
+pub enum MoveTaskProjectErrorCode {
+    InvalidSource,
+    InvalidDestination,
+    ProjectCollision,
+    DestinationConflict,
+    SourceRemovalFailed,
+    RollbackFailed,
+    IndexFailed,
+    OperationFailed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct MoveTaskProjectError {
+    pub code: MoveTaskProjectErrorCode,
+    pub message: String,
+    pub recovery_required: bool,
+}
+
+impl MoveTaskProjectError {
+    fn new(code: MoveTaskProjectErrorCode, message: impl Into<String>) -> Self {
+        Self {
+            code,
+            message: message.into(),
+            recovery_required: false,
+        }
+    }
+
+    fn recovery(message: impl Into<String>) -> Self {
+        Self {
+            code: MoveTaskProjectErrorCode::RollbackFailed,
+            message: message.into(),
+            recovery_required: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct MoveTaskProjectResult {
+    pub task: ParsedTask,
+    pub source_path: String,
+    pub destination_path: String,
+    pub warning: Option<CreateWarning>,
+}
+
 #[derive(Default)]
 pub struct TaskCreationService {
     write_lock: Mutex<()>,
     completed_operations: Mutex<HashMap<String, CreateTaskResult>>,
+    project_rename_plans: Mutex<HashMap<String, ProjectRenamePlan>>,
 }
 
 impl TaskCreationService {
+    pub fn preflight_project_rename(
+        &self,
+        vault_root: &Path,
+        config: &AppConfig,
+        source_project: &str,
+        destination_project: &str,
+    ) -> Result<ProjectRenamePlan, ProjectRenameError> {
+        crate::config::validate_config_for_vault(config, vault_root).map_err(|_| {
+            ProjectRenameError::new(
+                ProjectRenameErrorCode::InvalidRequest,
+                "Project rename configuration is invalid.",
+            )
+        })?;
+        let plan = plan_project_rename(
+            vault_root,
+            &config.project_folder,
+            source_project,
+            destination_project,
+        )
+        .map_err(|message| {
+            ProjectRenameError::new(ProjectRenameErrorCode::InvalidRequest, message)
+        })?;
+        let mut plans = self.project_rename_plans.lock().unwrap();
+        if plans.len() >= 32 {
+            plans.clear();
+        }
+        plans.insert(plan.plan_token.clone(), plan.clone());
+        Ok(plan)
+    }
+
+    pub fn execute_project_rename(
+        &self,
+        vault_root: &Path,
+        config: &AppConfig,
+        connection: &Connection,
+        plan_token: &str,
+    ) -> Result<ProjectRenameResult, ProjectRenameError> {
+        let plan = self
+            .project_rename_plans
+            .lock()
+            .unwrap()
+            .get(plan_token)
+            .cloned()
+            .ok_or_else(|| {
+                ProjectRenameError::new(
+                    ProjectRenameErrorCode::UnknownPlan,
+                    "Project rename plan is unknown or expired. Run preflight again.",
+                )
+            })?;
+        let _write_guard = self.write_lock.try_lock().map_err(|_| {
+            ProjectRenameError::new(
+                ProjectRenameErrorCode::Busy,
+                "Another task file operation is running. Try again.",
+            )
+        })?;
+        let current = plan_project_rename(
+            vault_root,
+            &config.project_folder,
+            &plan.source_project,
+            &plan.destination_project,
+        )
+        .map_err(|_| {
+            ProjectRenameError::new(
+                ProjectRenameErrorCode::StalePlan,
+                "Project rename plan is stale. Run preflight again.",
+            )
+        })?;
+        if current.plan_token != plan.plan_token {
+            self.project_rename_plans.lock().unwrap().remove(plan_token);
+            return Err(ProjectRenameError::new(
+                ProjectRenameErrorCode::StalePlan,
+                "Project rename plan is stale. Run preflight again.",
+            ));
+        }
+        self.project_rename_plans.lock().unwrap().remove(plan_token);
+        execute_project_rename_plan(vault_root, connection, &plan)
+    }
+
     pub fn preview_task_draft(
         &self,
         vault_root: &Path,
@@ -227,6 +360,168 @@ impl TaskCreationService {
             .retain(|_, result| result.undo_receipt != *receipt);
         Ok(())
     }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn move_task_project(
+        &self,
+        vault_root: &Path,
+        config: &AppConfig,
+        connection: &Connection,
+        source_file_path: &str,
+        original_line_number: usize,
+        original_raw_markdown: &str,
+        new_raw_markdown: &str,
+        submitted_at: DateTime<FixedOffset>,
+    ) -> Result<MoveTaskProjectResult, MoveTaskProjectError> {
+        self.move_task_project_with_hook(
+            vault_root,
+            config,
+            connection,
+            source_file_path,
+            original_line_number,
+            original_raw_markdown,
+            new_raw_markdown,
+            submitted_at,
+            |_| {},
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn move_task_project_with_hook<F>(
+        &self,
+        vault_root: &Path,
+        config: &AppConfig,
+        connection: &Connection,
+        source_file_path: &str,
+        original_line_number: usize,
+        original_raw_markdown: &str,
+        new_raw_markdown: &str,
+        submitted_at: DateTime<FixedOffset>,
+        after_destination_write: F,
+    ) -> Result<MoveTaskProjectResult, MoveTaskProjectError>
+    where
+        F: FnOnce(&Path),
+    {
+        let _write_guard = self.write_lock.lock().unwrap();
+        crate::config::validate_config_for_vault(config, vault_root).map_err(|message| {
+            MoveTaskProjectError::new(MoveTaskProjectErrorCode::InvalidDestination, message)
+        })?;
+        let source =
+            crate::path_security::resolve_existing_within(vault_root, source_file_path, false)
+                .map_err(|_| {
+                    MoveTaskProjectError::new(
+                        MoveTaskProjectErrorCode::InvalidSource,
+                        "Source task file is missing or outside the vault.",
+                    )
+                })?;
+        let source_path = source.to_string_lossy().into_owned();
+        validate_task_markdown_in_file(&source_path, original_line_number, original_raw_markdown)
+            .map_err(map_source_write_error)?;
+
+        let project = validate_moved_subtree(new_raw_markdown)?;
+        let resolved = resolve_destination_for_project(
+            vault_root,
+            config,
+            connection,
+            project.as_deref(),
+            submitted_at,
+        )
+        .map_err(map_create_to_move_error)?;
+        if source == resolved.path {
+            return Err(MoveTaskProjectError::new(
+                MoveTaskProjectErrorCode::InvalidDestination,
+                "Project change resolves to the current file.",
+            ));
+        }
+        let rendered_template = render_template(
+            &resolved.template.template,
+            TemplateContext {
+                project: resolved.project.as_ref(),
+                submitted_at,
+            },
+        )
+        .map_err(|error| {
+            MoveTaskProjectError::new(
+                MoveTaskProjectErrorCode::InvalidDestination,
+                error.to_string(),
+            )
+        })?;
+        let written = write_task_block(
+            &resolved.path,
+            &rendered_template,
+            new_raw_markdown,
+            &resolved.template.insertion,
+        )
+        .map_err(map_move_file_write_error)?;
+        let destination_path = resolved.path.to_string_lossy().into_owned();
+        after_destination_write(&resolved.path);
+
+        if let Err(source_error) =
+            delete_task_markdown_in_file(&source_path, original_line_number, original_raw_markdown)
+        {
+            let rollback = delete_task_markdown_in_file(
+                &destination_path,
+                written.insertion.line_number,
+                new_raw_markdown,
+            );
+            if rollback.is_err() {
+                return Err(MoveTaskProjectError::recovery(format!(
+                    "Source task was not removed ({0}). Destination rollback also failed. Task may exist in both files; refresh before editing.",
+                    source_error.message
+                )));
+            }
+            return Err(MoveTaskProjectError::new(
+                MoveTaskProjectErrorCode::SourceRemovalFailed,
+                format!(
+                    "Source task was not removed ({}). Destination write was rolled back.",
+                    source_error.message
+                ),
+            ));
+        }
+
+        index_single_file(connection, &source_path).map_err(|_| {
+            MoveTaskProjectError::new(
+                MoveTaskProjectErrorCode::IndexFailed,
+                "Task moved, but source index refresh failed.",
+            )
+        })?;
+        index_single_file(connection, &destination_path).map_err(|_| {
+            MoveTaskProjectError::new(
+                MoveTaskProjectErrorCode::IndexFailed,
+                "Task moved, but destination index refresh failed.",
+            )
+        })?;
+        let tasks = query_tasks(
+            connection,
+            "files.path = ?1 AND tasks.line_number = ?2",
+            &[
+                Value::Text(destination_path.clone()),
+                Value::Integer(written.insertion.line_number as i64),
+            ],
+        )
+        .map_err(|_| {
+            MoveTaskProjectError::new(
+                MoveTaskProjectErrorCode::IndexFailed,
+                "Moved task could not be read from derived index.",
+            )
+        })?;
+        let task = tasks
+            .into_iter()
+            .find(|task| task.parent_hash.is_none())
+            .ok_or_else(|| {
+                MoveTaskProjectError::new(
+                    MoveTaskProjectErrorCode::IndexFailed,
+                    "Moved root task is missing from derived index.",
+                )
+            })?;
+
+        Ok(MoveTaskProjectResult {
+            task,
+            source_path,
+            destination_path,
+            warning: written.insertion.warning,
+        })
+    }
 }
 
 struct ResolvedDestination<'a> {
@@ -242,7 +537,23 @@ fn resolve_destination<'a>(
     draft: &TaskDraft,
     submitted_at: DateTime<FixedOffset>,
 ) -> Result<ResolvedDestination<'a>, CreateTaskError> {
-    if let Some(project_name) = &draft.project {
+    resolve_destination_for_project(
+        vault_root,
+        config,
+        connection,
+        draft.project.as_deref(),
+        submitted_at,
+    )
+}
+
+fn resolve_destination_for_project<'a>(
+    vault_root: &Path,
+    config: &'a AppConfig,
+    connection: &Connection,
+    project_name: Option<&str>,
+    submitted_at: DateTime<FixedOffset>,
+) -> Result<ResolvedDestination<'a>, CreateTaskError> {
+    if let Some(project_name) = project_name {
         let project = ProjectPath::parse(project_name).map_err(|error| {
             CreateTaskError::new(CreateTaskErrorCode::InvalidDraft, error.to_string())
         })?;
@@ -321,6 +632,65 @@ fn resolve_destination<'a>(
     }
 }
 
+fn validate_moved_subtree(raw_markdown: &str) -> Result<Option<String>, MoveTaskProjectError> {
+    if raw_markdown.trim().is_empty() {
+        return Err(MoveTaskProjectError::new(
+            MoveTaskProjectErrorCode::InvalidSource,
+            "Moved task source cannot be empty.",
+        ));
+    }
+    let (tasks, _) = parse_markdown_content("<project-move>", raw_markdown);
+    let project_tokens = raw_markdown
+        .lines()
+        .next()
+        .into_iter()
+        .flat_map(str::split_whitespace)
+        .filter(|token| token.starts_with('+') && token.len() > 1)
+        .count();
+    if project_tokens > 1 {
+        return Err(MoveTaskProjectError::new(
+            MoveTaskProjectErrorCode::InvalidSource,
+            "Moved task can contain one root project.",
+        ));
+    }
+    let roots: Vec<&ParsedTask> = tasks
+        .iter()
+        .filter(|task| task.parent_hash.is_none())
+        .collect();
+    let [root] = roots.as_slice() else {
+        return Err(MoveTaskProjectError::new(
+            MoveTaskProjectErrorCode::InvalidSource,
+            "Moved Markdown must contain exactly one root task.",
+        ));
+    };
+    if tasks.iter().any(|task| task.parse_errors.is_some()) {
+        return Err(MoveTaskProjectError::new(
+            MoveTaskProjectErrorCode::InvalidSource,
+            "Moved task contains invalid metadata.",
+        ));
+    }
+    if tasks.iter().any(|task| {
+        task.parent_hash.is_some()
+            && task
+                .project
+                .as_deref()
+                .is_some_and(|project| root.project.as_deref() != Some(project))
+    }) {
+        return Err(MoveTaskProjectError::new(
+            MoveTaskProjectErrorCode::InvalidSource,
+            "Every subtask must inherit the root project.",
+        ));
+    }
+    root.project
+        .as_deref()
+        .map(ProjectPath::parse)
+        .transpose()
+        .map(|project| project.map(|value| value.display().to_string()))
+        .map_err(|error| {
+            MoveTaskProjectError::new(MoveTaskProjectErrorCode::InvalidSource, error.to_string())
+        })
+}
+
 fn existing_projects(connection: &Connection) -> Result<Vec<String>, CreateTaskError> {
     let mut statement = connection
         .prepare("SELECT DISTINCT project FROM tasks WHERE project IS NOT NULL")
@@ -370,6 +740,30 @@ fn map_file_write_error(error: TaskFileWriteError) -> CreateTaskError {
             CreateTaskError::new(CreateTaskErrorCode::OperationFailed, error.to_string())
         }
     }
+}
+
+fn map_create_to_move_error(error: CreateTaskError) -> MoveTaskProjectError {
+    let code = match error.code {
+        CreateTaskErrorCode::InvalidDraft => MoveTaskProjectErrorCode::InvalidSource,
+        CreateTaskErrorCode::InvalidDestination => MoveTaskProjectErrorCode::InvalidDestination,
+        CreateTaskErrorCode::ProjectCollision => MoveTaskProjectErrorCode::ProjectCollision,
+        CreateTaskErrorCode::DestinationConflict => MoveTaskProjectErrorCode::DestinationConflict,
+        CreateTaskErrorCode::IndexFailed => MoveTaskProjectErrorCode::IndexFailed,
+        CreateTaskErrorCode::OperationFailed => MoveTaskProjectErrorCode::OperationFailed,
+    };
+    MoveTaskProjectError::new(code, error.message)
+}
+
+fn map_move_file_write_error(error: TaskFileWriteError) -> MoveTaskProjectError {
+    let code = match error {
+        TaskFileWriteError::Conflict => MoveTaskProjectErrorCode::DestinationConflict,
+        TaskFileWriteError::OperationFailed => MoveTaskProjectErrorCode::OperationFailed,
+    };
+    MoveTaskProjectError::new(code, error.to_string())
+}
+
+fn map_source_write_error(error: WriteError) -> MoveTaskProjectError {
+    MoveTaskProjectError::new(MoveTaskProjectErrorCode::InvalidSource, error.message)
 }
 
 fn source_fingerprint(source: &str) -> String {
@@ -489,6 +883,258 @@ mod tests {
             )
             .unwrap();
         assert!(daily.destination_path.ends_with("journals/2026-09-07.md"));
+    }
+
+    #[test]
+    fn moves_complete_subtree_between_project_files_and_reindexes_both() {
+        let (_temp, vault, connection) = setup();
+        let service = TaskCreationService::default();
+        let source = vault.join("projects/old.md");
+        fs::create_dir_all(source.parent().unwrap()).unwrap();
+        let original = "- [ ] Parent +old\n    Parent note\n    - [ ] Child\n        Child note";
+        fs::write(&source, format!("# old\n\n{original}\n\n- [ ] Keep +old\n")).unwrap();
+        index_single_file(&connection, source.to_str().unwrap()).unwrap();
+
+        let moved = service
+            .move_task_project(
+                &vault,
+                &AppConfig::default(),
+                &connection,
+                source.to_str().unwrap(),
+                3,
+                original,
+                "- [ ] Parent +new\n    Parent note\n    - [ ] Child\n        Child note",
+                submitted_at(),
+            )
+            .unwrap();
+
+        let source_content = fs::read_to_string(&source).unwrap();
+        assert!(!source_content.contains("Parent"));
+        assert!(source_content.contains("Keep"));
+        let destination_content = fs::read_to_string(&moved.destination_path).unwrap();
+        assert!(destination_content.contains("Parent +new"));
+        assert!(destination_content.contains("Child note"));
+        assert_eq!(moved.task.project.as_deref(), Some("new"));
+        let indexed = query_tasks(&connection, "1 = 1", &[]).unwrap();
+        assert_eq!(indexed.len(), 3);
+        assert!(indexed.iter().all(|task| task.description != "Parent"
+            || task.file_path.as_deref() == Some(moved.destination_path.as_str())));
+    }
+
+    #[test]
+    fn removing_project_routes_complete_subtree_to_configured_inbox() {
+        let (_temp, vault, connection) = setup();
+        let service = TaskCreationService::default();
+        let source = vault.join("projects/old.md");
+        fs::create_dir_all(source.parent().unwrap()).unwrap();
+        let original = "- [ ] Parent +old\n    - [ ] Child";
+        fs::write(&source, original).unwrap();
+        index_single_file(&connection, source.to_str().unwrap()).unwrap();
+
+        let moved = service
+            .move_task_project(
+                &vault,
+                &AppConfig::default(),
+                &connection,
+                source.to_str().unwrap(),
+                1,
+                original,
+                "- [ ] Parent\n    - [ ] Child",
+                submitted_at(),
+            )
+            .unwrap();
+
+        assert!(moved.destination_path.ends_with("inbox.md"));
+        assert_eq!(moved.task.project, None);
+        assert!(!fs::read_to_string(source).unwrap().contains("Parent"));
+        assert!(fs::read_to_string(moved.destination_path)
+            .unwrap()
+            .contains("Child"));
+    }
+
+    #[test]
+    fn stale_project_move_aborts_before_destination_write() {
+        let (_temp, vault, connection) = setup();
+        let service = TaskCreationService::default();
+        let source = vault.join("projects/old.md");
+        fs::create_dir_all(source.parent().unwrap()).unwrap();
+        fs::write(&source, "- [ ] Changed +old").unwrap();
+
+        let error = service
+            .move_task_project(
+                &vault,
+                &AppConfig::default(),
+                &connection,
+                source.to_str().unwrap(),
+                1,
+                "- [ ] Original +old",
+                "- [ ] Original +new",
+                submitted_at(),
+            )
+            .unwrap_err();
+
+        assert_eq!(error.code, MoveTaskProjectErrorCode::InvalidSource);
+        assert!(!vault.join("projects/new.md").exists());
+        assert_eq!(fs::read_to_string(source).unwrap(), "- [ ] Changed +old");
+    }
+
+    #[test]
+    fn destination_failure_leaves_source_untouched() {
+        let (_temp, vault, connection) = setup();
+        let service = TaskCreationService::default();
+        let source = vault.join("inbox.md");
+        let original = "- [ ] Parent";
+        fs::write(&source, original).unwrap();
+        fs::create_dir_all(vault.join("projects/new.md")).unwrap();
+
+        let error = service
+            .move_task_project(
+                &vault,
+                &AppConfig::default(),
+                &connection,
+                source.to_str().unwrap(),
+                1,
+                original,
+                "- [ ] Parent +new",
+                submitted_at(),
+            )
+            .unwrap_err();
+
+        assert_eq!(error.code, MoveTaskProjectErrorCode::InvalidDestination);
+        assert_eq!(fs::read_to_string(source).unwrap(), original);
+    }
+
+    #[test]
+    fn move_inserts_into_existing_destination_without_replacing_content() {
+        let (_temp, vault, connection) = setup();
+        let service = TaskCreationService::default();
+        let source = vault.join("projects/old.md");
+        let destination = vault.join("projects/new.md");
+        fs::create_dir_all(source.parent().unwrap()).unwrap();
+        let original = "- [ ] Parent +old";
+        fs::write(&source, original).unwrap();
+        fs::write(&destination, "# Existing\n\n## Tasks\n\nKeep this text.\n").unwrap();
+        index_single_file(&connection, source.to_str().unwrap()).unwrap();
+
+        service
+            .move_task_project(
+                &vault,
+                &AppConfig::default(),
+                &connection,
+                source.to_str().unwrap(),
+                1,
+                original,
+                "- [ ] Parent +new",
+                submitted_at(),
+            )
+            .unwrap();
+
+        let content = fs::read_to_string(destination).unwrap();
+        assert!(content.contains("# Existing"));
+        assert!(content.contains("Keep this text."));
+        assert!(content.contains("Parent +new"));
+    }
+
+    #[test]
+    fn conflicting_subtask_project_aborts_before_destination_write() {
+        let (_temp, vault, connection) = setup();
+        let service = TaskCreationService::default();
+        let source = vault.join("projects/old.md");
+        fs::create_dir_all(source.parent().unwrap()).unwrap();
+        let original = "- [ ] Parent +old\n    - [ ] Child";
+        fs::write(&source, original).unwrap();
+
+        let error = service
+            .move_task_project(
+                &vault,
+                &AppConfig::default(),
+                &connection,
+                source.to_str().unwrap(),
+                1,
+                original,
+                "- [ ] Parent +new\n    - [ ] Child +other",
+                submitted_at(),
+            )
+            .unwrap_err();
+
+        assert_eq!(error.code, MoveTaskProjectErrorCode::InvalidSource);
+        assert!(!vault.join("projects/new.md").exists());
+        assert_eq!(fs::read_to_string(source).unwrap(), original);
+    }
+
+    #[test]
+    fn multiple_root_projects_are_rejected() {
+        let error = validate_moved_subtree("- [ ] Parent +one +two").unwrap_err();
+        assert_eq!(error.code, MoveTaskProjectErrorCode::InvalidSource);
+    }
+
+    #[test]
+    fn source_removal_failure_rolls_destination_back() {
+        let (_temp, vault, connection) = setup();
+        let service = TaskCreationService::default();
+        let source = vault.join("projects/old.md");
+        fs::create_dir_all(source.parent().unwrap()).unwrap();
+        let original = "- [ ] Parent +old";
+        fs::write(&source, original).unwrap();
+        let source_for_hook = source.clone();
+
+        let error = service
+            .move_task_project_with_hook(
+                &vault,
+                &AppConfig::default(),
+                &connection,
+                source.to_str().unwrap(),
+                1,
+                original,
+                "- [ ] Parent +new",
+                submitted_at(),
+                move |_| fs::write(source_for_hook, "- [ ] External change +old").unwrap(),
+            )
+            .unwrap_err();
+
+        assert_eq!(error.code, MoveTaskProjectErrorCode::SourceRemovalFailed);
+        assert!(!error.recovery_required);
+        let destination = vault.join("projects/new.md");
+        assert!(!fs::read_to_string(destination)
+            .unwrap()
+            .contains("Parent +new"));
+    }
+
+    #[test]
+    fn failed_destination_rollback_reports_recovery_state() {
+        let (_temp, vault, connection) = setup();
+        let service = TaskCreationService::default();
+        let source = vault.join("projects/old.md");
+        fs::create_dir_all(source.parent().unwrap()).unwrap();
+        let original = "- [ ] Parent +old";
+        fs::write(&source, original).unwrap();
+        let source_for_hook = source.clone();
+
+        let error = service
+            .move_task_project_with_hook(
+                &vault,
+                &AppConfig::default(),
+                &connection,
+                source.to_str().unwrap(),
+                1,
+                original,
+                "- [ ] Parent +new",
+                submitted_at(),
+                move |destination| {
+                    fs::write(source_for_hook, "- [ ] External source change +old").unwrap();
+                    let changed = fs::read_to_string(destination)
+                        .unwrap()
+                        .replace("Parent +new", "External destination change +new");
+                    fs::write(destination, changed).unwrap();
+                },
+            )
+            .unwrap_err();
+
+        assert_eq!(error.code, MoveTaskProjectErrorCode::RollbackFailed);
+        assert!(error.recovery_required);
+        assert!(fs::read_to_string(vault.join("projects/new.md"))
+            .unwrap()
+            .contains("External destination change +new"));
     }
 
     #[test]

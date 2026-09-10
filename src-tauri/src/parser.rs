@@ -1,3 +1,4 @@
+use crate::project::ProjectPath;
 use crate::CHECKLIST_CHAR_CLASS;
 use regex::Regex;
 use sha2::{Digest, Sha256};
@@ -576,9 +577,130 @@ pub fn parse_markdown_content(
     (tasks, views)
 }
 
+/// Rewrites project tokens only where task parser treats them as metadata.
+/// Returns original line endings and all non-project bytes unchanged.
+pub fn rewrite_project_tokens(
+    content: &str,
+    old_project: &ProjectPath,
+    new_project: &ProjectPath,
+) -> (String, usize) {
+    let mut output = String::with_capacity(content.len());
+    let mut replacement_count = 0;
+    let mut inside_codeblock = false;
+    let mut inside_comment = false;
+
+    for raw_line in content.split_inclusive('\n') {
+        let (line, ending) = raw_line
+            .strip_suffix("\r\n")
+            .map(|line| (line, "\r\n"))
+            .or_else(|| raw_line.strip_suffix('\n').map(|line| (line, "\n")))
+            .unwrap_or((raw_line, ""));
+        let trimmed = line.trim();
+
+        if !inside_codeblock && trimmed == "%%" {
+            inside_comment = !inside_comment;
+            output.push_str(line);
+            output.push_str(ending);
+            continue;
+        }
+        if inside_comment {
+            output.push_str(line);
+            output.push_str(ending);
+            continue;
+        }
+        if trimmed.starts_with("```") {
+            inside_codeblock = !inside_codeblock;
+            output.push_str(line);
+            output.push_str(ending);
+            continue;
+        }
+        if inside_codeblock || !get_header_re().is_match(line) {
+            output.push_str(line);
+            output.push_str(ending);
+            continue;
+        }
+
+        let mut masked = line.as_bytes().to_vec();
+        for expression in [get_link_re(), get_url_re(), get_code_re()] {
+            for matched in expression.find_iter(line) {
+                masked[matched.start()..matched.end()].fill(b' ');
+            }
+        }
+        let mut delimiters = line.match_indices("%%").map(|(index, _)| index);
+        while let Some(start) = delimiters.next() {
+            let end = delimiters.next().map_or(line.len(), |index| index + 2);
+            masked[start..end].fill(b' ');
+        }
+
+        let searchable = String::from_utf8(masked).unwrap_or_default();
+        let mut replacements = Vec::new();
+        for captures in get_project_re().captures_iter(&searchable) {
+            let Some(token) = captures.get(1) else {
+                continue;
+            };
+            let Ok(project) = ProjectPath::parse(token.as_str()) else {
+                continue;
+            };
+            if let Some(replacement) = project.renamed_descendant(old_project, new_project) {
+                let whole = captures.get(0).expect("project match includes full token");
+                replacements.push((whole.start()..whole.end(), format!("+{replacement}")));
+            }
+        }
+
+        if replacements.is_empty() {
+            output.push_str(line);
+        } else {
+            let mut rewritten = line.to_string();
+            replacement_count += replacements.len();
+            for (range, replacement) in replacements.into_iter().rev() {
+                rewritten.replace_range(range, &replacement);
+            }
+            output.push_str(&rewritten);
+        }
+        output.push_str(ending);
+    }
+
+    (output, replacement_count)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rewrites_only_project_metadata_on_task_lines() {
+        let old = ProjectPath::parse("work").unwrap();
+        let new = ProjectPath::parse("job").unwrap();
+        let content = concat!(
+            "Prose +work and [link](projects/+work)\n",
+            "- [ ] Exact +work and descendant +Work/Client\n",
+            "- [ ] Lookalike +workshop [linked +work](https://example.com/+work) `+work` %% +work %%\n",
+            "```md\n- [ ] Code +work\n```\n",
+            "%%\n- [ ] Comment +work\n%%\n",
+        );
+
+        let (rewritten, count) = rewrite_project_tokens(content, &old, &new);
+
+        assert_eq!(count, 2);
+        assert!(rewritten.contains("- [ ] Exact +job and descendant +job/Client"));
+        assert!(rewritten.contains("Prose +work and [link](projects/+work)"));
+        assert!(rewritten
+            .contains("+workshop [linked +work](https://example.com/+work) `+work` %% +work %%"));
+        assert!(rewritten.contains("- [ ] Code +work"));
+        assert!(rewritten.contains("- [ ] Comment +work"));
+    }
+
+    #[test]
+    fn preserves_crlf_and_missing_final_newline_during_project_rewrite() {
+        let old = ProjectPath::parse("work").unwrap();
+        let new = ProjectPath::parse("Work").unwrap();
+        let content = "- [ ] First +work\r\n- [ ] Last +work";
+
+        assert_eq!(
+            rewrite_project_tokens(content, &old, &new),
+            ("- [ ] First +Work\r\n- [ ] Last +Work".to_string(), 2)
+        );
+    }
 
     #[test]
     fn test_parse_simple_task() {

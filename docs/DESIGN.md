@@ -45,6 +45,16 @@ Octarine uses a dark, interstellar workspace aesthetic: deep navy surfaces, rest
 - Successful task creation closes capture and returns focus to `New task`. Write failure keeps modal
   and draft open. Notification actions use compact text controls for Undo, Open file, and Retry
   refresh.
+- Editing root project opens separate confirmation above task editor. Confirmation states source and
+  destination projects, affected nested-task count, and both file paths. Cancel returns to unsaved
+  editor. Successful move closes both modals; move warnings and errors use global notifications.
+- Renaming project file or directory opens separate preflight confirmation. Summary states source and
+  destination, rewritten task-token count, affected files, filesystem moves, descendant count, and
+  non-updated-link warning. Collision disables confirmation. Partial failure replaces action view with
+  completed/pending recovery report. Success closes modal and uses global notification viewport.
+- Active or hovered sidebar project exposes compact pencil action. Inline editor changes one project
+  segment with explicit confirm/cancel controls, then opens same project-rename preflight confirmation.
+  Escape cancels inline editing; selected project follows successful hierarchy rename.
 - At narrow viewports, calendar controls stack while the seven-day calendar grid scrolls horizontally as a single bounded region. The day drawer is viewport-width constrained, and file-tree labels truncate rather than forcing page overflow.
 - Project views place compact Board/List presentation switch beside search. Board is default; Done and Cancelled column toggles appear only in Board mode.
 - Kanban columns keep fixed readable width and scroll inside board region instead of stacking or shrinking. Each column groups cards under flat uppercase context headings; No context appears first. Card context pills are omitted because group heading owns that information, while descendant project pills show only relative path.

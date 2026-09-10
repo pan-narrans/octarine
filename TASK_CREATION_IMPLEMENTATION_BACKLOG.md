@@ -249,15 +249,15 @@ and external actions remain outside backlog authorization.
   require explicit move operation rather than raw metadata replacement.
 - **Dependencies:** TC-107, TC-201, TC-202.
 - **Acceptance Criteria:**
-  - [ ] Root project change moves complete raw Markdown subtree.
-  - [ ] Child effective project inherits new parent project.
-  - [ ] Destination follows project template/insertion rules when new.
-  - [ ] Source stale/missing/ambiguous state aborts before source removal.
-  - [ ] Destination failure leaves source intact.
-  - [ ] Source-removal failure after destination insertion triggers rollback attempt and returns
+  - [x] Root project change moves complete raw Markdown subtree.
+  - [x] Child effective project inherits new parent project.
+  - [x] Destination follows project template/insertion rules when new.
+  - [x] Source stale/missing/ambiguous state aborts before source removal.
+  - [x] Destination failure leaves source intact.
+  - [x] Source-removal failure after destination insertion triggers rollback attempt and returns
         explicit recovery state if rollback fails.
-  - [ ] Removing project routes subtree to configured unprojected destination.
-  - [ ] Both affected files reindex before success.
+  - [x] Removing project routes subtree to configured unprojected destination.
+  - [x] Both affected files reindex before success.
 - **Validation / Verification:**
   - _How to verify:_ Add cross-file integration matrix covering existing/missing destination,
     descendants, notes, unprojected route, source conflict, destination failure, rollback success, and
@@ -498,12 +498,12 @@ and external actions remain outside backlog authorization.
   case-only rename.
 - **Dependencies:** TC-304.
 - **Acceptance Criteria:**
-  - [ ] `work → job` maps both `work.md` and `work/` plus descendant project tokens.
-  - [ ] Ordinary files inside renamed directory move with directory.
-  - [ ] Ignored file contents remain untouched even when containing old project token.
-  - [ ] Markdown links remain unchanged.
-  - [ ] Per-file atomicity and lack of global atomicity are explicit.
-  - [ ] Recovery state requirements are normative.
+  - [x] `work → job` maps both `work.md` and `work/` plus descendant project tokens.
+  - [x] Ordinary files inside renamed directory move with directory.
+  - [x] Ignored file contents remain untouched even when containing old project token.
+  - [x] Markdown links remain unchanged.
+  - [x] Per-file atomicity and lack of global atomicity are explicit.
+  - [x] Recovery state requirements are normative.
 - **Validation / Verification:**
   - _How to verify:_ Review ADR against approved definition and format-check changed Markdown.
 
@@ -514,12 +514,12 @@ and external actions remain outside backlog authorization.
   mutating filesystem.
 - **Dependencies:** PR-401, TC-107.
 - **Acceptance Criteria:**
-  - [ ] Planner handles leaf, parent hierarchy, and case-only rename.
-  - [ ] Exact token matching avoids rewriting prefix lookalikes.
-  - [ ] Descendant token suffixes remain unchanged after prefix replacement.
-  - [ ] Every destination collision appears before execution.
-  - [ ] Ignored contents are excluded from token rewrite plan.
-  - [ ] Plan is deterministic and serializable for confirmation UI.
+  - [x] Planner handles leaf, parent hierarchy, and case-only rename.
+  - [x] Exact token matching avoids rewriting prefix lookalikes.
+  - [x] Descendant token suffixes remain unchanged after prefix replacement.
+  - [x] Every destination collision appears before execution.
+  - [x] Ignored contents are excluded from token rewrite plan.
+  - [x] Plan is deterministic and serializable for confirmation UI.
 - **Validation / Verification:**
   - _How to verify:_ Add table-driven planner tests for exact, descendant, lookalike, Unicode, case,
     ignored, collision, file-only, directory-only, and combined mappings; run targeted Rust tests.
@@ -531,14 +531,14 @@ and external actions remain outside backlog authorization.
   reconciliation, and explicit partial-failure report.
 - **Dependencies:** PR-402.
 - **Acceptance Criteria:**
-  - [ ] Executor refuses stale or mismatched plan before first mutation when detectable.
-  - [ ] Case-only rename succeeds on case-insensitive macOS filesystem.
-  - [ ] Exact and descendant task tokens update in non-ignored Markdown.
-  - [ ] Project file and descendant directory reach planned destinations.
-  - [ ] Ordinary directory contents move intact.
-  - [ ] Markdown links and ignored file contents remain byte-identical.
-  - [ ] Index reconciles every affected non-ignored file before success.
-  - [ ] Partial failure reports completed and pending operations plus recovery guidance.
+  - [x] Executor refuses stale or mismatched plan before first mutation when detectable.
+  - [x] Case-only rename succeeds on case-insensitive macOS filesystem.
+  - [x] Exact and descendant task tokens update in non-ignored Markdown.
+  - [x] Project file and descendant directory reach planned destinations.
+  - [x] Ordinary directory contents move intact.
+  - [x] Markdown links and ignored file contents remain byte-identical.
+  - [x] Index reconciles every affected non-ignored file before success.
+  - [x] Partial failure reports completed and pending operations plus recovery guidance.
 - **Validation / Verification:**
   - _How to verify:_ Add temporary-vault integration tests with injected failures at each execution
     stage; run Rust tests, formatting, and Clippy.
@@ -550,13 +550,13 @@ and external actions remain outside backlog authorization.
   and non-updated links.
 - **Dependencies:** PR-403.
 - **Acceptance Criteria:**
-  - [ ] UI cannot execute without current native preflight token.
-  - [ ] Confirmation names source/destination and descendant impact clearly.
-  - [ ] Collision blocks confirmation.
-  - [ ] UI warns Markdown links are not updated.
-  - [ ] Partial failure view exposes recovery report without raw diagnostic leakage.
-  - [ ] Storybook stories reach exact approval before app integration.
-  - [ ] App integration reaches `APP VERIFIED`.
+  - [x] UI cannot execute without current native preflight token.
+  - [x] Confirmation names source/destination and descendant impact clearly.
+  - [x] Collision blocks confirmation.
+  - [x] UI warns Markdown links are not updated.
+  - [x] Partial failure view exposes recovery report without raw diagnostic leakage.
+  - [x] Storybook stories reach exact approval before app integration.
+  - [x] App integration reaches `APP VERIFIED`.
 - **Validation / Verification:**
   - _How to verify:_ Run generated-contract checks, component tests, named Storybook review, approved
     visual regression, and rendered app inspection.
@@ -567,12 +567,12 @@ and external actions remain outside backlog authorization.
   documentation, and final quality gate for Block 2.
 - **Dependencies:** PR-404.
 - **Acceptance Criteria:**
-  - [ ] Tests cover leaf, hierarchy, case-only, collisions, stale plan, ignored content, ordinary
+  - [x] Tests cover leaf, hierarchy, case-only, collisions, stale plan, ignored content, ordinary
         files, links, injected partial failure, recovery report, and restart reconciliation.
-  - [ ] Rename performance is measured against approved 20,000-file/200,000-task fixture.
-  - [ ] Documentation describes scope, confirmation, ignored content, links, and recovery.
-  - [ ] macOS smoke test verifies exact Markdown and filesystem result.
-  - [ ] No Linux or Windows support claim is added.
+  - [x] Rename performance is measured against approved 20,000-file/200,000-task fixture.
+  - [x] Documentation describes scope, confirmation, ignored content, links, and recovery.
+  - [x] macOS smoke test verifies exact Markdown and filesystem result.
+  - [x] No Linux or Windows support claim is added.
   - [ ] Full frontend, IPC, visual, Rust, and documentation gates pass.
 - **Validation / Verification:**
   - _How to verify:_ Run full TC-304 command set plus rename benchmark and documented macOS smoke

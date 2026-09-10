@@ -87,6 +87,15 @@ reindexes written file, and returns indexed task plus bounded Undo receipt. Miss
 heading/marker targets fall back to EOF with stable warning code. Index failure is reported only after
 durable Markdown write, allowing frontend to close capture and offer explicit refresh recovery.
 
+Existing-task project changes use destination-first subtree move through same serialized task service.
+Hierarchical project rename uses deterministic native preflight stored behind bounded opaque plan
+token, then guarded execution under shared mutation lock. Planner scans non-ignored Markdown, records
+source fingerprints and collision state, and maps conventional project file plus descendant directory.
+Executor atomically rewrites task metadata, moves planned paths, and reconciles affected index rows.
+Partial failure returns structured recovery report; no global atomicity or automatic rollback is
+claimed. Large-vault rename measurement and reproduction command live in
+`development/project-rename-performance.md`.
+
 ## Query Language
 
 `src-tauri/src/query_dsl.rs` supports boolean expressions, parentheses, projects, contexts, tags, priorities, and comparisons for due date, status, and type. Supported relative dates are currently `today` and `tomorrow`.
@@ -97,7 +106,7 @@ The compiler validates a complete expression tree and emits SQL made from allowl
 
 - `App.tsx` contains several product features and substantial local state.
 - Tauri commands remain registered in the startup shell rather than feature-specific command modules.
-- IPC types are duplicated manually between Rust and TypeScript.
+- IPC DTOs are generated from Rust; frontend runtime response guards remain manual.
 - User-facing errors are inconsistent.
 
 These are migration targets, not requirements to refactor unrelated code. New work should follow `CONTRIBUTING.md` and the staged roadmap.

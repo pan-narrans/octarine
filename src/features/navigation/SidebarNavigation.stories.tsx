@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { expect, fn, userEvent, within } from "storybook/test";
 import { useState } from "react";
 import type { CustomView } from "../../types";
 import { SidebarNavigation } from "./SidebarNavigation";
@@ -43,6 +44,30 @@ export const ProjectSelected: Story = {
 
 export const ContextSelected: Story = {
   args: { selectedSection: "ctx:focus" },
+};
+
+export const ProjectRenameAvailable: Story = {
+  args: {
+    selectedSection: "proj:product",
+    projects: ["product", "launch", "ui"],
+    onRenameProject: fn(),
+  },
+};
+
+export const ProjectRenameEditing: Story = {
+  args: {
+    selectedSection: "proj:product",
+    projects: ["product", "launch", "ui"],
+    onRenameProject: fn(),
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("button", { name: "Rename +product" }));
+    const input = canvas.getByRole("textbox", { name: "New name for +product" });
+    await userEvent.clear(input);
+    await userEvent.type(input, "platform");
+    await expect(input).toHaveValue("platform");
+  },
 };
 
 function InteractionHarness() {
