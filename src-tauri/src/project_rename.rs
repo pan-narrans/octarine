@@ -1094,12 +1094,12 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "20,000-file/200,000-task release benchmark"]
+    #[ignore = "20,000-file/2,000,000-task release benchmark"]
     fn benchmark_large_vault_project_rename() {
         let temp = tempdir().unwrap();
         let vault = temp.path().join("vault");
         fs::create_dir(&vault).unwrap();
-        let content = (0..10)
+        let content = (0..100)
             .map(|task| format!("- [ ] Task {task} +work/client @benchmark\n"))
             .collect::<String>();
 
@@ -1116,17 +1116,17 @@ mod tests {
         let plan = plan_project_rename(&vault, "projects", "work", "job").unwrap();
         let preflight_elapsed = preflight_started.elapsed();
         assert_eq!(plan.impact.rewritten_files, 20_000);
-        assert_eq!(plan.impact.rewritten_tokens, 200_000);
+        assert_eq!(plan.impact.rewritten_tokens, 2_000_000);
 
         let execute_started = std::time::Instant::now();
         let result = execute_project_rename_plan(&vault, &connection, &plan).unwrap();
         let execute_elapsed = execute_started.elapsed();
         assert_eq!(result.rewritten_files, 20_000);
-        assert_eq!(result.rewritten_tokens, 200_000);
+        assert_eq!(result.rewritten_tokens, 2_000_000);
 
         eprintln!(
-            "project_rename_benchmark files=20000 tasks=200000 affected_files=20000 \
-             affected_tokens=200000 profile={} preflight_ms={} execute_ms={}",
+            "project_rename_benchmark files=20000 tasks=2000000 affected_files=20000 \
+             affected_tokens=2000000 profile={} preflight_ms={} execute_ms={}",
             if cfg!(debug_assertions) {
                 "debug"
             } else {

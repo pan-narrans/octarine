@@ -44,7 +44,8 @@ This document contains planned work. Items here are not current capabilities or 
       handling, task-token rewrites, filesystem moves, and partial-failure recovery.
 - [x] Add staged project merge for rename collisions with explicit conflict resolution, cancellable
       dry run, guarded commit, safe stop, and 30-day successful recovery.
-- Measured large-vault performance work, including batching or parallelism where profiling supports it.
+- Measure accepted 20,000-file, 2,000,000-task local-SSD fixture, then add batching or parallelism
+  where profiling supports it.
 - Extend virtualization to other unbounded frontend lists where measured view size requires it.
 - Mobile and browser targets.
 - CRDT-based, end-to-end encrypted peer synchronization and auditable merge review.

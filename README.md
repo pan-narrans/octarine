@@ -23,7 +23,8 @@ Octarine is under active development. See `docs/architecture.md` and `docs/roadm
 - End-to-end encrypted peer-to-peer synchronization.
 - CRDT-based merging and merge review.
 - Mobile and browser/WASM clients.
-- Parallel boot indexing and measured large-vault performance guarantees.
+- Parallel boot indexing and measured performance guarantees for accepted 20,000-file,
+  2,000,000-task local-SSD baseline.
 - Virtualization for unbounded non-Kanban frontend lists.
 
 ## Technology

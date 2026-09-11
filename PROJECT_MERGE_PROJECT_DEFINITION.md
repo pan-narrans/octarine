@@ -271,7 +271,8 @@ failure, and recovery failure.
 12. Successful recovery bundles expire after 30 days; partial bundles do not.
 13. Current source project view follows destination after success.
 14. Links and path references remain unchanged with explicit warning.
-15. UI stays responsive for 20,000 files and 200,000 indexed tasks on documented macOS SSD fixture.
+15. UI stays responsive for 20,000 files and 2,000,000 indexed tasks (100 per file) on documented
+    macOS SSD fixture.
 
 ## 5. Verification Strategy
 
@@ -288,6 +289,6 @@ failure, and recovery failure.
   viewport.
 - Rendered macOS app smoke test: source/destination notes, recursive directories, ignored opaque
   content, external edit refusal, clean cancellation, successful merge, safe stop, recovery access.
-- Release benchmark: 20,000 Markdown files, 200,000 indexed tasks, recorded fixture shape, affected
-  scope, run count, preflight/staging/commit measurements, and environment metadata.
+- Release benchmark: 20,000 Markdown files, 2,000,000 indexed tasks (100 per file), recorded fixture
+  shape, affected scope, run count, preflight/staging/commit measurements, and environment metadata.
 - Linux and Windows remain unverified.

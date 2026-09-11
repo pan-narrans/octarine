@@ -9,14 +9,15 @@ cargo test --release project_rename::tests::benchmark_large_vault_project_rename
 ```
 
 Fixture generation is excluded from measured intervals. Fixture contains 20,000 Markdown files in 200
-directories, 10 indexed tasks per file, and 200,000 affected `+work/client` tokens. Preflight scans
+directories, 100 indexed tasks per file, and 2,000,000 affected `+work/client` tokens. Preflight scans
 complete fixture. Execution atomically rewrites and reindexes every file. This is worst-case affected
 scope, not typical rename.
 
-## macOS Measurement
+## Previous macOS Measurement
 
-Recorded 2026-09-10 on MacBook Pro Mac16,7, Apple M4 Pro (14 cores), 48 GB memory, macOS 26.6.2,
-local SSD, release profile. One full run after warm compilation:
+These results used superseded 20,000-file/200,000-task fixture. Recorded 2026-09-10 on MacBook Pro
+Mac16,7, Apple M4 Pro (14 cores), 48 GB memory, macOS 26.6.2, local SSD, release profile. One full run
+after warm compilation:
 
 | Phase     | Time       |
 | --------- | ---------- |
@@ -25,7 +26,10 @@ local SSD, release profile. One full run after warm compilation:
 
 Initial implementation executed one SQLite connection and transaction per affected file: preflight
 2,325 ms, execute 201,634 ms. Batched reconciliation reduced execution by 18,097 ms (9.0%). Remaining
-worst-case cost is dominated by 20,000 durable atomic file replacements and 200,000 task index writes.
+worst-case cost was dominated by 20,000 durable atomic file replacements and 200,000 task index writes.
+
+Current 20,000-file/2,000,000-task fixture has not been measured. Do not treat previous timings as
+current baseline results.
 
 Project rename has no accepted latency threshold. Task-creation latency budgets remain separate and
 creation continues to reindex one destination file only. Linux and Windows results are unavailable.

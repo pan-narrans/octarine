@@ -94,7 +94,9 @@ source fingerprints and collision state, and maps conventional project file plus
 Executor atomically rewrites task metadata, moves planned paths, and reconciles affected index rows.
 Partial failure returns structured recovery report; no global atomicity or automatic rollback is
 claimed. Large-vault rename measurement and reproduction command live in
-`development/project-rename-performance.md`.
+`development/project-rename-performance.md`. Accepted benchmark fixture contains 20,000 Markdown
+files and 2,000,000 indexed tasks (100 per file) on local SSD. Current fixture has no recorded timing;
+older 200,000-task results remain historical only.
 
 Rename collisions can enter staged project merge. Native preflight recursively maps source into
 existing destination, classifies Markdown, ordinary file, ignored opaque, and path-kind conflicts,

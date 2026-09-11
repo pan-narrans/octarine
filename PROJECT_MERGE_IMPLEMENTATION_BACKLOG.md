@@ -224,7 +224,7 @@ and external actions remain outside backlog authorization.
 
 ### PM-302 - Measure Large-vault Merge Performance
 
-- **Description:** Add reproducible release benchmark at accepted 20,000-file/200,000-task scale.
+- **Description:** Add reproducible release benchmark at accepted 20,000-file/2,000,000-task scale.
   Measure discovery, preparation, staging, commit, recovery bookkeeping, and reindex separately.
 - **Dependencies:** PM-202, PM-301.
 - **Acceptance Criteria:**

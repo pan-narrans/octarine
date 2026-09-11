@@ -10,7 +10,10 @@ Not started. Boot traversal and indexing are sequential, and startup currently r
 
 ## Context
 
-When Octarine starts up, it must reconcile the local SQLite database cache with the current state of the Markdown vault files on disk. For vaults with 10,000+ to 50,000+ files, performing file metadata checks and database insertions sequentially is slow ($O(N)$), causing long loading splash-screens on startup and blocking the user from immediate action.
+When Octarine starts up, it must reconcile the local SQLite database cache with the current state of the Markdown vault files on disk. Accepted large-vault fixture contains 20,000 Markdown files and
+2,000,000 indexed tasks, averaging 100 tasks per file, on local SSD. Vaults may grow beyond 50,000
+files. Performing file metadata checks and database insertions sequentially is slow ($O(N)$), causing
+long loading splash-screens on startup and blocking the user from immediate action.
 
 Specifically:
 
@@ -50,3 +53,6 @@ Parsed task rows are written to the SQLite cache in large batches inside a singl
   - **Zero UI Blocking:** Both on native (due to separate OS threads) and web (due to Web Workers), the frontend UI renders instantly without waiting for the sync to complete.
 - **Negative:**
   - Writing concurrently to SQLite is not supported natively. The parallel parsing threads must collect their structured task arrays into a single coordinator thread that performs sequential batched transactions against SQLite to avoid concurrency lock errors.
+
+Accepted 20,000-file/2,000,000-task fixture must be measured separately from 50,000-file metadata-scan
+target. Neither target is verified by this proposed ADR.

@@ -35,6 +35,9 @@ Convenient UI edits must never justify silent data loss. Ambiguous or stale sour
 ### Measured scalability
 
 The architecture should support large vaults, but performance claims require reproducible measurement. Caching, batching, parallelism, and virtualization are tools to introduce when evidence supports them.
+Accepted large-vault validation fixture contains 20,000 Markdown files and 2,000,000 indexed tasks,
+averaging 100 tasks per file, on local SSD. Fixture size is a test contract, not a current performance
+guarantee.
 
 ### Portable future
 

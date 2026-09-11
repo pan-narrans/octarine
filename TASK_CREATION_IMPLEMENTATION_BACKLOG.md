@@ -164,7 +164,8 @@ and external actions remain outside backlog authorization.
   machine, filesystem, build profile, fixture shape, warmup, and run count.
 - **Dependencies:** TC-105, TC-109.
 - **Acceptance Criteria:**
-  - [ ] Fixture can generate 20,000 Markdown files and 200,000 indexed tasks without real user paths.
+  - [ ] Fixture can generate 20,000 Markdown files and 2,000,000 indexed tasks (100 per file) without
+        real user paths.
   - [ ] Fixture includes 2 MB typical and 20 MB maximum destination files.
   - [ ] Benchmarks measure draft preview, insertion, direct reindex, and end-to-end create service.
   - [ ] Benchmark artifacts stay outside tracked source unless explicitly intended.
@@ -440,7 +441,7 @@ and external actions remain outside backlog authorization.
   - [ ] UI remains usable during startup and ignore reconciliation.
 - **Validation / Verification:**
   - _How to verify:_ Run documented release-profile benchmark suite on recorded macOS hardware at
-    20,000 files/200,000 tasks; retain summary with p50/p95 and environment metadata.
+    20,000 files/2,000,000 tasks; retain summary with p50/p95 and environment metadata.
 
 ### TC-303 - Complete Creation Documentation
 
@@ -569,7 +570,7 @@ and external actions remain outside backlog authorization.
 - **Acceptance Criteria:**
   - [x] Tests cover leaf, hierarchy, case-only, collisions, stale plan, ignored content, ordinary
         files, links, injected partial failure, recovery report, and restart reconciliation.
-  - [x] Rename performance is measured against approved 20,000-file/200,000-task fixture.
+  - [ ] Rename performance is measured against approved 20,000-file/2,000,000-task fixture.
   - [x] Documentation describes scope, confirmation, ignored content, links, and recovery.
   - [x] macOS smoke test verifies exact Markdown and filesystem result.
   - [x] No Linux or Windows support claim is added.

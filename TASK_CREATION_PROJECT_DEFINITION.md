@@ -324,7 +324,8 @@ Baseline hardware uses local SSD and documented macOS test machine.
 
 ```text
 Markdown files:             20,000
-Indexed tasks:              200,000
+Tasks per Markdown file:    100
+Indexed tasks:              2,000,000
 Largest Markdown file:      20 MB
 Typical destination file:   <= 2 MB
 
@@ -400,7 +401,7 @@ through typed Tauri IPC.
     contribute tasks.
 19. Ignore changes reconcile index; ignored Markdown remains visible in note tree.
 20. External journal migration never moves user files automatically.
-21. Feature satisfies accepted macOS performance budgets at doubled baseline scale.
+21. Feature satisfies accepted macOS performance budgets at 20,000 files and 2,000,000 indexed tasks.
 
 ### Project Rename Block
 

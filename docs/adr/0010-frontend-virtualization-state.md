@@ -10,7 +10,12 @@ Partial. Zustand is used for task/custom-view state, but the frontend does not i
 
 ## Context
 
-Octarine’s Kanban views, calendar boards, and search panels must display highly interactive lists of tasks and events. On web, phone, and desktop screens, rendering hundreds or thousands of rich, interactive card elements (each with contextual menus, metadata badges, drag-and-drop support, and state selectors) causes severe performance degradation:
+Octarine’s accepted large-vault fixture contains 2,000,000 indexed tasks across 20,000 Markdown files,
+averaging 100 tasks per file. Kanban views, calendar boards, and search panels must display bounded,
+highly interactive result sets without mounting vault-sized interfaces. On web, phone, and desktop
+screens, rendering hundreds or thousands of rich, interactive card elements (each with contextual
+menus, metadata badges, drag-and-drop support, and state selectors) causes severe performance
+degradation:
 
 1. **DOM Bloat:** Large numbers of DOM or virtual nodes degrade browser/webview layout engines, dropping scroll rates well below 60fps.
 2. **Cascading Re-renders:** Triggering a state update on a single task card (such as checking off a checkbox) can cause the entire dashboard, lane, or board to re-render under default React state propagation models, causing input lag.
