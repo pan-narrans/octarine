@@ -8,6 +8,14 @@ import {
   type MoveTaskProjectError,
   type MoveTaskProjectErrorCode,
   type MoveTaskProjectResult,
+  type PreparedProjectMerge,
+  type ProjectMergeBulkResolution,
+  type ProjectMergeError,
+  type ProjectMergeErrorCode,
+  type ProjectMergePlan,
+  type ProjectMergeRecoveryBundle,
+  type ProjectMergeResolution,
+  type ProjectMergeResult,
   type ProjectRenameError,
   type ProjectRenameErrorCode,
   type ProjectRenamePlan,
@@ -357,4 +365,240 @@ export async function executeProjectRename(planToken: string): Promise<ProjectRe
     throw new Error("Invalid project rename result response.");
   }
   return result as unknown as ProjectRenameResult;
+}
+
+const PROJECT_MERGE_ERROR_CODES: ReadonlySet<ProjectMergeErrorCode> = new Set([
+  "invalid_request",
+  "destination_missing",
+  "ancestor_conflict",
+  "symlink_blocked",
+  "unknown_plan",
+  "unresolved_conflict",
+  "invalid_resolution",
+  "invalid_result",
+  "stale_plan",
+  "busy",
+  "cancelled",
+  "operation_failed",
+  "partial_failure",
+  "recovery_failure",
+]);
+
+const MERGE_ENTRY_KINDS = new Set(["markdown", "file", "ignored", "type_mismatch"]);
+const MERGE_PATH_KINDS = new Set(["file", "directory"]);
+const MERGE_MOVE_KINDS = new Set(["file", "directory"]);
+const MERGE_STAGED_KINDS = new Set(["markdown", "file", "directory"]);
+const MERGE_RECOVERY_STATUSES = new Set(["committing", "successful", "stopped", "failed"]);
+
+function isNullableString(value: unknown): value is string | null {
+  return value === null || typeof value === "string";
+}
+
+function isMergeConflict(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.relativePath === "string" &&
+    typeof value.sourcePath === "string" &&
+    typeof value.destinationPath === "string" &&
+    MERGE_ENTRY_KINDS.has(String(value.kind)) &&
+    MERGE_PATH_KINDS.has(String(value.sourceKind)) &&
+    MERGE_PATH_KINDS.has(String(value.destinationKind)) &&
+    typeof value.sourceFingerprint === "string" &&
+    typeof value.destinationFingerprint === "string" &&
+    typeof value.nestedFileCount === "number" &&
+    typeof value.byteSize === "number" &&
+    isNullableString(value.sourcePreview) &&
+    isNullableString(value.destinationPreview)
+  );
+}
+
+export function isProjectMergePlan(value: unknown): value is ProjectMergePlan {
+  if (
+    !isRecord(value) ||
+    typeof value.planToken !== "string" ||
+    typeof value.operationId !== "string" ||
+    typeof value.sourceProject !== "string" ||
+    typeof value.destinationProject !== "string" ||
+    typeof value.projectFolder !== "string" ||
+    !Array.isArray(value.rewrites) ||
+    !Array.isArray(value.moves) ||
+    !Array.isArray(value.conflicts) ||
+    !Array.isArray(value.autoResolutions) ||
+    !isStringArray(value.collapsedDescendants) ||
+    !isStringArray(value.warnings) ||
+    !isRecord(value.impact)
+  ) {
+    return false;
+  }
+  const validRewrites = value.rewrites.every(
+    (rewrite) =>
+      isRecord(rewrite) &&
+      typeof rewrite.path === "string" &&
+      typeof rewrite.destinationPath === "string" &&
+      typeof rewrite.sourceFingerprint === "string" &&
+      typeof rewrite.replacementCount === "number",
+  );
+  const validMoves = value.moves.every(
+    (move) =>
+      isRecord(move) &&
+      MERGE_MOVE_KINDS.has(String(move.kind)) &&
+      typeof move.sourcePath === "string" &&
+      typeof move.destinationPath === "string" &&
+      typeof move.sourceFingerprint === "string" &&
+      typeof move.ignored === "boolean",
+  );
+  const validAutoResolutions = value.autoResolutions.every(
+    (resolution) =>
+      isRecord(resolution) &&
+      typeof resolution.sourcePath === "string" &&
+      typeof resolution.destinationPath === "string" &&
+      typeof resolution.sourceFingerprint === "string" &&
+      typeof resolution.destinationFingerprint === "string" &&
+      typeof resolution.reason === "string",
+  );
+  return (
+    validRewrites &&
+    validMoves &&
+    value.conflicts.every(isMergeConflict) &&
+    validAutoResolutions &&
+    typeof value.impact.rewrittenFiles === "number" &&
+    typeof value.impact.rewrittenTokens === "number" &&
+    typeof value.impact.filesystemMoves === "number" &&
+    typeof value.impact.conflicts === "number" &&
+    typeof value.impact.autoResolved === "number" &&
+    typeof value.impact.collapsedDescendants === "number"
+  );
+}
+
+export function isPreparedProjectMerge(value: unknown): value is PreparedProjectMerge {
+  return (
+    isRecord(value) &&
+    typeof value.preparedToken === "string" &&
+    typeof value.planToken === "string" &&
+    typeof value.operationId === "string" &&
+    typeof value.stagingPath === "string" &&
+    isStringArray(value.warnings) &&
+    Array.isArray(value.entries) &&
+    value.entries.every(
+      (entry) =>
+        isRecord(entry) &&
+        typeof entry.destinationPath === "string" &&
+        typeof entry.stagedPath === "string" &&
+        typeof entry.fingerprint === "string" &&
+        MERGE_STAGED_KINDS.has(String(entry.kind)) &&
+        typeof entry.ignored === "boolean",
+    )
+  );
+}
+
+export function parseProjectMergeError(error: unknown): ProjectMergeError | null {
+  if (
+    !isRecord(error) ||
+    typeof error.code !== "string" ||
+    !PROJECT_MERGE_ERROR_CODES.has(error.code as ProjectMergeErrorCode) ||
+    typeof error.message !== "string" ||
+    !isStringArray(error.paths)
+  ) {
+    return null;
+  }
+  if (
+    error.recovery !== null &&
+    (!isRecord(error.recovery) ||
+      typeof error.recovery.operationId !== "string" ||
+      typeof error.recovery.recoveryPath !== "string" ||
+      !isStringArray(error.recovery.completedOperations) ||
+      !isStringArray(error.recovery.pendingOperations) ||
+      !isStringArray(error.recovery.inspectPaths) ||
+      typeof error.recovery.guidance !== "string")
+  ) {
+    return null;
+  }
+  return error as unknown as ProjectMergeError;
+}
+
+export async function preflightProjectMerge(
+  sourceProject: string,
+  destinationProject: string,
+): Promise<ProjectMergePlan> {
+  const result: unknown = await invoke("preflight_project_merge", {
+    sourceProject,
+    destinationProject,
+  });
+  if (!isProjectMergePlan(result)) throw new Error("Invalid project merge plan response.");
+  return result;
+}
+
+export function resolveProjectMergeConflict(
+  planToken: string,
+  resolution: ProjectMergeResolution,
+): Promise<void> {
+  return invoke("resolve_project_merge_conflict", { planToken, resolution });
+}
+
+export function resolveProjectMergeConflictsBulk(
+  planToken: string,
+  bulk: ProjectMergeBulkResolution,
+): Promise<void> {
+  return invoke("resolve_project_merge_conflicts_bulk", { planToken, bulk });
+}
+
+export async function prepareProjectMerge(planToken: string): Promise<PreparedProjectMerge> {
+  const result: unknown = await invoke("prepare_project_merge", { planToken });
+  if (!isPreparedProjectMerge(result)) {
+    throw new Error("Invalid prepared project merge response.");
+  }
+  return result;
+}
+
+export async function executeProjectMerge(planToken: string): Promise<ProjectMergeResult> {
+  const result: unknown = await invoke("execute_project_merge", { planToken });
+  if (
+    !isRecord(result) ||
+    typeof result.preparedToken !== "string" ||
+    typeof result.operationId !== "string" ||
+    typeof result.recoveryPath !== "string" ||
+    typeof result.recoveryDeletionDate !== "string" ||
+    !isStringArray(result.completedOperations)
+  ) {
+    throw new Error("Invalid project merge result response.");
+  }
+  return result as unknown as ProjectMergeResult;
+}
+
+export function cancelProjectMerge(operationId: string): Promise<void> {
+  return invoke("cancel_project_merge", { operationId });
+}
+
+export async function listProjectMergeRecovery(): Promise<ProjectMergeRecoveryBundle[]> {
+  const result: unknown = await invoke("list_project_merge_recovery");
+  if (
+    !Array.isArray(result) ||
+    !result.every(
+      (bundle) =>
+        isRecord(bundle) &&
+        typeof bundle.operationId === "string" &&
+        typeof bundle.recoveryPath === "string" &&
+        typeof bundle.createdAt === "string" &&
+        isNullableString(bundle.completedAt) &&
+        isNullableString(bundle.expiresAt) &&
+        typeof bundle.sourceProject === "string" &&
+        typeof bundle.destinationProject === "string" &&
+        MERGE_RECOVERY_STATUSES.has(String(bundle.status)) &&
+        typeof bundle.sizeBytes === "number" &&
+        typeof bundle.completedOperations === "number" &&
+        typeof bundle.pendingOperations === "number",
+    )
+  ) {
+    throw new Error("Invalid project merge recovery response.");
+  }
+  return result as ProjectMergeRecoveryBundle[];
+}
+
+export function deleteProjectMergeRecovery(operationId: string): Promise<void> {
+  return invoke("delete_project_merge_recovery", { operationId });
+}
+
+export function openProjectMergeRecovery(operationId: string): Promise<void> {
+  return invoke("open_project_merge_recovery", { operationId });
 }

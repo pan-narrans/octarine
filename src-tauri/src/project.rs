@@ -114,6 +114,17 @@ impl ProjectPath {
         Some(segments.join("/"))
     }
 
+    pub fn is_ancestor_of(&self, other: &Self) -> bool {
+        self.segments.len() < other.segments.len()
+            && self
+                .segments
+                .iter()
+                .zip(&other.segments)
+                .all(|(candidate, descendant)| {
+                    folded_identity(candidate) == folded_identity(descendant)
+                })
+    }
+
     pub fn case_collision<'a, I>(&self, existing: I) -> Result<Option<String>, ProjectNameError>
     where
         I: IntoIterator<Item = &'a str>,
@@ -325,5 +336,17 @@ mod tests {
                 .renamed_descendant(&old, &new),
             None
         );
+    }
+
+    #[test]
+    fn detects_only_strict_segment_ancestry() {
+        let work = ProjectPath::parse("Work").unwrap();
+        let client = ProjectPath::parse("work/client").unwrap();
+        let workshop = ProjectPath::parse("workshop").unwrap();
+
+        assert!(work.is_ancestor_of(&client));
+        assert!(!client.is_ancestor_of(&work));
+        assert!(!work.is_ancestor_of(&work));
+        assert!(!work.is_ancestor_of(&workshop));
     }
 }

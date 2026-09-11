@@ -190,6 +190,8 @@ export function taskStatusFromMarkdown(rawMarkdown: string): Task["status"] {
 export function installVisualFixtures(scenario: VisualScenario): void {
   let tasks = scenario === "empty" ? [] : populatedTasks();
   let pendingRename = { source: "octarine", destination: "product" };
+  let pendingMerge = { source: "octarine/launch", destination: "octarine/ui" };
+  let mergeCompleted = false;
   let taskCreationConfig: TaskCreationConfig = {
     defaultDestination: "inbox",
     inboxFile: "inbox.md",
@@ -406,6 +408,9 @@ export function installVisualFixtures(scenario: VisualScenario): void {
         const sourceProject = String(args.sourceProject);
         const destinationProject = String(args.destinationProject);
         pendingRename = { source: sourceProject, destination: destinationProject };
+        const destinationExists = tasks.some(
+          (entry) => entry.project?.toLocaleLowerCase() === destinationProject.toLocaleLowerCase(),
+        );
         return {
           planToken: "visual-project-rename-plan",
           sourceProject,
@@ -432,7 +437,16 @@ export function installVisualFixtures(scenario: VisualScenario): void {
             },
           ],
           indexUpdates: [],
-          collisions: [],
+          collisions: destinationExists
+            ? [
+                {
+                  code: "project_identity",
+                  path: null,
+                  project: destinationProject,
+                  message: `Renamed project '${destinationProject}' conflicts with existing project '${destinationProject}'.`,
+                },
+              ]
+            : [],
           impact: {
             rewrittenFiles: 1,
             rewrittenTokens: tasks.filter(
@@ -467,6 +481,81 @@ export function installVisualFixtures(scenario: VisualScenario): void {
           movedPaths: 1,
         };
       }
+      case "preflight_project_merge": {
+        const sourceProject = String(args.sourceProject);
+        const destinationProject = String(args.destinationProject);
+        pendingMerge = { source: sourceProject, destination: destinationProject };
+        return {
+          planToken: "visual-project-merge-plan",
+          operationId: "0123456789abcdef01234567",
+          sourceProject,
+          destinationProject,
+          projectFolder: "projects",
+          rewrites: [],
+          moves: [],
+          conflicts: [],
+          autoResolutions: [],
+          collapsedDescendants: [],
+          impact: {
+            rewrittenFiles: 1,
+            rewrittenTokens: tasks.filter(
+              (entry) => entry.project?.toLocaleLowerCase() === sourceProject.toLocaleLowerCase(),
+            ).length,
+            filesystemMoves: 1,
+            conflicts: 0,
+            autoResolved: 0,
+            collapsedDescendants: 0,
+          },
+          warnings: ["Markdown links stay unchanged."],
+        };
+      }
+      case "prepare_project_merge":
+        return {
+          preparedToken: "visual-prepared-merge",
+          planToken: String(args.planToken),
+          operationId: "0123456789abcdef01234567",
+          stagingPath: ".octarine/staging/0123456789abcdef01234567",
+          entries: [],
+          warnings: [],
+        };
+      case "execute_project_merge":
+        tasks = tasks.map((entry) =>
+          entry.project?.toLocaleLowerCase() === pendingMerge.source.toLocaleLowerCase()
+            ? { ...entry, project: pendingMerge.destination }
+            : entry,
+        );
+        mergeCompleted = true;
+        return {
+          preparedToken: "visual-prepared-merge",
+          operationId: "0123456789abcdef01234567",
+          recoveryPath: ".octarine/recovery/0123456789abcdef01234567",
+          recoveryDeletionDate: "2026-10-11T09:00:00Z",
+          completedOperations: ["Install merged project", "Reconcile derived task index"],
+        };
+      case "list_project_merge_recovery":
+        return mergeCompleted
+          ? [
+              {
+                operationId: "0123456789abcdef01234567",
+                recoveryPath: ".octarine/recovery/0123456789abcdef01234567",
+                createdAt: "2026-09-11T09:00:00Z",
+                completedAt: "2026-09-11T09:00:02Z",
+                expiresAt: "2026-10-11T09:00:00Z",
+                sourceProject: pendingMerge.source,
+                destinationProject: pendingMerge.destination,
+                status: "successful",
+                sizeBytes: 4096,
+                completedOperations: 2,
+                pendingOperations: 0,
+              },
+            ]
+          : [];
+      case "open_project_merge_recovery":
+      case "cancel_project_merge":
+        return undefined;
+      case "delete_project_merge_recovery":
+        mergeCompleted = false;
+        return undefined;
       case "delete_task_markdown":
         tasks = tasks.filter((entry) => entry.line_number !== Number(args.lineNumber));
         return undefined;

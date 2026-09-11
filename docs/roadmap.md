@@ -42,6 +42,8 @@ This document contains planned work. Items here are not current capabilities or 
 - [x] Add confirmed existing-task project moves with whole-subtree preservation and guarded recovery.
 - [x] Add guarded hierarchical project rename with preflight, collision detection, case-only macOS
       handling, task-token rewrites, filesystem moves, and partial-failure recovery.
+- [x] Add staged project merge for rename collisions with explicit conflict resolution, cancellable
+      dry run, guarded commit, safe stop, and 30-day successful recovery.
 - Measured large-vault performance work, including batching or parallelism where profiling supports it.
 - Extend virtualization to other unbounded frontend lists where measured view size requires it.
 - Mobile and browser targets.

@@ -1927,6 +1927,7 @@ dependencies = [
  "hex",
  "ignore",
  "notify",
+ "open",
  "pulldown-cmark",
  "regex",
  "rusqlite",

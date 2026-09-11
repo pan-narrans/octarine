@@ -3,6 +3,14 @@ use crate::db::{index_single_file, query_tasks};
 use crate::parser::{parse_markdown_content, ParsedTask};
 use crate::path_security::resolve_descendant_within;
 use crate::project::{filesystem_case_collision, resolve_project_file, ProjectPath};
+use crate::project_merge::{
+    cancel_project_merge_staging, cleanup_project_merge_recovery, delete_project_merge_recovery,
+    execute_prepared_project_merge_with_hook, list_project_merge_recovery, plan_project_merge,
+    prepare_project_merge_with_stop, PreparedProjectMerge, ProjectMergeBulkResolution,
+    ProjectMergeError, ProjectMergeErrorCode, ProjectMergePathKind, ProjectMergePlan,
+    ProjectMergeRecoveryBundle, ProjectMergeRecoveryCleanup, ProjectMergeResolution,
+    ProjectMergeResult,
+};
 use crate::project_rename::{
     execute_project_rename_plan, plan_project_rename, ProjectRenameError, ProjectRenameErrorCode,
     ProjectRenamePlan, ProjectRenameResult,
@@ -20,9 +28,10 @@ use rusqlite::types::Value;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 const MAX_CACHED_OPERATIONS: usize = 1024;
 
@@ -123,9 +132,312 @@ pub struct TaskCreationService {
     write_lock: Mutex<()>,
     completed_operations: Mutex<HashMap<String, CreateTaskResult>>,
     project_rename_plans: Mutex<HashMap<String, ProjectRenamePlan>>,
+    project_merge_sessions: Mutex<HashMap<String, ProjectMergeSession>>,
+    active_project_merges: Mutex<HashMap<String, Arc<AtomicBool>>>,
+}
+
+#[derive(Clone)]
+struct ProjectMergeSession {
+    plan: ProjectMergePlan,
+    resolutions: BTreeMap<String, ProjectMergeResolution>,
+    prepared: Option<PreparedProjectMerge>,
 }
 
 impl TaskCreationService {
+    pub fn preflight_project_merge(
+        &self,
+        vault_root: &Path,
+        config: &AppConfig,
+        source_project: &str,
+        destination_project: &str,
+    ) -> Result<ProjectMergePlan, ProjectMergeError> {
+        crate::config::validate_config_for_vault(config, vault_root).map_err(|_| {
+            ProjectMergeError::new(
+                ProjectMergeErrorCode::InvalidRequest,
+                "Project merge configuration is invalid.",
+            )
+        })?;
+        let _guard = self.write_lock.try_lock().map_err(|_| merge_busy_error())?;
+        let plan = plan_project_merge(
+            vault_root,
+            &config.project_folder,
+            source_project,
+            destination_project,
+        )?;
+        let mut sessions = self
+            .project_merge_sessions
+            .lock()
+            .map_err(|_| merge_state_error())?;
+        if sessions.len() >= 32 {
+            sessions.clear();
+        }
+        sessions.insert(
+            plan.plan_token.clone(),
+            ProjectMergeSession {
+                plan: plan.clone(),
+                resolutions: BTreeMap::new(),
+                prepared: None,
+            },
+        );
+        Ok(plan)
+    }
+
+    pub fn resolve_project_merge_conflict(
+        &self,
+        plan_token: &str,
+        resolution: ProjectMergeResolution,
+    ) -> Result<(), ProjectMergeError> {
+        let mut sessions = self
+            .project_merge_sessions
+            .lock()
+            .map_err(|_| merge_state_error())?;
+        let session = sessions
+            .get_mut(plan_token)
+            .ok_or_else(merge_unknown_error)?;
+        if !session
+            .plan
+            .conflicts
+            .iter()
+            .any(|conflict| conflict.id == resolution.conflict_id)
+        {
+            return Err(ProjectMergeError::new(
+                ProjectMergeErrorCode::InvalidResolution,
+                "Project merge conflict ID is invalid.",
+            ));
+        }
+        session
+            .resolutions
+            .insert(resolution.conflict_id.clone(), resolution);
+        session.prepared = None;
+        Ok(())
+    }
+
+    pub fn resolve_project_merge_conflicts_bulk(
+        &self,
+        plan_token: &str,
+        bulk: ProjectMergeBulkResolution,
+    ) -> Result<(), ProjectMergeError> {
+        if !matches!(
+            bulk.action,
+            crate::project_merge::ProjectMergeResolutionAction::UseSource
+                | crate::project_merge::ProjectMergeResolutionAction::UseDestination
+        ) || bulk.conflict_ids.is_empty()
+            || bulk.confirmed_count != bulk.conflict_ids.len()
+        {
+            return Err(ProjectMergeError::new(
+                ProjectMergeErrorCode::InvalidResolution,
+                "Bulk merge resolution confirmation is invalid.",
+            ));
+        }
+        let ids = bulk
+            .conflict_ids
+            .into_iter()
+            .collect::<std::collections::BTreeSet<_>>();
+        if ids.len() != bulk.confirmed_count {
+            return Err(ProjectMergeError::new(
+                ProjectMergeErrorCode::InvalidResolution,
+                "Bulk merge resolution contains duplicate conflict IDs.",
+            ));
+        }
+        let mut sessions = self
+            .project_merge_sessions
+            .lock()
+            .map_err(|_| merge_state_error())?;
+        let session = sessions
+            .get_mut(plan_token)
+            .ok_or_else(merge_unknown_error)?;
+        for id in &ids {
+            let conflict = session
+                .plan
+                .conflicts
+                .iter()
+                .find(|conflict| &conflict.id == id)
+                .ok_or_else(|| {
+                    ProjectMergeError::new(
+                        ProjectMergeErrorCode::InvalidResolution,
+                        "Bulk merge resolution contains unknown conflict ID.",
+                    )
+                })?;
+            if conflict.kind == crate::project_merge::ProjectMergeEntryKind::TypeMismatch
+                || conflict.source_kind == ProjectMergePathKind::Directory
+                || conflict.destination_kind == ProjectMergePathKind::Directory
+            {
+                return Err(ProjectMergeError::new(
+                    ProjectMergeErrorCode::InvalidResolution,
+                    "Bulk merge resolution cannot include directories or type mismatches.",
+                ));
+            }
+        }
+        for conflict_id in ids {
+            session.resolutions.insert(
+                conflict_id.clone(),
+                ProjectMergeResolution {
+                    conflict_id,
+                    action: bulk.action,
+                    result: None,
+                    source_name: None,
+                },
+            );
+        }
+        session.prepared = None;
+        Ok(())
+    }
+
+    pub fn prepare_project_merge(
+        &self,
+        vault_root: &Path,
+        config: &AppConfig,
+        plan_token: &str,
+    ) -> Result<PreparedProjectMerge, ProjectMergeError> {
+        let session = self
+            .project_merge_sessions
+            .lock()
+            .map_err(|_| merge_state_error())?
+            .get(plan_token)
+            .cloned()
+            .ok_or_else(merge_unknown_error)?;
+        if session.plan.project_folder != config.project_folder {
+            return Err(merge_stale_error());
+        }
+        let _guard = self.write_lock.try_lock().map_err(|_| merge_busy_error())?;
+        let current = plan_project_merge(
+            vault_root,
+            &config.project_folder,
+            &session.plan.source_project,
+            &session.plan.destination_project,
+        )?;
+        if current.plan_token != session.plan.plan_token {
+            return Err(merge_stale_error());
+        }
+        let resolutions = session.resolutions.into_values().collect::<Vec<_>>();
+        let stop = Arc::new(AtomicBool::new(false));
+        self.active_project_merges
+            .lock()
+            .map_err(|_| merge_state_error())?
+            .insert(session.plan.operation_id.clone(), stop.clone());
+        let prepared =
+            prepare_project_merge_with_stop(vault_root, &session.plan, &resolutions, &stop);
+        self.active_project_merges
+            .lock()
+            .map_err(|_| merge_state_error())?
+            .remove(&session.plan.operation_id);
+        let prepared = prepared?;
+        let mut sessions = self
+            .project_merge_sessions
+            .lock()
+            .map_err(|_| merge_state_error())?;
+        let stored = sessions
+            .get_mut(plan_token)
+            .ok_or_else(merge_unknown_error)?;
+        stored.prepared = Some(prepared.clone());
+        Ok(prepared)
+    }
+
+    pub fn execute_project_merge(
+        &self,
+        vault_root: &Path,
+        config: &AppConfig,
+        connection: &Connection,
+        plan_token: &str,
+    ) -> Result<ProjectMergeResult, ProjectMergeError> {
+        let session = self
+            .project_merge_sessions
+            .lock()
+            .map_err(|_| merge_state_error())?
+            .get(plan_token)
+            .cloned()
+            .ok_or_else(merge_unknown_error)?;
+        let prepared = session.prepared.clone().ok_or_else(|| {
+            ProjectMergeError::new(
+                ProjectMergeErrorCode::UnknownPlan,
+                "Project merge must be prepared before commit.",
+            )
+        })?;
+        if session.plan.project_folder != config.project_folder {
+            return Err(merge_stale_error());
+        }
+        let _guard = self.write_lock.try_lock().map_err(|_| merge_busy_error())?;
+        let current = plan_project_merge(
+            vault_root,
+            &config.project_folder,
+            &session.plan.source_project,
+            &session.plan.destination_project,
+        )?;
+        if current.plan_token != session.plan.plan_token {
+            return Err(merge_stale_error());
+        }
+        let stop = Arc::new(AtomicBool::new(false));
+        self.active_project_merges
+            .lock()
+            .map_err(|_| merge_state_error())?
+            .insert(prepared.operation_id.clone(), stop.clone());
+        let result = execute_prepared_project_merge_with_hook(
+            vault_root,
+            Some(connection),
+            &session.plan,
+            &prepared,
+            |_| !stop.load(Ordering::Acquire),
+        );
+        self.active_project_merges
+            .lock()
+            .map_err(|_| merge_state_error())?
+            .remove(&prepared.operation_id);
+        if result.is_ok() {
+            self.project_merge_sessions
+                .lock()
+                .map_err(|_| merge_state_error())?
+                .remove(plan_token);
+        }
+        result
+    }
+
+    pub fn cancel_project_merge(
+        &self,
+        vault_root: &Path,
+        operation_id: &str,
+    ) -> Result<(), ProjectMergeError> {
+        if let Some(stop) = self
+            .active_project_merges
+            .lock()
+            .map_err(|_| merge_state_error())?
+            .get(operation_id)
+            .cloned()
+        {
+            stop.store(true, Ordering::Release);
+            return Ok(());
+        }
+        cancel_project_merge_staging(vault_root, operation_id)?;
+        self.project_merge_sessions
+            .lock()
+            .map_err(|_| merge_state_error())?
+            .retain(|_, session| session.plan.operation_id != operation_id);
+        Ok(())
+    }
+
+    pub fn list_project_merge_recovery(
+        &self,
+        vault_root: &Path,
+    ) -> Result<Vec<ProjectMergeRecoveryBundle>, ProjectMergeError> {
+        list_project_merge_recovery(vault_root)
+    }
+
+    pub fn delete_project_merge_recovery(
+        &self,
+        vault_root: &Path,
+        operation_id: &str,
+    ) -> Result<(), ProjectMergeError> {
+        let _guard = self.write_lock.try_lock().map_err(|_| merge_busy_error())?;
+        delete_project_merge_recovery(vault_root, operation_id)
+    }
+
+    pub fn cleanup_project_merge_recovery(
+        &self,
+        vault_root: &Path,
+    ) -> Result<ProjectMergeRecoveryCleanup, ProjectMergeError> {
+        let _guard = self.write_lock.try_lock().map_err(|_| merge_busy_error())?;
+        cleanup_project_merge_recovery(vault_root)
+    }
+
     pub fn preflight_project_rename(
         &self,
         vault_root: &Path,
@@ -522,6 +834,34 @@ impl TaskCreationService {
             warning: written.insertion.warning,
         })
     }
+}
+
+fn merge_busy_error() -> ProjectMergeError {
+    ProjectMergeError::new(
+        ProjectMergeErrorCode::Busy,
+        "Another task file operation is running. Try again.",
+    )
+}
+
+fn merge_state_error() -> ProjectMergeError {
+    ProjectMergeError::new(
+        ProjectMergeErrorCode::OperationFailed,
+        "Project merge session state is unavailable.",
+    )
+}
+
+fn merge_unknown_error() -> ProjectMergeError {
+    ProjectMergeError::new(
+        ProjectMergeErrorCode::UnknownPlan,
+        "Project merge plan is unknown or expired. Run preflight again.",
+    )
+}
+
+fn merge_stale_error() -> ProjectMergeError {
+    ProjectMergeError::new(
+        ProjectMergeErrorCode::StalePlan,
+        "Project merge plan is stale. Run preflight again.",
+    )
 }
 
 struct ResolvedDestination<'a> {
@@ -1316,5 +1656,92 @@ mod tests {
             .destination_path
             .ends_with("projects/work/project.md"));
         assert!(!Path::new(&preview.destination_path).exists());
+    }
+
+    #[test]
+    fn project_merge_service_prepares_commits_and_reconciles_index() {
+        let (_temp, vault, connection) = setup();
+        fs::create_dir_all(vault.join("projects/old")).unwrap();
+        fs::create_dir_all(vault.join("projects/new")).unwrap();
+        let note = vault.join("tasks.md");
+        fs::write(&note, "- [ ] Source +old\n- [ ] Destination +new\n").unwrap();
+        fs::write(vault.join("projects/old/file.txt"), "move").unwrap();
+        crate::db::index_files(&connection, &[note.to_string_lossy().to_string()]).unwrap();
+        let service = TaskCreationService::default();
+        let config = AppConfig::default();
+
+        let plan = service
+            .preflight_project_merge(&vault, &config, "old", "new")
+            .unwrap();
+        service
+            .prepare_project_merge(&vault, &config, &plan.plan_token)
+            .unwrap();
+        service
+            .execute_project_merge(&vault, &config, &connection, &plan.plan_token)
+            .unwrap();
+
+        assert_eq!(
+            fs::read_to_string(&note).unwrap(),
+            "- [ ] Source +new\n- [ ] Destination +new\n"
+        );
+        assert_eq!(
+            fs::read_to_string(vault.join("projects/new/file.txt")).unwrap(),
+            "move"
+        );
+        assert!(query_tasks(&connection, "tasks.project = 'old'", &[])
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            query_tasks(&connection, "tasks.project = 'new'", &[])
+                .unwrap()
+                .len(),
+            2
+        );
+    }
+
+    #[test]
+    fn project_merge_bulk_resolution_requires_exact_confirmation_count() {
+        let (_temp, vault, _connection) = setup();
+        fs::create_dir_all(vault.join("projects/old")).unwrap();
+        fs::create_dir_all(vault.join("projects/new")).unwrap();
+        fs::write(
+            vault.join("tasks.md"),
+            "- [ ] Source +old\n- [ ] Destination +new\n",
+        )
+        .unwrap();
+        fs::write(vault.join("projects/old/config.json"), "source").unwrap();
+        fs::write(vault.join("projects/new/config.json"), "destination").unwrap();
+        let service = TaskCreationService::default();
+        let config = AppConfig::default();
+        let plan = service
+            .preflight_project_merge(&vault, &config, "old", "new")
+            .unwrap();
+        let conflict_id = plan.conflicts[0].id.clone();
+
+        let error = service
+            .resolve_project_merge_conflicts_bulk(
+                &plan.plan_token,
+                ProjectMergeBulkResolution {
+                    conflict_ids: vec![conflict_id.clone()],
+                    action: crate::project_merge::ProjectMergeResolutionAction::UseSource,
+                    confirmed_count: 2,
+                },
+            )
+            .unwrap_err();
+        assert_eq!(error.code, ProjectMergeErrorCode::InvalidResolution);
+
+        service
+            .resolve_project_merge_conflicts_bulk(
+                &plan.plan_token,
+                ProjectMergeBulkResolution {
+                    conflict_ids: vec![conflict_id],
+                    action: crate::project_merge::ProjectMergeResolutionAction::UseSource,
+                    confirmed_count: 1,
+                },
+            )
+            .unwrap();
+        service
+            .prepare_project_merge(&vault, &config, &plan.plan_token)
+            .unwrap();
     }
 }

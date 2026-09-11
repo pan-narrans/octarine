@@ -3,11 +3,17 @@ import { invoke } from "@tauri-apps/api/tauri";
 import {
   createTask,
   isCreateTaskResult,
+  isPreparedProjectMerge,
+  isProjectMergePlan,
+  listProjectMergeRecovery,
+  openProjectMergeRecovery,
   isTaskDraft,
   moveTaskProject,
   parseCreateTaskError,
   parseMoveTaskProjectError,
   parseProjectRenameError,
+  parseProjectMergeError,
+  preflightProjectMerge,
   preflightProjectRename,
   previewTaskDraft,
 } from "./ipc";
@@ -216,5 +222,83 @@ describe("task creation IPC", () => {
       }),
     ).toBeNull();
     expect(parseProjectRenameError({ code: "unknown", message: "No" })).toBeNull();
+  });
+
+  it("validates project merge plans and structured recovery errors", async () => {
+    const plan = {
+      planToken: "merge-plan",
+      operationId: "0123456789abcdef01234567",
+      sourceProject: "old",
+      destinationProject: "new",
+      projectFolder: "projects",
+      rewrites: [
+        {
+          path: "notes/tasks.md",
+          destinationPath: "notes/tasks.md",
+          sourceFingerprint: "source-hash",
+          replacementCount: 1,
+        },
+      ],
+      moves: [],
+      conflicts: [],
+      autoResolutions: [],
+      collapsedDescendants: ["old/api"],
+      impact: {
+        rewrittenFiles: 1,
+        rewrittenTokens: 1,
+        filesystemMoves: 0,
+        conflicts: 0,
+        autoResolved: 0,
+        collapsedDescendants: 1,
+      },
+      warnings: ["Links stay unchanged."],
+    };
+    vi.mocked(invoke).mockResolvedValue(plan);
+
+    await expect(preflightProjectMerge("old", "new")).resolves.toEqual(plan);
+    expect(isProjectMergePlan(plan)).toBe(true);
+    expect(
+      parseProjectMergeError({
+        code: "partial_failure",
+        message: "Stopped safely.",
+        paths: [],
+        recovery: {
+          operationId: plan.operationId,
+          recoveryPath: `.octarine/recovery/${plan.operationId}`,
+          completedOperations: ["Install notes/tasks.md"],
+          pendingOperations: ["Recover source projects/old.md"],
+          inspectPaths: ["notes/tasks.md"],
+          guidance: "Inspect recovery.",
+        },
+      }),
+    ).toEqual(expect.objectContaining({ code: "partial_failure" }));
+  });
+
+  it("rejects malformed merge preparation, recovery, and errors", async () => {
+    expect(isPreparedProjectMerge({ preparedToken: "incomplete" })).toBe(false);
+    expect(parseProjectMergeError({ code: "unknown", message: "No", paths: [] })).toBeNull();
+    expect(
+      parseProjectMergeError({
+        code: "partial_failure",
+        message: "Missing report fields",
+        paths: [],
+        recovery: {},
+      }),
+    ).toBeNull();
+
+    vi.mocked(invoke).mockResolvedValue([{ operationId: 1 }]);
+    await expect(listProjectMergeRecovery()).rejects.toThrow(
+      "Invalid project merge recovery response.",
+    );
+  });
+
+  it("opens validated native merge recovery by operation ID", async () => {
+    vi.mocked(invoke).mockResolvedValue(undefined);
+
+    await openProjectMergeRecovery("0123456789abcdef01234567");
+
+    expect(invoke).toHaveBeenCalledWith("open_project_merge_recovery", {
+      operationId: "0123456789abcdef01234567",
+    });
   });
 });

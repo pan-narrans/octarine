@@ -12,6 +12,9 @@ Octarine is an early-stage, local-first desktop task manager and Markdown worksp
 - Display task, calendar, note, journal, project, context, tag, and embedded custom-query views.
 - Review exact and descendant project tasks on Kanban boards grouped by primary context, with optional closed columns and source-safe movement.
 - Apply task-level edits with location and source-content checks.
+- Capture tasks into configured inbox, daily, or hierarchical project notes.
+- Rename project hierarchies and merge rename collisions through cancellable staging, explicit
+  conflict resolution, guarded commit, and local recovery.
 
 Octarine is under active development. See `docs/architecture.md` and `docs/roadmap.md` for the honest implementation boundary.
 

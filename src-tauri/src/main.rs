@@ -20,6 +20,11 @@ use octarine::path_security::{
     canonicalize_root, resolve_child_within, resolve_descendant_within, resolve_existing_within,
     resolve_new_within,
 };
+use octarine::project_merge::{
+    project_merge_recovery_path, PreparedProjectMerge, ProjectMergeBulkResolution,
+    ProjectMergeError, ProjectMergeErrorCode, ProjectMergePlan, ProjectMergeRecoveryBundle,
+    ProjectMergeResolution, ProjectMergeResult,
+};
 use octarine::project_rename::{ProjectRenameError, ProjectRenamePlan, ProjectRenameResult};
 use octarine::query_dsl::compile_filter_to_sql;
 use octarine::task_creation::{CaptureContext, TaskDraft, TaskDraftPreview};
@@ -203,6 +208,119 @@ fn execute_project_rename(
         &connection,
         &plan_token,
     )
+}
+
+#[tauri::command]
+fn preflight_project_merge(
+    state: State<'_, AppState>,
+    source_project: String,
+    destination_project: String,
+) -> Result<ProjectMergePlan, ProjectMergeError> {
+    let vault = state.vault_dir.lock().unwrap().clone();
+    let config = state.config.lock().unwrap().clone();
+    state.task_creation.preflight_project_merge(
+        std::path::Path::new(&vault),
+        &config,
+        &source_project,
+        &destination_project,
+    )
+}
+
+#[tauri::command]
+fn resolve_project_merge_conflict(
+    state: State<'_, AppState>,
+    plan_token: String,
+    resolution: ProjectMergeResolution,
+) -> Result<(), ProjectMergeError> {
+    state
+        .task_creation
+        .resolve_project_merge_conflict(&plan_token, resolution)
+}
+
+#[tauri::command]
+fn resolve_project_merge_conflicts_bulk(
+    state: State<'_, AppState>,
+    plan_token: String,
+    bulk: ProjectMergeBulkResolution,
+) -> Result<(), ProjectMergeError> {
+    state
+        .task_creation
+        .resolve_project_merge_conflicts_bulk(&plan_token, bulk)
+}
+
+#[tauri::command]
+fn prepare_project_merge(
+    state: State<'_, AppState>,
+    plan_token: String,
+) -> Result<PreparedProjectMerge, ProjectMergeError> {
+    let vault = state.vault_dir.lock().unwrap().clone();
+    let config = state.config.lock().unwrap().clone();
+    state
+        .task_creation
+        .prepare_project_merge(std::path::Path::new(&vault), &config, &plan_token)
+}
+
+#[tauri::command]
+fn execute_project_merge(
+    state: State<'_, AppState>,
+    plan_token: String,
+) -> Result<ProjectMergeResult, ProjectMergeError> {
+    let vault = state.vault_dir.lock().unwrap().clone();
+    let config = state.config.lock().unwrap().clone();
+    let connection = state.db.lock().unwrap();
+    state.task_creation.execute_project_merge(
+        std::path::Path::new(&vault),
+        &config,
+        &connection,
+        &plan_token,
+    )
+}
+
+#[tauri::command]
+fn cancel_project_merge(
+    state: State<'_, AppState>,
+    operation_id: String,
+) -> Result<(), ProjectMergeError> {
+    let vault = state.vault_dir.lock().unwrap().clone();
+    state
+        .task_creation
+        .cancel_project_merge(std::path::Path::new(&vault), &operation_id)
+}
+
+#[tauri::command]
+fn list_project_merge_recovery(
+    state: State<'_, AppState>,
+) -> Result<Vec<ProjectMergeRecoveryBundle>, ProjectMergeError> {
+    let vault = state.vault_dir.lock().unwrap().clone();
+    state
+        .task_creation
+        .list_project_merge_recovery(std::path::Path::new(&vault))
+}
+
+#[tauri::command]
+fn delete_project_merge_recovery(
+    state: State<'_, AppState>,
+    operation_id: String,
+) -> Result<(), ProjectMergeError> {
+    let vault = state.vault_dir.lock().unwrap().clone();
+    state
+        .task_creation
+        .delete_project_merge_recovery(std::path::Path::new(&vault), &operation_id)
+}
+
+#[tauri::command]
+fn open_project_merge_recovery(
+    state: State<'_, AppState>,
+    operation_id: String,
+) -> Result<(), ProjectMergeError> {
+    let vault = state.vault_dir.lock().unwrap().clone();
+    let path = project_merge_recovery_path(std::path::Path::new(&vault), &operation_id)?;
+    open::that(path).map_err(|_| {
+        ProjectMergeError::new(
+            ProjectMergeErrorCode::OperationFailed,
+            "Project merge recovery could not be opened.",
+        )
+    })
 }
 
 fn record_create_failure(diagnostics: &Diagnostics, code: CreateTaskErrorCode) {
@@ -620,6 +738,18 @@ fn main() {
         .into_owned();
     validate_config_for_vault(&config, std::path::Path::new(&vault_dir))
         .expect("application configuration contains an invalid vault destination");
+    match octarine::project_merge::cleanup_project_merge_recovery(std::path::Path::new(&vault_dir))
+    {
+        Ok(cleanup) if !cleanup.deleted_operation_ids.is_empty() => diagnostics.info(
+            "project_merge.recovery_cleanup",
+            "Expired successful project merge recovery was removed.",
+        ),
+        Ok(_) => {}
+        Err(_) => diagnostics.error(
+            "project_merge.recovery_cleanup_failed",
+            "Project merge recovery cleanup failed; recovery was retained.",
+        ),
+    }
     let journal_override = std::env::var("OCTARINE_JOURNAL_FOLDER")
         .ok()
         .filter(|value| !value.trim().is_empty())
@@ -671,6 +801,15 @@ fn main() {
         move_task_project,
         preflight_project_rename,
         execute_project_rename,
+        preflight_project_merge,
+        resolve_project_merge_conflict,
+        resolve_project_merge_conflicts_bulk,
+        prepare_project_merge,
+        execute_project_merge,
+        cancel_project_merge,
+        list_project_merge_recovery,
+        delete_project_merge_recovery,
+        open_project_merge_recovery,
         get_vault_config,
         set_vault_config,
         get_journal_config,

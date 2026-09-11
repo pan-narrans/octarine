@@ -55,6 +55,10 @@ Octarine uses a dark, interstellar workspace aesthetic: deep navy surfaces, rest
 - Active or hovered sidebar project exposes compact pencil action. Inline editor changes one project
   segment with explicit confirm/cancel controls, then opens same project-rename preflight confirmation.
   Escape cancels inline editing; selected project follows successful hierarchy rename.
+- Rename into existing project offers merge. Merge uses explicit preflight, conflict resolution,
+  preparation, and commit steps. Preparation remains cancellable without durable project changes.
+  Commit can stop safely between file operations and never rolls back automatically. Successful and
+  interrupted recovery bundles remain visible under Task settings.
 - At narrow viewports, calendar controls stack while the seven-day calendar grid scrolls horizontally as a single bounded region. The day drawer is viewport-width constrained, and file-tree labels truncate rather than forcing page overflow.
 - Project views place compact Board/List presentation switch beside search. Board is default; Done and Cancelled column toggles appear only in Board mode.
 - Kanban columns keep fixed readable width and scroll inside board region instead of stacking or shrinking. Each column groups cards under flat uppercase context headings; No context appears first. Card context pills are omitted because group heading owns that information, while descendant project pills show only relative path.

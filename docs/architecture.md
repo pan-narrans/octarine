@@ -96,6 +96,14 @@ Partial failure returns structured recovery report; no global atomicity or autom
 claimed. Large-vault rename measurement and reproduction command live in
 `development/project-rename-performance.md`.
 
+Rename collisions can enter staged project merge. Native preflight recursively maps source into
+existing destination, classifies Markdown, ordinary file, ignored opaque, and path-kind conflicts,
+and stores user resolutions behind opaque plan token. Preparation materializes complete output under
+`.octarine/staging` without changing project data. Explicit commit revalidates fingerprints, moves
+originals into `.octarine/recovery`, installs destination outputs atomically per entry, removes source
+last, and reconciles index. Stop takes effect between atomic operations. Successful recovery expires
+after 30 days; partial, stopped, and failed recovery remains until manual deletion.
+
 ## Query Language
 
 `src-tauri/src/query_dsl.rs` supports boolean expressions, parentheses, projects, contexts, tags, priorities, and comparisons for due date, status, and type. Supported relative dates are currently `today` and `tomorrow`.

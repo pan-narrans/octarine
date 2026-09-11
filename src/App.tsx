@@ -1,7 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { useTaskStore } from "./hooks/use-task-store";
 import { useTauriEvents } from "./hooks/use-tauri-events";
-import { Task, FileNode, type ProjectRenamePlan, type ProjectRenameRecoveryReport } from "./types";
+import {
+  Task,
+  FileNode,
+  type ProjectMergePlan,
+  type ProjectMergeRecoveryBundle,
+  type ProjectMergeRecoveryReport,
+  type ProjectMergeResult,
+  type ProjectMergeResolutionAction,
+  type ProjectRenamePlan,
+  type ProjectRenameRecoveryReport,
+} from "./types";
 import { FileTree } from "./components/FileTree";
 import { MarkdownEditor } from "./components/MarkdownEditor";
 import { WorkspaceState } from "./components/WorkspaceState";
@@ -9,6 +19,11 @@ import { EditTaskModal } from "./components/EditTaskModal";
 import { CreateTaskModal } from "./components/CreateTaskModal";
 import { ProjectMoveConfirmation } from "./components/ProjectMoveConfirmation";
 import { ProjectRenameConfirmation } from "./components/ProjectRenameConfirmation";
+import {
+  ProjectMergeRecoveryList,
+  ProjectMergeWorkflow,
+  type ProjectMergeWorkflowStage,
+} from "./components/ProjectMergeWorkflow";
 import { NotificationViewport } from "./components/NotificationViewport";
 import { TaskCreationSettings } from "./components/TaskCreationSettings";
 import { TaskCard } from "./features/tasks/TaskCard";
@@ -30,11 +45,21 @@ import {
   isWriteConflict,
   deleteTaskMarkdown,
   moveTaskProject,
+  cancelProjectMerge,
+  deleteProjectMergeRecovery,
   executeProjectRename,
+  executeProjectMerge,
+  listProjectMergeRecovery,
+  openProjectMergeRecovery,
   parseCreateTaskError,
   parseMoveTaskProjectError,
   parseProjectRenameError,
+  parseProjectMergeError,
+  prepareProjectMerge,
+  preflightProjectMerge,
   preflightProjectRename,
+  resolveProjectMergeConflict,
+  resolveProjectMergeConflictsBulk,
   previewTaskDraft,
   updateEventSchedule,
   updateTaskMarkdown,
@@ -104,6 +129,30 @@ function renamedProjectValue(project: string, source: string, destination: strin
   return project.slice(0, prefix.length).toLocaleLowerCase() === prefix.toLocaleLowerCase()
     ? `${destination}/${project.slice(prefix.length)}`
     : project;
+}
+
+function blockedMergePlan(renamePlan: ProjectRenamePlan, projectFolder: string): ProjectMergePlan {
+  return {
+    planToken: "",
+    operationId: "",
+    sourceProject: renamePlan.sourceProject,
+    destinationProject: renamePlan.destinationProject,
+    projectFolder,
+    rewrites: [],
+    moves: [],
+    conflicts: [],
+    autoResolutions: [],
+    collapsedDescendants: [],
+    impact: {
+      rewrittenFiles: renamePlan.impact.rewrittenFiles,
+      rewrittenTokens: renamePlan.impact.rewrittenTokens,
+      filesystemMoves: renamePlan.impact.filesystemMoves,
+      conflicts: renamePlan.collisions.length,
+      autoResolved: 0,
+      collapsedDescendants: renamePlan.impact.descendantProjects,
+    },
+    warnings: [],
+  };
 }
 
 export function App() {
@@ -183,8 +232,20 @@ export function App() {
   const [projectRenameRecovery, setProjectRenameRecovery] =
     useState<ProjectRenameRecoveryReport | null>(null);
   const [renamingProject, setRenamingProject] = useState(false);
+  const [pendingProjectMerge, setPendingProjectMerge] = useState<ProjectMergePlan | null>(null);
+  const [projectMergeStage, setProjectMergeStage] = useState<ProjectMergeWorkflowStage>("offer");
+  const [projectMergeBlocker, setProjectMergeBlocker] = useState<"ancestor" | "symlink">();
+  const [projectMergeBlockerPath, setProjectMergeBlockerPath] = useState<string>();
+  const [resolvedProjectMergeConflicts, setResolvedProjectMergeConflicts] = useState<string[]>([]);
+  const [projectMergeRecovery, setProjectMergeRecovery] =
+    useState<ProjectMergeRecoveryReport | null>(null);
+  const [projectMergeResult, setProjectMergeResult] = useState<ProjectMergeResult | null>(null);
+  const [projectMergeRecoveryBundles, setProjectMergeRecoveryBundles] = useState<
+    ProjectMergeRecoveryBundle[]
+  >([]);
   const pushNotification = useNotificationStore((state) => state.push);
   const openedVisualModal = useRef(false);
+  const cancelledProjectMerges = useRef(new Set<string>());
   const [todayJournalContent, setTodayJournalContent] = useState<string | null>(null);
   const [todayJournalPath, setTodayJournalPath] = useState<string>("");
   const [todayJournalLoading, setTodayJournalLoading] = useState<boolean>(true);
@@ -607,7 +668,34 @@ export function App() {
   const beginProjectRename = async (sourceProject: string, destinationProject: string) => {
     const plan = await preflightProjectRename(sourceProject, destinationProject);
     setProjectRenameRecovery(null);
-    setPendingProjectRename(plan);
+    if (plan.collisions.length === 0) {
+      setPendingProjectRename(plan);
+      return;
+    }
+
+    try {
+      const mergePlan = await preflightProjectMerge(sourceProject, destinationProject);
+      setPendingProjectRename(null);
+      setPendingProjectMerge(mergePlan);
+      setProjectMergeStage("offer");
+      setProjectMergeBlocker(undefined);
+      setProjectMergeBlockerPath(undefined);
+      setResolvedProjectMergeConflicts([]);
+      setProjectMergeRecovery(null);
+      setProjectMergeResult(null);
+    } catch (error) {
+      const mergeError = parseProjectMergeError(error);
+      if (mergeError?.code === "ancestor_conflict" || mergeError?.code === "symlink_blocked") {
+        const config = await getTaskCreationConfig();
+        setPendingProjectRename(null);
+        setPendingProjectMerge(blockedMergePlan(plan, config.projectFolder));
+        setProjectMergeStage("blocked");
+        setProjectMergeBlocker(mergeError.code === "symlink_blocked" ? "symlink" : "ancestor");
+        setProjectMergeBlockerPath(mergeError.paths[0]);
+        return;
+      }
+      setPendingProjectRename(plan);
+    }
   };
 
   const handleSidebarProjectRename = async (sourceProject: string, destinationProject: string) => {
@@ -729,6 +817,27 @@ export function App() {
       await Promise.all([fetchJournalTree(), fetchDirTree(), fetchTodayJournal(journalPath)]);
     },
   });
+
+  useEffect(() => {
+    if (selectedSection !== "settings" || activeFilePath !== null) return;
+    let active = true;
+    void listProjectMergeRecovery()
+      .then((bundles) => {
+        if (active) setProjectMergeRecoveryBundles(bundles);
+      })
+      .catch((error) => {
+        if (!active) return;
+        pushNotification({
+          id: "project-merge-recovery-load-error",
+          kind: "warning",
+          title: "Merge recovery unavailable",
+          message: parseProjectMergeError(error)?.message ?? writeErrorMessage(error),
+        });
+      });
+    return () => {
+      active = false;
+    };
+  }, [activeFilePath, pushNotification, selectedSection]);
 
   const saveEditedTask = async (newRawMarkdown: string): Promise<boolean> => {
     if (!modalTask) return false;
@@ -941,6 +1050,304 @@ export function App() {
       });
     } finally {
       setRenamingProject(false);
+    }
+  };
+
+  const eligibleProjectMergeConflictIds =
+    pendingProjectMerge?.conflicts
+      .filter(
+        (conflict) =>
+          (conflict.kind === "file" || conflict.kind === "ignored") &&
+          conflict.sourceKind === "file" &&
+          conflict.destinationKind === "file",
+      )
+      .map((conflict) => conflict.id) ?? [];
+
+  const clearProjectMerge = () => {
+    setPendingProjectMerge(null);
+    setProjectMergeStage("offer");
+    setProjectMergeBlocker(undefined);
+    setProjectMergeBlockerPath(undefined);
+    setResolvedProjectMergeConflicts([]);
+    setProjectMergeRecovery(null);
+    setProjectMergeResult(null);
+  };
+
+  const closeProjectMerge = async () => {
+    const operationId = pendingProjectMerge?.operationId;
+    const shouldCancel =
+      operationId &&
+      projectMergeStage !== "success" &&
+      projectMergeStage !== "partial" &&
+      projectMergeStage !== "blocked";
+    clearProjectMerge();
+    if (!shouldCancel) return;
+    try {
+      await cancelProjectMerge(operationId);
+    } catch (error) {
+      pushNotification({
+        id: "project-merge-cancel-error",
+        kind: "warning",
+        title: "Merge cleanup needs attention",
+        message: parseProjectMergeError(error)?.message ?? writeErrorMessage(error),
+      });
+    }
+  };
+
+  const cancelPendingProjectMerge = async () => {
+    if (!pendingProjectMerge?.operationId) {
+      clearProjectMerge();
+      return;
+    }
+    try {
+      cancelledProjectMerges.current.add(pendingProjectMerge.operationId);
+      await cancelProjectMerge(pendingProjectMerge.operationId);
+      setProjectMergeStage("cancelled");
+    } catch (error) {
+      cancelledProjectMerges.current.delete(pendingProjectMerge.operationId);
+      pushNotification({
+        id: "project-merge-cancel-error",
+        kind: "error",
+        title: "Project merge not cancelled",
+        message: parseProjectMergeError(error)?.message ?? writeErrorMessage(error),
+      });
+    }
+  };
+
+  const saveProjectMergeResolution = async (
+    conflictId: string,
+    action: ProjectMergeResolutionAction,
+    result?: string,
+    sourceName?: string,
+  ) => {
+    if (!pendingProjectMerge) return;
+    try {
+      await resolveProjectMergeConflict(pendingProjectMerge.planToken, {
+        conflictId,
+        action,
+        result: result ?? null,
+        sourceName: sourceName ?? null,
+      });
+      setResolvedProjectMergeConflicts((current) =>
+        current.includes(conflictId) ? current : [...current, conflictId],
+      );
+    } catch (error) {
+      pushNotification({
+        id: "project-merge-resolution-error",
+        kind: "error",
+        title: "Conflict not resolved",
+        message: parseProjectMergeError(error)?.message ?? writeErrorMessage(error),
+      });
+    }
+  };
+
+  const confirmBulkProjectMergeResolution = async () => {
+    if (!pendingProjectMerge || eligibleProjectMergeConflictIds.length === 0) {
+      setProjectMergeStage("resolve");
+      return;
+    }
+    try {
+      await resolveProjectMergeConflictsBulk(pendingProjectMerge.planToken, {
+        conflictIds: eligibleProjectMergeConflictIds,
+        action: "use_destination",
+        confirmedCount: eligibleProjectMergeConflictIds.length,
+      });
+      setResolvedProjectMergeConflicts((current) => [
+        ...new Set([...current, ...eligibleProjectMergeConflictIds]),
+      ]);
+      setProjectMergeStage("resolve");
+    } catch (error) {
+      pushNotification({
+        id: "project-merge-bulk-resolution-error",
+        kind: "error",
+        title: "Bulk resolution not applied",
+        message: parseProjectMergeError(error)?.message ?? writeErrorMessage(error),
+      });
+    }
+  };
+
+  const preparePendingProjectMerge = async () => {
+    if (!pendingProjectMerge) return;
+    if (resolvedProjectMergeConflicts.length !== pendingProjectMerge.conflicts.length) {
+      setProjectMergeStage("resolve");
+      pushNotification({
+        id: "project-merge-unresolved",
+        kind: "warning",
+        title: "Resolve every conflict",
+        message: `${pendingProjectMerge.conflicts.length - resolvedProjectMergeConflicts.length} conflicts remain.`,
+      });
+      return;
+    }
+    setProjectMergeStage("preparing");
+    try {
+      await prepareProjectMerge(pendingProjectMerge.planToken);
+      cancelledProjectMerges.current.delete(pendingProjectMerge.operationId);
+      setProjectMergeStage("commit");
+    } catch (error) {
+      const mergeError = parseProjectMergeError(error);
+      const cancellationRequested = cancelledProjectMerges.current.delete(
+        pendingProjectMerge.operationId,
+      );
+      if (mergeError?.code === "cancelled" || cancellationRequested) {
+        setProjectMergeStage("cancelled");
+        return;
+      }
+      setProjectMergeStage(pendingProjectMerge.conflicts.length ? "resolve" : "review");
+      pushNotification({
+        id: "project-merge-prepare-error",
+        kind: "error",
+        title: "Merge preparation failed",
+        message: mergeError?.message ?? writeErrorMessage(error),
+      });
+    }
+  };
+
+  const retryProjectMergePreflight = async () => {
+    if (!pendingProjectMerge) return;
+    try {
+      const plan = await preflightProjectMerge(
+        pendingProjectMerge.sourceProject,
+        pendingProjectMerge.destinationProject,
+      );
+      setPendingProjectMerge(plan);
+      setResolvedProjectMergeConflicts([]);
+      setProjectMergeRecovery(null);
+      setProjectMergeResult(null);
+      setProjectMergeStage("review");
+    } catch (error) {
+      pushNotification({
+        id: "project-merge-retry-error",
+        kind: "error",
+        title: "Merge preflight failed",
+        message: parseProjectMergeError(error)?.message ?? writeErrorMessage(error),
+      });
+    }
+  };
+
+  const continueProjectMerge = () => {
+    if (!pendingProjectMerge) return;
+    if (projectMergeStage === "review" && pendingProjectMerge.conflicts.length > 0) {
+      setProjectMergeStage("resolve");
+      return;
+    }
+    if (projectMergeStage === "partial") {
+      void retryProjectMergePreflight();
+      return;
+    }
+    void preparePendingProjectMerge();
+  };
+
+  const commitPendingProjectMerge = async () => {
+    if (!pendingProjectMerge) return;
+    const plan = pendingProjectMerge;
+    setProjectMergeStage("committing");
+    try {
+      const result = await executeProjectMerge(plan.planToken);
+      setProjectMergeResult(result);
+      setProjectMergeStage("success");
+      setProjectMergeRecovery(null);
+      if (selectedSection.startsWith("proj:")) {
+        const selectedProject = selectedSection.slice("proj:".length);
+        if (
+          selectedProject.toLocaleLowerCase() === plan.sourceProject.toLocaleLowerCase() ||
+          selectedProject
+            .toLocaleLowerCase()
+            .startsWith(`${plan.sourceProject.toLocaleLowerCase()}/`)
+        ) {
+          setSelectedSection(`proj:${plan.destinationProject}`);
+        }
+      }
+      if (activeFilePath?.startsWith(`${activeVaultPath}/${plan.projectFolder}/`)) {
+        setActiveFilePath(null);
+        setActiveFileContent(null);
+      }
+      const [, bundles] = await Promise.all([
+        Promise.all([fetchTasks(), fetchCustomViews(), fetchDirTree()]),
+        listProjectMergeRecovery(),
+      ]);
+      setProjectMergeRecoveryBundles(bundles);
+      pushNotification(
+        {
+          id: `project-merged-${result.operationId}`,
+          kind: "success",
+          title: "Projects merged",
+          message: `+${plan.sourceProject} → +${plan.destinationProject}`,
+          detail: "Original files remain available in recovery for 30 days.",
+        },
+        6_000,
+      );
+    } catch (error) {
+      const mergeError = parseProjectMergeError(error);
+      if (mergeError?.recovery) {
+        setProjectMergeRecovery(mergeError.recovery);
+        setProjectMergeStage("partial");
+        await Promise.all([fetchTasks(), fetchCustomViews(), fetchDirTree()]);
+      } else if (mergeError?.code === "cancelled") {
+        setProjectMergeStage("cancelled");
+      } else {
+        setProjectMergeStage("commit");
+      }
+      pushNotification({
+        id: "project-merge-commit-error",
+        kind: mergeError?.recovery ? "warning" : "error",
+        title: mergeError?.recovery ? "Project merge needs attention" : "Projects not merged",
+        message: mergeError?.message ?? writeErrorMessage(error),
+      });
+    }
+  };
+
+  const stopCommittedProjectMerge = async () => {
+    if (!pendingProjectMerge) return;
+    setProjectMergeStage("stopping");
+    try {
+      await cancelProjectMerge(pendingProjectMerge.operationId);
+    } catch (error) {
+      setProjectMergeStage("committing");
+      pushNotification({
+        id: "project-merge-stop-error",
+        kind: "error",
+        title: "Safe stop not requested",
+        message: parseProjectMergeError(error)?.message ?? writeErrorMessage(error),
+      });
+    }
+  };
+
+  const openMergeRecovery = async (operationId?: string) => {
+    const target =
+      operationId ?? projectMergeResult?.operationId ?? projectMergeRecovery?.operationId;
+    if (!target) return;
+    try {
+      await openProjectMergeRecovery(target);
+    } catch (error) {
+      pushNotification({
+        id: "project-merge-recovery-open-error",
+        kind: "error",
+        title: "Recovery not opened",
+        message: parseProjectMergeError(error)?.message ?? writeErrorMessage(error),
+      });
+    }
+  };
+
+  const deleteMergeRecovery = async (operationId: string) => {
+    if (!window.confirm("Delete this project merge recovery permanently?")) return;
+    try {
+      await deleteProjectMergeRecovery(operationId);
+      setProjectMergeRecoveryBundles((current) =>
+        current.filter((bundle) => bundle.operationId !== operationId),
+      );
+      pushNotification({
+        id: `project-merge-recovery-deleted-${operationId}`,
+        kind: "info",
+        title: "Merge recovery deleted",
+        message: "Original files from this merge can no longer be restored.",
+      });
+    } catch (error) {
+      pushNotification({
+        id: "project-merge-recovery-delete-error",
+        kind: "error",
+        title: "Recovery not deleted",
+        message: parseProjectMergeError(error)?.message ?? writeErrorMessage(error),
+      });
     }
   };
 
@@ -1308,6 +1715,52 @@ export function App() {
           />
         )}
 
+        {pendingProjectMerge && (
+          <ProjectMergeWorkflow
+            plan={pendingProjectMerge}
+            stage={projectMergeStage}
+            blocker={projectMergeBlocker}
+            blockerPath={projectMergeBlockerPath}
+            resolvedConflictIds={resolvedProjectMergeConflicts}
+            bulkCount={eligibleProjectMergeConflictIds.length}
+            progress={
+              projectMergeStage === "preparing" ? 42 : projectMergeStage === "stopping" ? 72 : 68
+            }
+            recovery={projectMergeRecovery}
+            recoveryDeletionDate={projectMergeResult?.recoveryDeletionDate}
+            onClose={() => void closeProjectMerge()}
+            onStartMerge={() => setProjectMergeStage("review")}
+            onContinue={continueProjectMerge}
+            onBack={() =>
+              setProjectMergeStage(projectMergeStage === "bulk_confirm" ? "resolve" : "review")
+            }
+            onCancel={() => void cancelPendingProjectMerge()}
+            onStop={() => void stopCommittedProjectMerge()}
+            onCommit={() => void commitPendingProjectMerge()}
+            onResolveConflict={(id, action, result, sourceName) =>
+              void saveProjectMergeResolution(id, action, result, sourceName)
+            }
+            onRequestBulk={() => {
+              if (eligibleProjectMergeConflictIds.length > 0) {
+                setProjectMergeStage("bulk_confirm");
+              } else {
+                pushNotification({
+                  id: "project-merge-no-bulk-conflicts",
+                  kind: "info",
+                  title: "No bulk-eligible conflicts",
+                  message: "Resolve directories and type mismatches individually.",
+                });
+              }
+            }}
+            onConfirmBulk={() => void confirmBulkProjectMergeResolution()}
+            onOpenRecovery={() => void openMergeRecovery()}
+            onOpenDestination={() => {
+              setSelectedSection(`proj:${pendingProjectMerge.destinationProject}`);
+              clearProjectMerge();
+            }}
+          />
+        )}
+
         {!(activeFilePath === null && selectedSection === "settings") && (
           <div className="main-header">
             <div className="main-title">
@@ -1430,6 +1883,13 @@ export function App() {
                 onChange={taskSettings.setValue}
                 onSave={() => void taskSettings.save()}
               />
+              <div className="task-settings-recovery-section">
+                <ProjectMergeRecoveryList
+                  bundles={projectMergeRecoveryBundles}
+                  onOpen={(operationId) => void openMergeRecovery(operationId)}
+                  onDelete={(operationId) => void deleteMergeRecovery(operationId)}
+                />
+              </div>
             </div>
           ) : taskSettings.loading ? (
             <WorkspaceState kind="loading" />

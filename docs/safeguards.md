@@ -25,3 +25,11 @@ A task edit must carry the original source block supplied to the user. Do not re
 ## Preserve Existing Work
 
 Before replacing a large file, inspect current status and diff. Prefer focused edits so concurrent or recently removed behavior is not accidentally reintroduced.
+
+## Stage Multi-file Project Merges
+
+Project merge preparation must write only under validated `.octarine/staging` workspace. Durable
+commit must revalidate plan fingerprints, recover displaced originals before replacement, install
+destination first, and remove source last. Cancellation before commit must leave project data
+unchanged. Stop or failure after commit begins must retain recovery and report completed and pending
+operations; never attempt automatic multi-file rollback.
