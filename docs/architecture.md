@@ -31,6 +31,13 @@ The React frontend lives in `src/`. `App.tsx` currently coordinates most navigat
 
 Project routes reuse `src/features/kanban/KanbanBoard.tsx`. One globally persisted client-local preference selects Board or List; fresh profiles use Board. Pure projection logic scopes exact and descendant projects, removes events and child cards, groups by indexed primary context, and sorts deterministically. Groups above 50 cards use `@tanstack/react-virtual`; board container owns horizontal overflow.
 
+Sidebar project navigation uses separate full and visible project catalogs derived in one memoized
+pass over loaded indexed tasks. Full catalog continues feeding task and Markdown editing surfaces.
+Visible catalog omits projects without `todo`, `doing`, or `deferred` items unless user enables
+`Show inactive`; active events and indexed subtasks use same status rule. Selected project remains
+visible until navigation leaves it, and hierarchical tree construction retains ancestors of visible
+descendants. Reveal preference persists client-locally per effective vault path.
+
 Feature-owned adapters under `src/features/*/ipc.ts` are the only frontend modules that call Tauri commands. Rust returns normalized task metadata, including tags, contexts, and source file paths, so the frontend does not reinterpret raw Markdown. Shared response and error DTOs are generated from Rust into `src/generated/ipc`; frontend aliases and runtime guards live in `src/types`.
 
 Task creation orchestration lives in `src/features/tasks/use-task-creation-controller.ts` and its

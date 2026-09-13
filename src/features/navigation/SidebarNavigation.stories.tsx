@@ -27,9 +27,12 @@ const meta = {
     activeFilePath: null,
     customViews,
     projects: ["octarine/ui", "octarine/docs"],
+    projectCatalogSize: 2,
+    showInactiveProjects: false,
     contexts: ["desk", "focus"],
     tags: ["design", "responsive"],
     onSelectSection: () => undefined,
+    onShowInactiveProjectsChange: fn(),
   },
 } satisfies Meta<typeof SidebarNavigation>;
 
@@ -44,6 +47,48 @@ export const ProjectSelected: Story = {
 
 export const ContextSelected: Story = {
   args: { selectedSection: "ctx:focus" },
+};
+
+export const InactiveProjectsHidden: Story = {
+  args: {
+    projects: ["octarine/ui", "work/current"],
+    projectCatalogSize: 4,
+    showInactiveProjects: false,
+  },
+};
+
+export const AllProjectsInactive: Story = {
+  args: {
+    projects: [],
+    projectCatalogSize: 2,
+    showInactiveProjects: false,
+  },
+};
+
+export const InactiveProjectsRevealed: Story = {
+  args: {
+    projects: ["octarine/ui", "octarine/archive", "work/current", "personal/finished"],
+    projectCatalogSize: 4,
+    showInactiveProjects: true,
+  },
+};
+
+export const SelectedInactiveProject: Story = {
+  args: {
+    selectedSection: "proj:octarine/archive",
+    projects: ["octarine/ui", "octarine/archive"],
+    projectCatalogSize: 4,
+    showInactiveProjects: false,
+  },
+};
+
+export const ActiveDescendantProject: Story = {
+  args: {
+    selectedSection: "proj:org",
+    projects: ["org/team"],
+    projectCatalogSize: 3,
+    showInactiveProjects: false,
+  },
 };
 
 export const ProjectRenameAvailable: Story = {
@@ -94,6 +139,26 @@ function InteractionHarness() {
   );
 }
 
+function VisibilityHarness() {
+  const [showInactiveProjects, setShowInactiveProjects] = useState(false);
+  const activeProjects = ["octarine/ui", "work/current"];
+  const allProjects = ["octarine/ui", "octarine/archive", "work/current", "personal/finished"];
+
+  return (
+    <SidebarNavigation
+      {...meta.args}
+      projects={showInactiveProjects ? allProjects : activeProjects}
+      projectCatalogSize={allProjects.length}
+      showInactiveProjects={showInactiveProjects}
+      onShowInactiveProjectsChange={setShowInactiveProjects}
+    />
+  );
+}
+
 export const Interactive: Story = {
   render: () => <InteractionHarness />,
+};
+
+export const VisibilityInteractive: Story = {
+  render: () => <VisibilityHarness />,
 };

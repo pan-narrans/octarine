@@ -10,6 +10,11 @@ test.describe("Sidebar navigation visual regression", () => {
     ["context-selected", "context-selected.png"],
     ["project-rename-available", "project-rename-available.png"],
     ["project-rename-editing", "project-rename-editing.png"],
+    ["inactive-projects-hidden", "inactive-projects-hidden.png"],
+    ["all-projects-inactive", "all-projects-inactive.png"],
+    ["inactive-projects-revealed", "inactive-projects-revealed.png"],
+    ["selected-inactive-project", "selected-inactive-project.png"],
+    ["active-descendant-project", "active-descendant-project.png"],
   ] as const) {
     test(story, async ({ page }) => {
       await page.setViewportSize({ width: 360, height: 840 });
@@ -33,4 +38,18 @@ test("submits inline project rename", async ({ page }) => {
   await expect(input).toHaveValue("platform");
   await page.getByRole("button", { name: "Confirm rename of +product" }).click();
   await expect(input).toBeHidden();
+});
+
+test("reveals and hides inactive projects", async ({ page }) => {
+  await page.goto(storyUrl("visibility-interactive"));
+  const toggle = page.getByRole("button", { name: "Show inactive" });
+
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await expect(page.getByText("archive", { exact: true })).toBeHidden();
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByText("archive", { exact: true })).toBeVisible();
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await expect(page.getByText("archive", { exact: true })).toBeHidden();
 });

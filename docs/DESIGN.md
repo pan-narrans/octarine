@@ -55,6 +55,12 @@ Octarine uses a dark, interstellar workspace aesthetic: deep navy surfaces, rest
 - Active or hovered sidebar project exposes compact pencil action. Inline editor changes one project
   segment with explicit confirm/cancel controls, then opens same project-rename preflight confirmation.
   Escape cancels inline editing; selected project follows successful hierarchy rename.
+- Projects heading places compact `Show inactive` control opposite label. Sidebar hides projects with
+  no `todo`, `doing`, or `deferred` items by default while retaining full project catalog in creation
+  and editing surfaces. Active descendants retain hierarchy ancestors; selected inactive project
+  remains visible until navigation leaves it.
+- Sidebar project entry and removal uses 0.2-second opacity plus vertical collapse motion without
+  horizontal movement. Reduced-motion preference suppresses transition.
 - Rename into existing project offers merge. Merge uses explicit preflight, conflict resolution,
   preparation, and commit steps. Preparation remains cancellable without durable project changes.
   Commit can stop safely between file operations and never rolls back automatically. Successful and

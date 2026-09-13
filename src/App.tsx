@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTaskStore } from "./hooks/use-task-store";
 import { useTauriEvents } from "./hooks/use-tauri-events";
 import {
@@ -28,6 +28,11 @@ import { NotificationViewport } from "./components/NotificationViewport";
 import { TaskCreationSettings } from "./components/TaskCreationSettings";
 import { TaskCard } from "./features/tasks/TaskCard";
 import { SidebarNavigation } from "./features/navigation/SidebarNavigation";
+import { projectCatalogs } from "./features/navigation/project-visibility";
+import {
+  readShowInactiveProjects,
+  writeShowInactiveProjects,
+} from "./features/navigation/project-visibility-preference";
 import { Dashboard } from "./features/dashboard/Dashboard";
 import { KanbanBoard } from "./features/kanban/KanbanBoard";
 import type { ClosedKanbanStatus } from "./features/kanban/model";
@@ -189,6 +194,7 @@ export function App() {
   );
   const [visibleClosedStatuses, setVisibleClosedStatuses] = useState<ClosedKanbanStatus[]>([]);
   const [activeVaultPath, setActiveVaultPath] = useState<string>("Loading...");
+  const [showInactiveProjects, setShowInactiveProjects] = useState(false);
 
   // Vault Path Inline Editor state
   const [isEditingVault, setIsEditingVault] = useState<boolean>(false);
@@ -253,6 +259,11 @@ export function App() {
   useEffect(() => {
     writeProjectViewMode(window.localStorage, projectViewMode);
   }, [projectViewMode]);
+
+  useEffect(() => {
+    if (activeVaultPath === "Loading...") return;
+    setShowInactiveProjects(readShowInactiveProjects(window.localStorage, activeVaultPath));
+  }, [activeVaultPath]);
 
   // Initial Boot Fetch & Config Query
   useEffect(() => {
@@ -369,7 +380,14 @@ export function App() {
   }, [tasks, visualScenario]);
 
   // Aggregate unique projects, contexts, and tags dynamically from loaded tasks
-  const projects = Array.from(new Set(tasks.map((t) => t.project).filter((p): p is string => !!p)));
+  const selectedProject =
+    activeFilePath === null && selectedSection.startsWith("proj:")
+      ? selectedSection.slice("proj:".length)
+      : null;
+  const { allProjects: projects, sidebarProjects } = useMemo(
+    () => projectCatalogs(tasks, { showInactiveProjects, selectedProject }),
+    [tasks, showInactiveProjects, selectedProject],
+  );
   const contexts = Array.from(
     new Set(
       tasks.map((task) => task.primary_context).filter((context): context is string => !!context),
@@ -462,6 +480,13 @@ export function App() {
       fetchTasks(filterStr);
     } else {
       fetchTasks();
+    }
+  };
+
+  const handleShowInactiveProjectsChange = (showInactive: boolean) => {
+    setShowInactiveProjects(showInactive);
+    if (activeVaultPath !== "Loading...") {
+      writeShowInactiveProjects(window.localStorage, activeVaultPath, showInactive);
     }
   };
 
@@ -1358,10 +1383,13 @@ export function App() {
         selectedSection={selectedSection}
         activeFilePath={activeFilePath}
         customViews={customViews}
-        projects={projects}
+        projects={sidebarProjects}
+        projectCatalogSize={projects.length}
+        showInactiveProjects={showInactiveProjects}
         contexts={contexts}
         tags={tags}
         onSelectSection={handleSidebarItemClick}
+        onShowInactiveProjectsChange={handleShowInactiveProjectsChange}
         onRenameProject={handleSidebarProjectRename}
         beforeCollections={
           <>
