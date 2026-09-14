@@ -8,6 +8,7 @@ import {
   Inbox,
   Layers,
   Loader2,
+  Menu,
   Pencil,
   Tag,
   X,
@@ -119,6 +120,7 @@ export function SidebarNavigation({
   beforeCollections,
   footer,
 }: SidebarNavigationProps) {
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<string | null>(null);
   const [projectNameDraft, setProjectNameDraft] = useState("");
   const [renamingProject, setRenamingProject] = useState(false);
@@ -126,6 +128,32 @@ export function SidebarNavigation({
   const projectTree = useMemo(() => buildProjectTree(renderedProjects), [renderedProjects]);
   const visibleProjectPaths = useMemo(() => buildProjectPathSet(projects), [projects]);
   const isActive = (section: string) => activeFilePath === null && selectedSection === section;
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [mobileOpen]);
+
+  const selectSection = (section: string, filter?: string) => {
+    setMobileOpen(false);
+    onSelectSection(section, filter);
+  };
+
+  const closeAfterNavigation = (event: React.MouseEvent<HTMLElement>) => {
+    const target = event.target as HTMLElement;
+    if (
+      target.closest(
+        ".sidebar-project-rename, .sidebar-project-rename-trigger, .file-tree-actions, .file-tree-edit-form",
+      )
+    ) {
+      return;
+    }
+    if (target.closest(".sidebar-item, .file-tree-row.file")) setMobileOpen(false);
+  };
 
   const startProjectRename = (node: ProjectNode) => {
     setEditingProject(node.fullPath);
@@ -173,7 +201,7 @@ export function SidebarNavigation({
           <li
             className={`sidebar-item ${isActive(`proj:${node.fullPath}`) ? "active" : ""}`}
             onClick={() =>
-              editingProject !== node.fullPath && onSelectSection(`proj:${node.fullPath}`)
+              editingProject !== node.fullPath && selectSection(`proj:${node.fullPath}`)
             }
             style={{ paddingLeft: `${Math.min(level * 10 + 8, 48)}px`, fontSize: "0.82rem" }}
           >
@@ -253,8 +281,13 @@ export function SidebarNavigation({
     );
   };
 
-  return (
-    <aside className="sidebar" aria-label="Octarine navigation">
+  const sidebar = (
+    <aside
+      id="octarine-sidebar"
+      className={`sidebar ${mobileOpen ? "is-mobile-open" : ""}`}
+      aria-label="Octarine navigation"
+      onClickCapture={closeAfterNavigation}
+    >
       <h2>
         Octarine <span>🌌</span>
       </h2>
@@ -264,25 +297,25 @@ export function SidebarNavigation({
         <ul className="sidebar-list">
           <li
             className={`sidebar-item ${isActive("all") ? "active" : ""}`}
-            onClick={() => onSelectSection("all")}
+            onClick={() => selectSection("all")}
           >
             <Inbox size={16} /> All Tasks
           </li>
           <li
             className={`sidebar-item ${isActive("todo") ? "active" : ""}`}
-            onClick={() => onSelectSection("todo")}
+            onClick={() => selectSection("todo")}
           >
             <CheckCircle2 size={16} color="#9ca3af" /> Not Started
           </li>
           <li
             className={`sidebar-item ${isActive("doing") ? "active" : ""}`}
-            onClick={() => onSelectSection("doing")}
+            onClick={() => selectSection("doing")}
           >
             <Loader2 size={16} className="animate-spin" color="#a78bfa" /> In Progress
           </li>
           <li
             className={`sidebar-item ${isActive("events") ? "active" : ""}`}
-            onClick={() => onSelectSection("events")}
+            onClick={() => selectSection("events")}
           >
             <Calendar size={16} color="#818cf8" /> Schedule Events
           </li>
@@ -307,7 +340,7 @@ export function SidebarNavigation({
                 <li
                   key={`${view.title}-${view.line_number}`}
                   className={`sidebar-item ${isActive(`view:${view.title}`) ? "active" : ""}`}
-                  onClick={() => onSelectSection(`view:${view.title}`, filter)}
+                  onClick={() => selectSection(`view:${view.title}`, filter)}
                 >
                   <Layers size={16} /> {view.title}
                 </li>
@@ -347,7 +380,7 @@ export function SidebarNavigation({
               <li
                 key={context}
                 className={`sidebar-item ${isActive(`ctx:${context}`) ? "active" : ""}`}
-                onClick={() => onSelectSection(`ctx:${context}`)}
+                onClick={() => selectSection(`ctx:${context}`)}
               >
                 <Tag size={16} /> @{context}
               </li>
@@ -364,7 +397,7 @@ export function SidebarNavigation({
               <li
                 key={tag}
                 className={`sidebar-item ${isActive(`tag:${tag}`) ? "active" : ""}`}
-                onClick={() => onSelectSection(`tag:${tag}`)}
+                onClick={() => selectSection(`tag:${tag}`)}
               >
                 <Hash size={16} /> #{tag}
               </li>
@@ -375,5 +408,29 @@ export function SidebarNavigation({
 
       {footer}
     </aside>
+  );
+
+  return (
+    <>
+      <button
+        type="button"
+        className="sidebar-mobile-toggle"
+        aria-controls="octarine-sidebar"
+        aria-expanded={mobileOpen}
+        aria-label="Open navigation"
+        onClick={() => setMobileOpen(true)}
+      >
+        <Menu size={20} />
+      </button>
+      {mobileOpen && (
+        <button
+          type="button"
+          className="sidebar-mobile-backdrop"
+          aria-label="Close navigation"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
+      {sidebar}
+    </>
   );
 }

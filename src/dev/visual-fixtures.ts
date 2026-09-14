@@ -1,6 +1,7 @@
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import type { CaptureContext, CustomView, FileNode, Task, TaskDraft } from "../types";
 import type { TaskCreationConfig } from "../generated/ipc/TaskCreationConfig";
+import type { UpdateChannel } from "../generated/ipc/UpdateChannel";
 import type { VisualScenario } from "./visual-scenario";
 
 function localDate(offsetDays = 0): string {
@@ -214,6 +215,7 @@ export function installVisualFixtures(scenario: VisualScenario): void {
     },
     migrationSource: null,
   };
+  let updateChannel: UpdateChannel = "stable";
   let eventListenerId = 0;
   const files = new Map<string, string>([
     [
@@ -228,7 +230,8 @@ export function installVisualFixtures(scenario: VisualScenario): void {
   ]);
 
   mockWindows("main");
-  mockIPC((command, args) => {
+  mockIPC((command, payload) => {
+    const args = (payload ?? {}) as Record<string, unknown>;
     switch (command) {
       case "tauri":
         return ++eventListenerId;
@@ -248,6 +251,31 @@ export function installVisualFixtures(scenario: VisualScenario): void {
           migrationSource: null,
         };
         return structuredClone(taskCreationConfig);
+      case "get_update_runtime_info":
+        return {
+          currentVersion: "0.1.0",
+          channel: updateChannel,
+          channelMutable: true,
+          distribution: "direct",
+          installStrategy: "self_update",
+          checkConfigured: true,
+          installationSupported: true,
+        };
+      case "set_update_channel":
+        updateChannel = args.channel as UpdateChannel;
+        return {
+          currentVersion: "0.1.0",
+          channel: updateChannel,
+          channelMutable: true,
+          distribution: "direct",
+          installStrategy: "self_update",
+          checkConfigured: true,
+          installationSupported: true,
+        };
+      case "check_for_update":
+        return null;
+      case "install_update":
+        return null;
       case "preview_task_draft": {
         const input = String(args.input).trim();
         if (!input) throw { code: "invalid_draft", message: "Task title is required." };

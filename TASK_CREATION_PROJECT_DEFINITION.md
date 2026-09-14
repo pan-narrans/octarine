@@ -95,7 +95,7 @@ Primary job:
 
 | Layer         | Technology             | Role                                                                                |
 | ------------- | ---------------------- | ----------------------------------------------------------------------------------- |
-| Desktop shell | Tauri 1.x              | Existing native filesystem and typed IPC boundary.                                  |
+| Desktop shell | Tauri 2                | Existing native filesystem and typed IPC boundary.                                  |
 | Frontend      | React 18 + TypeScript  | Compact capture, shared composer, settings, previews, feedback.                     |
 | State         | Zustand                | Existing task state plus bounded creation state and reconciliation.                 |
 | Native domain | Rust                   | Canonical validation, parsing, serialization, routing, safe writes, Undo, indexing. |

@@ -1,0 +1,113 @@
+name: Set updater channel target
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: Updater channel to change
+        required: true
+        type: choice
+        options:
+          - stable
+          - beta
+      tag:
+        description: Existing published release tag, for example v1.0.0
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: updater-pages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Point ${{ inputs.channel }} to ${{ inputs.tag }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Check out updater site
+        uses: actions/checkout@v6
+
+      - name: Set up pinned Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+
+      - name: Validate release and build channel manifests
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_CHANNEL: ${{ inputs.channel }}
+          TARGET_TAG: ${{ inputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          release="$(gh release view "$TARGET_TAG" --json isDraft,isPrerelease)"
+          if [[ "$(jq -r '.isDraft' <<< "$release")" != "false" ]]; then
+            echo "Target must be published release: $TARGET_TAG" >&2
+            exit 1
+          fi
+
+          mkdir -p "$RUNNER_TEMP/target" site/updates
+          cp update-site/index.html site/index.html
+          gh release download "$TARGET_TAG" --pattern latest.json --dir "$RUNNER_TEMP/target"
+          version="$(node .github/scripts/update-manifests.mjs validate "$RUNNER_TEMP/target/latest.json")"
+          if [[ "$TARGET_TAG" != "v$version" ]]; then
+            echo "Release tag $TARGET_TAG does not match manifest version $version." >&2
+            exit 1
+          fi
+          manifest_channel="$(node .github/scripts/update-manifests.mjs channel "$RUNNER_TEMP/target/latest.json")"
+          release_channel="$(jq -r 'if .isPrerelease then "beta" else "stable" end' <<< "$release")"
+          if [[ "$manifest_channel" != "$release_channel" ]]; then
+            echo "GitHub release type does not match manifest version." >&2
+            exit 1
+          fi
+          if [[ "$TARGET_CHANNEL" == "stable" && "$release_channel" != "stable" ]]; then
+            echo "Stable channel cannot target prerelease $TARGET_TAG." >&2
+            exit 1
+          fi
+
+          cp "$RUNNER_TEMP/target/latest.json" "site/updates/$TARGET_CHANNEL.json"
+          if [[ "$TARGET_CHANNEL" == "stable" ]]; then
+            other_channel="beta"
+          else
+            other_channel="stable"
+          fi
+
+          current_url="https://pan-narrans.github.io/octarine/updates/$other_channel.json?run=$GITHUB_RUN_ID"
+          if curl --fail --silent --show-error --location \
+            --header "Cache-Control: no-cache" "$current_url" \
+            --output "site/updates/$other_channel.json"; then
+            node .github/scripts/update-manifests.mjs validate "site/updates/$other_channel.json"
+          else
+            rm -f "site/updates/$other_channel.json"
+          fi
+
+          {
+            echo "## Updater channel target"
+            echo "- Actor: $GITHUB_ACTOR"
+            echo "- Channel: $TARGET_CHANNEL"
+            echo "- Tag: $TARGET_TAG"
+            echo "- Version: $version"
+            echo "- URL: https://pan-narrans.github.io/octarine/updates/$TARGET_CHANNEL.json"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

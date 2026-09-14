@@ -108,6 +108,41 @@ export const PartialSuccessWarning: Story = {
   },
 };
 
+export const ApplicationUpdateAvailable: Story = {
+  args: {
+    notifications: [
+      {
+        id: "application-update-available",
+        kind: "info",
+        title: "Octarine 1.0.0 available",
+        message: "Stable update will restart Octarine immediately after installation.",
+        detail: "Signed release with safer local updates and recovery improvements.",
+        actions: [
+          { label: "Update now", onClick: () => undefined },
+          { label: "Later", onClick: () => undefined },
+        ],
+      },
+    ],
+  },
+};
+
+export const ApplicationUpdateFailed: Story = {
+  args: {
+    notifications: [
+      {
+        id: "application-update-install-error",
+        kind: "error",
+        title: "Update not installed",
+        message: "Update signature could not be verified. Current version remains installed.",
+        actions: [
+          { label: "Retry", onClick: () => undefined },
+          { label: "Open download page", onClick: () => undefined },
+        ],
+      },
+    ],
+  },
+};
+
 export const Stack: Story = {
   args: {
     notifications: [

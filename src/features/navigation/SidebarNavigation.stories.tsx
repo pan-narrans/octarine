@@ -49,6 +49,19 @@ export const ContextSelected: Story = {
   args: { selectedSection: "ctx:focus" },
 };
 
+export const MobileClosed: Story = {
+  globals: { viewport: { value: "octarineMobile", isRotated: false } },
+};
+
+export const MobileOpen: Story = {
+  globals: { viewport: { value: "octarineMobile", isRotated: false } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("button", { name: "Open navigation" }));
+    await expect(canvas.getByRole("complementary", { name: "Octarine navigation" })).toBeVisible();
+  },
+};
+
 export const InactiveProjectsHidden: Story = {
   args: {
     projects: ["octarine/ui", "work/current"],

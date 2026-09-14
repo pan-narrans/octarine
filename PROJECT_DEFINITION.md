@@ -64,7 +64,7 @@ Primary job:
 
 | Layer                | Technology                  | Role and justification                                                                                                                   |
 | -------------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| Desktop shell        | Tauri 1.6                   | Existing trusted filesystem and IPC boundary.                                                                                            |
+| Desktop shell        | Tauri 2                     | Existing trusted filesystem and IPC boundary.                                                                                            |
 | Frontend             | React 18.3 + TypeScript 5.2 | Existing UI stack and typed task contracts.                                                                                              |
 | State                | Zustand 4.5                 | Existing task state; supports optimistic card mutation and targeted rollback.                                                            |
 | Board interaction    | Native pointer/drag events  | MVP needs status/context drop zones, not sortable lists; avoids new drag dependency. Existing editor supplies non-pointer mutation path. |

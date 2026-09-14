@@ -5,7 +5,8 @@
 
 use octarine::app_state::AppState;
 use octarine::config::{
-    expand_home, load_or_migrate_config, save_config, validate_config_for_vault, TaskCreationConfig,
+    expand_home, load_or_migrate_config_from_previous_identifier, save_config,
+    validate_config_for_vault, TaskCreationConfig, UpdateChannel,
 };
 use octarine::db::{
     boot_sweep_with_diagnostics, delete_file, index_single_file, initialize_db, query_tasks,
@@ -31,6 +32,10 @@ use octarine::task_creation::{CaptureContext, TaskDraft, TaskDraftPreview};
 use octarine::task_service::{
     CreateTaskError, CreateTaskErrorCode, CreateTaskResult, MoveTaskProjectError,
     MoveTaskProjectResult, UndoCreateReceipt,
+};
+use octarine::updates::{
+    check_remote_update, install_self_update, runtime_info, AvailableUpdate, UpdateInstallStrategy,
+    UpdateRuntimeInfo,
 };
 use octarine::watcher_service::build_vault_watcher;
 use octarine::writer::{
@@ -465,6 +470,65 @@ fn set_task_creation_config(
 }
 
 #[tauri::command]
+fn get_update_runtime_info(app: tauri::AppHandle, state: State<'_, AppState>) -> UpdateRuntimeInfo {
+    let channel = state.config.lock().unwrap().update_channel;
+    runtime_info(&app.package_info().version.to_string(), channel)
+}
+
+#[tauri::command]
+fn set_update_channel(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    channel: UpdateChannel,
+) -> Result<UpdateRuntimeInfo, String> {
+    let current_channel = state.config.lock().unwrap().update_channel;
+    let current = runtime_info(&app.package_info().version.to_string(), current_channel);
+    if !current.channel_mutable {
+        return Err("Update channel is controlled by this build.".into());
+    }
+
+    let mut updated = state.config.lock().unwrap().clone();
+    updated.update_channel = channel;
+    {
+        let mut config = state.config.lock().unwrap();
+        save_config(&state.config_path, &updated)?;
+        *config = updated;
+    }
+    Ok(runtime_info(
+        &app.package_info().version.to_string(),
+        channel,
+    ))
+}
+
+#[tauri::command]
+async fn check_for_update(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Option<AvailableUpdate>, String> {
+    let channel = state.config.lock().unwrap().update_channel;
+    let channel = octarine::updates::effective_channel(channel);
+    check_remote_update(&app, channel).await
+}
+
+#[tauri::command]
+async fn install_update(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    expected_version: String,
+) -> Result<(), String> {
+    let channel = state.config.lock().unwrap().update_channel;
+    let channel = octarine::updates::effective_channel(channel);
+    match runtime_info(&app.package_info().version.to_string(), channel).install_strategy {
+        UpdateInstallStrategy::SelfUpdate => {
+            install_self_update(&app, channel, &expected_version).await
+        }
+        UpdateInstallStrategy::Unsupported => {
+            Err("Automatic installation is unavailable for this build.".to_string())
+        }
+    }
+}
+
+#[tauri::command]
 fn update_event_schedule(
     state: State<'_, AppState>,
     file_path: String,
@@ -702,15 +766,20 @@ fn write_file_content(
     Ok(())
 }
 
-fn main() {
+fn initialize_app_state(app: &tauri::App) -> AppState {
     let home_dir = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
     let home_path = std::path::Path::new(&home_dir);
-    let platform_config_dir = tauri::api::path::config_dir()
-        .expect("platform config directory is unavailable")
-        .join("com.octarine.app");
-    let platform_cache_dir = tauri::api::path::cache_dir()
-        .expect("platform cache directory is unavailable")
-        .join("com.octarine.app");
+    let platform_config_dir = app
+        .path()
+        .app_config_dir()
+        .expect("platform config directory is unavailable");
+    let platform_cache_dir = app
+        .path()
+        .app_cache_dir()
+        .expect("platform cache directory is unavailable");
+    let previous_platform_config_dir = platform_config_dir
+        .parent()
+        .map(|parent| parent.join("com.octarine.app"));
     std::fs::create_dir_all(&platform_cache_dir)
         .expect("failed to create application cache directory");
     let db_path = platform_cache_dir
@@ -719,8 +788,12 @@ fn main() {
         .into_owned();
     let diagnostics =
         Diagnostics::new(&platform_config_dir).expect("failed to initialize local diagnostics");
-    let (config, config_path) = load_or_migrate_config(home_path, &platform_config_dir)
-        .expect("failed to load application configuration");
+    let (config, config_path) = load_or_migrate_config_from_previous_identifier(
+        home_path,
+        &platform_config_dir,
+        previous_platform_config_dir.as_deref(),
+    )
+    .expect("failed to load application configuration");
 
     let vault_setting = std::env::var("OCTARINE_VAULT_DIR")
         .ok()
@@ -782,7 +855,7 @@ fn main() {
         .expect("failed to run boot sweep");
     diagnostics.info("app.started", "Octarine started.");
 
-    let mut builder = tauri::Builder::default().manage(AppState::new(
+    AppState::new(
         conn,
         db_path.clone(),
         vault_dir.clone(),
@@ -790,59 +863,67 @@ fn main() {
         config,
         config_path,
         diagnostics,
-    ));
+    )
+}
 
-    builder = builder.invoke_handler(tauri::generate_handler![
-        get_tasks,
-        get_custom_views,
-        preview_task_draft,
-        create_task,
-        undo_created_task,
-        move_task_project,
-        preflight_project_rename,
-        execute_project_rename,
-        preflight_project_merge,
-        resolve_project_merge_conflict,
-        resolve_project_merge_conflicts_bulk,
-        prepare_project_merge,
-        execute_project_merge,
-        cancel_project_merge,
-        list_project_merge_recovery,
-        delete_project_merge_recovery,
-        open_project_merge_recovery,
-        get_vault_config,
-        set_vault_config,
-        get_journal_config,
-        set_journal_config,
-        get_task_creation_config,
-        set_task_creation_config,
-        read_journal_tree,
-        update_event_schedule,
-        update_task_status,
-        move_task,
-        update_task_markdown,
-        delete_task_markdown,
-        read_dir_tree,
-        create_file,
-        create_directory,
-        delete_path,
-        rename_path,
-        read_file_content,
-        write_file_content
-    ]);
-
-    builder
+fn main() {
+    tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .invoke_handler(tauri::generate_handler![
+            get_tasks,
+            get_custom_views,
+            preview_task_draft,
+            create_task,
+            undo_created_task,
+            move_task_project,
+            preflight_project_rename,
+            execute_project_rename,
+            preflight_project_merge,
+            resolve_project_merge_conflict,
+            resolve_project_merge_conflicts_bulk,
+            prepare_project_merge,
+            execute_project_merge,
+            cancel_project_merge,
+            list_project_merge_recovery,
+            delete_project_merge_recovery,
+            open_project_merge_recovery,
+            get_vault_config,
+            set_vault_config,
+            get_journal_config,
+            set_journal_config,
+            get_task_creation_config,
+            set_task_creation_config,
+            get_update_runtime_info,
+            set_update_channel,
+            check_for_update,
+            install_update,
+            read_journal_tree,
+            update_event_schedule,
+            update_task_status,
+            move_task,
+            update_task_markdown,
+            delete_task_markdown,
+            read_dir_tree,
+            create_file,
+            create_directory,
+            delete_path,
+            rename_path,
+            read_file_content,
+            write_file_content
+        ])
         .setup(|app| {
-            let state = app.state::<AppState>();
+            let state = initialize_app_state(app);
             let vault_dir = state.vault_dir.lock().unwrap().clone();
             let watcher = build_vault_watcher(
                 &state.db_path,
                 &vault_dir,
-                app.handle(),
+                app.handle().clone(),
                 state.diagnostics.clone(),
             )
             .map_err(std::io::Error::other)?;
             *state.watcher.lock().unwrap() = Some(watcher);
+            app.manage(state);
 
             Ok(())
         })

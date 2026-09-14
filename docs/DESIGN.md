@@ -22,7 +22,7 @@ Octarine uses a dark, interstellar workspace aesthetic: deep navy surfaces, rest
 - At the 1280×1024 visual-reference viewport, dashboard columns and cards are 420px wide with a 32px column gap. The journal editor is 904×220px.
 - The month calendar uses seven 116×98px cells with 8px gutters. Its 860px grid intentionally leaves breathing room inside the 904px main content width.
 - The desktop task modal is 860×820px, starts 90px from the top of the reference viewport, and keeps the complete structured form and footer visible.
-- Current responsive rules at 850px and 560px target modal and form layout. The application shell does not yet define a responsive sidebar breakpoint, so treat shell responsiveness as an area that needs deliberate validation rather than an established behavior.
+- At 850px and below, the application sidebar collapses into an off-canvas drawer so the workspace owns the full width. A fixed menu control opens it; backdrop, Escape, or navigation closes it.
 
 ## Components and interaction
 

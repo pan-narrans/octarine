@@ -17,13 +17,43 @@ test.describe("Sidebar navigation visual regression", () => {
     ["active-descendant-project", "active-descendant-project.png"],
   ] as const) {
     test(story, async ({ page }) => {
-      await page.setViewportSize({ width: 360, height: 840 });
+      await page.setViewportSize({ width: 1280, height: 840 });
       await page.goto(storyUrl(story));
       await expect(
         page.getByRole("complementary", { name: "Octarine navigation" }),
       ).toHaveScreenshot(snapshot);
     });
   }
+});
+
+test("opens and dismisses collapsed navigation", async ({ page }) => {
+  await page.setViewportSize({ width: 711, height: 900 });
+  await page.goto(storyUrl("default"));
+
+  const navigation = page.getByRole("complementary", { name: "Octarine navigation" });
+  await expect(navigation).toBeHidden();
+  await page.getByRole("button", { name: "Open navigation" }).click();
+  await expect(navigation).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(navigation).toBeHidden();
+});
+
+test.describe("Collapsed sidebar visual regression", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.setViewportSize({ width: 560, height: 840 });
+  });
+
+  test("closed", async ({ page }) => {
+    await page.goto(storyUrl("mobile-closed"));
+    await expect(page).toHaveScreenshot("mobile-closed.png");
+  });
+
+  test("open", async ({ page }) => {
+    await page.goto(storyUrl("mobile-closed"));
+    await page.getByRole("button", { name: "Open navigation" }).click();
+    await expect(page.getByRole("complementary", { name: "Octarine navigation" })).toBeVisible();
+    await expect(page).toHaveScreenshot("mobile-open.png");
+  });
 });
 
 test("selects a navigation item", async ({ page }) => {

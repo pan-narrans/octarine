@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { invoke } from "@tauri-apps/api/tauri";
+import { invoke } from "@tauri-apps/api/core";
 import {
   createTask,
   isCreateTaskResult,
@@ -19,7 +19,7 @@ import {
 } from "./ipc";
 import type { TaskDraft } from "../../types";
 
-vi.mock("@tauri-apps/api/tauri", () => ({ invoke: vi.fn() }));
+vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 
 const draft: TaskDraft = {
   title: "Task",

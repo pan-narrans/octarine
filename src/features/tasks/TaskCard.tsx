@@ -1,6 +1,6 @@
 import type { KeyboardEvent, MouseEvent } from "react";
 import { Calendar, CheckCircle2 } from "lucide-react";
-import { open } from "@tauri-apps/api/shell";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { MetadataPill, PriorityBadge, StatusControl } from "../../design-system/controls";
 import type { Task } from "../../types";
 
@@ -78,7 +78,7 @@ function renderMarkdownDescription(text: string) {
         onClick={(event) => {
           event.preventDefault();
           event.stopPropagation();
-          open(url).catch((error) => console.error("Failed to open URL:", error));
+          openUrl(url).catch((error) => console.error("Failed to open URL:", error));
         }}
         className="task-inline-link"
       >

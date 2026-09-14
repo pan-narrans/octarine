@@ -64,7 +64,7 @@ Primary job:
 
 | Layer               | Technology                                | Role and justification                                                                                                        |
 | ------------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| Desktop shell       | Tauri 1.6                                 | Existing local application shell; no native contract change required.                                                         |
+| Desktop shell       | Tauri 2                                   | Existing local application shell; no native contract change required.                                                         |
 | Frontend            | React 18.3 + TypeScript 5.2               | Current sidebar and project catalog live in React.                                                                            |
 | Client state        | React state and memoized pure projections | Separates full catalog from sidebar-visible catalog without duplicating durable state.                                        |
 | Preference storage  | Webview `localStorage`                    | Existing presentation-preference mechanism; vault-qualified key provides restart persistence without native config migration. |

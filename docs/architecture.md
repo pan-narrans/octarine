@@ -52,9 +52,13 @@ feedback, timed dismissal, persistent failures, Open file, Undo, and index-refre
 
 Commands accept path strings from the frontend but authorize them in Rust before filesystem access. Existing paths and destination parents are canonicalized and constrained to the configured vault or journal capability root. Task and vault-tree mutations are vault-only; content reads and writes may address either root. Traversal, root mutation, and symlink escapes are rejected.
 
-The webview allowlist disables blanket Tauri API access. Its only optional native API permission is opening validated HTTP or HTTPS links; command invocation and application events use Tauri's core IPC boundary.
+The main-window Tauri capability grants core IPC access plus URL opening through the opener plugin. Application link parsing restricts opened links to validated HTTP or HTTPS URLs; no blanket native API access is enabled.
 
-Configuration is a typed, versioned JSON document stored under the platform configuration directory for `com.octarine.app`. On first use, values from the legacy `~/.octarine_config.json` file are imported without deleting the original. Vault and journal environment overrides are applied independently at runtime and are not persisted.
+Configuration is a typed, versioned JSON document stored under platform configuration directory for
+`net.auranimnus.octarine`. When new identifier has no configuration, startup copies configuration
+from former `com.octarine.app` directory without deleting source. Values from legacy
+`~/.octarine_config.json` file are otherwise imported without deleting original. Vault and journal
+environment overrides are applied independently at runtime and are not persisted.
 
 Native operational diagnostics are written locally as capped JSON Lines in `diagnostics.jsonl` beside the platform configuration. Events contain a timestamp, severity, stable event code, and static redacted message; note contents, queries, and filesystem paths are not recorded. The application has no diagnostic upload or telemetry path.
 
@@ -74,7 +78,27 @@ Task queries join normalized tag and ordered context associations and return the
 
 The cache stores separate schema and index-format versions. Startup preserves indexed rows when both versions match, skips unchanged files by modification time plus content hash, and removes records for files no longer present. A version mismatch clears derived rows once so the following sweep rebuilds them from Markdown.
 
-The disposable database is stored as `com.octarine.app/index.sqlite3` under the operating system's platform cache directory. Older home-directory cache files are ignored and may be removed manually because Markdown remains authoritative.
+Disposable database is stored as `net.auranimnus.octarine/index.sqlite3` under operating system's
+platform cache directory. Cache is rebuilt after identifier migration. Older cache files are ignored
+and may be removed manually because Markdown remains authoritative.
+
+## Application Updates
+
+Settings load distribution, user-selected channel, current version, check readiness, and installation
+support from native runtime. Packaged macOS DMG and Linux AppImage builds use one self-update strategy.
+Unknown local development distribution disables remote checks and installation.
+
+Production checks use committed GitHub Pages stable or beta endpoint on launch and every 24 hours
+while process remains open. Launch, timer, manual, and channel-change checks share one in-flight
+operation. Update prompt shows release and restart information. Binary download begins only after
+explicit click; Tauri verifies embedded updater signature, installs, then restarts. Any different
+signed version offered by endpoint is eligible, allowing rollback and beta-to-stable transition.
+
+Stable manifest points to selected stable release. Beta manifest normally selects greater SemVer
+across stable and beta. Authorized manual workflow can point either channel to older published signed
+release. Release-only Tauri overlay creates updater artifacts; private signing key exists only in
+release secret storage and offline backup. Homebrew, APT, and DNF providers are absent from v1 runtime
+and build matrix.
 
 ## Filesystem Watcher
 

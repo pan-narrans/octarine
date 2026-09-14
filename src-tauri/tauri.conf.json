@@ -1,41 +1,42 @@
 {
   "build": {
-    "distDir": "../dist",
-    "devPath": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist",
     "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build"
+    "devUrl": "http://localhost:1420"
   },
-  "package": {
-    "productName": "octarine",
-    "version": "0.1.0"
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "signingIdentity": "-"
+    }
   },
-  "tauri": {
-    "allowlist": {
-      "all": false,
-      "shell": {
-        "all": false,
-        "execute": false,
-        "sidecar": false,
-        "open": "^https?://[^\\s]+$"
-      }
-    },
-    "bundle": {
-      "active": true,
-      "targets": "all",
-      "identifier": "com.octarine.app",
-      "icon": []
-    },
-    "security": {
-      "csp": null
-    },
+  "productName": "octarine",
+  "mainBinaryName": "octarine",
+  "version": "0.1.0",
+  "identifier": "net.auranimnus.octarine",
+  "plugins": {},
+  "app": {
     "windows": [
       {
         "title": "Octarine",
         "width": 1200,
         "height": 800,
         "resizable": true,
-        "fullscreen": false
+        "fullscreen": false,
+        "useHttpsScheme": true
       }
-    ]
+    ],
+    "security": {
+      "csp": null
+    }
   }
 }

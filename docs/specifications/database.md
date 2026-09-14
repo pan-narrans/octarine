@@ -2,7 +2,9 @@
 
 SQLite is a derived local index. Markdown files remain authoritative and the index must be rebuildable.
 
-The database file is `com.octarine.app/index.sqlite3` under the platform cache directory. A cache from an older location is not migrated; startup rebuilds the derived index from Markdown.
+Database file is `net.auranimnus.octarine/index.sqlite3` under platform cache directory. Cache from
+older identifier or older home-directory location is not migrated; startup rebuilds derived index
+from Markdown.
 
 ## Current Tables
 

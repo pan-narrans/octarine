@@ -26,6 +26,7 @@ import {
 } from "./components/ProjectMergeWorkflow";
 import { NotificationViewport } from "./components/NotificationViewport";
 import { TaskCreationSettings } from "./components/TaskCreationSettings";
+import { ApplicationUpdateSettings } from "./components/ApplicationUpdateSettings";
 import { TaskCard } from "./features/tasks/TaskCard";
 import { SidebarNavigation } from "./features/navigation/SidebarNavigation";
 import { projectCatalogs } from "./features/navigation/project-visibility";
@@ -73,6 +74,7 @@ import {
 import { useTaskCreationController } from "./features/tasks/use-task-creation-controller";
 import { useNotificationStore } from "./features/notifications/use-notification-store";
 import { useTaskCreationSettings } from "./features/settings/use-task-creation-settings";
+import { useApplicationUpdates } from "./features/settings/use-application-updates";
 import {
   createDirectory,
   createFile,
@@ -177,6 +179,9 @@ export function App() {
   } = useTaskStore();
 
   const visualScenario = getVisualScenario();
+  const applicationUpdates = useApplicationUpdates({
+    automaticCheck: import.meta.env.PROD && visualScenario === null,
+  });
   const [selectedSection, setSelectedSection] = useState<string>(() =>
     visualScenario === "calendar"
       ? "events"
@@ -1902,6 +1907,19 @@ export function App() {
         ) : selectedSection === "settings" ? (
           taskSettings.value ? (
             <div className="task-settings-app-surface">
+              {applicationUpdates.runtime && (
+                <ApplicationUpdateSettings
+                  runtime={applicationUpdates.runtime}
+                  available={applicationUpdates.available}
+                  checking={applicationUpdates.checking}
+                  installing={applicationUpdates.installing}
+                  savingChannel={applicationUpdates.savingChannel}
+                  error={applicationUpdates.error}
+                  onChannelChange={(channel) => void applicationUpdates.changeChannel(channel)}
+                  onCheck={() => void applicationUpdates.check()}
+                  onInstall={(update) => void applicationUpdates.install(update)}
+                />
+              )}
               <TaskCreationSettings
                 value={taskSettings.value}
                 errors={taskSettings.errors}

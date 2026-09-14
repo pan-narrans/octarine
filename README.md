@@ -18,6 +18,22 @@ Octarine is an early-stage, local-first desktop task manager and Markdown worksp
 
 Octarine is under active development. See `docs/architecture.md` and `docs/roadmap.md` for the honest implementation boundary.
 
+## Distribution Target
+
+First public release will provide two direct downloads through GitHub Releases:
+
+- macOS 15 Sequoia or newer on Apple Silicon: open DMG, drag Octarine into Applications, then use
+  macOS contextual Open flow for initial Gatekeeper approval.
+- Linux x86_64: download AppImage, run `chmod +x Octarine*.AppImage`, keep file in user-writable
+  directory, then launch it directly.
+
+Packaged app checks selected stable or beta channel on launch and every 24 hours while running. It
+downloads no binary until user selects Update now. Signed update installs and restarts immediately.
+Failure keeps current version and offers retry plus GitHub Releases fallback.
+
+Homebrew, APT, and DNF installation are not v1 targets. Public binaries are not available until first
+release passes signed cross-platform smoke matrix.
+
 ## Planned, Not Implemented
 
 - End-to-end encrypted peer-to-peer synchronization.
@@ -32,7 +48,7 @@ Octarine is under active development. See `docs/architecture.md` and `docs/roadm
 - React 18 and TypeScript.
 - Vite.
 - Zustand.
-- Tauri 1.
+- Tauri 2.
 - Rust.
 - SQLite through `rusqlite`.
 - Native filesystem events through `notify`.
@@ -85,4 +101,6 @@ cargo clippy --all-targets -- -D warnings
 cargo test --all-targets
 ```
 
-Read `CONTRIBUTING.md` before making changes. Product purpose is documented in `docs/vision.md`; current internals are documented in `docs/architecture.md`.
+Read `CONTRIBUTING.md` before making changes. Product purpose is documented in `docs/vision.md`;
+current internals are documented in `docs/architecture.md`; release prerequisites are documented in
+`docs/development/releasing.md`.

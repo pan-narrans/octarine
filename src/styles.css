@@ -63,6 +63,11 @@ body {
   overflow-y: auto;
 }
 
+.sidebar-mobile-toggle,
+.sidebar-mobile-backdrop {
+  display: none;
+}
+
 .sidebar h2 {
   font-size: 1.8rem;
   background: linear-gradient(135deg, var(--color-violet), var(--color-indigo));
@@ -320,6 +325,68 @@ body {
   padding-left: calc(0.75rem - 3px);
 }
 
+@media (max-width: 850px) {
+  #root {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sidebar {
+    position: fixed;
+    z-index: 100;
+    inset: 0 auto 0 0;
+    width: min(280px, calc(100vw - var(--space-12)));
+    visibility: hidden;
+    transform: translateX(-100%);
+    box-shadow: 18px 0 48px rgba(0, 0, 0, 0.36);
+    transition:
+      transform 0.2s ease-in-out,
+      visibility 0s linear 0.2s;
+  }
+
+  .sidebar.is-mobile-open {
+    visibility: visible;
+    transform: translateX(0);
+    transition-delay: 0s;
+  }
+
+  .sidebar-mobile-toggle {
+    position: fixed;
+    z-index: 80;
+    top: var(--space-4);
+    left: var(--space-4);
+    width: 40px;
+    height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(139, 92, 246, 0.34);
+    border-radius: var(--radius-md);
+    background: rgba(15, 23, 42, 0.96);
+    color: #d8c7ff;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
+    cursor: pointer;
+  }
+
+  .sidebar-mobile-toggle:hover,
+  .sidebar-mobile-toggle:focus-visible {
+    border-color: rgba(139, 92, 246, 0.68);
+    background: rgba(139, 92, 246, 0.18);
+    outline: none;
+  }
+
+  .sidebar-mobile-backdrop {
+    position: fixed;
+    z-index: 90;
+    inset: 0;
+    display: block;
+    width: 100vw;
+    height: 100vh;
+    border: 0;
+    background: rgba(3, 6, 18, 0.68);
+    cursor: default;
+  }
+}
+
 /* 2. Main Content Styles */
 .main-content {
   display: flex;
@@ -327,6 +394,12 @@ body {
   padding: 3rem;
   overflow-y: auto;
   position: relative;
+}
+
+@media (max-width: 850px) {
+  .main-content {
+    padding-top: calc(var(--space-12) + var(--space-6));
+  }
 }
 
 .main-header {
@@ -5121,6 +5194,58 @@ body {
   padding: var(--space-6);
 }
 
+.application-update-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  align-items: end;
+  gap: var(--space-4);
+  padding: var(--space-6) var(--space-6) var(--space-3);
+}
+
+.application-update-settings {
+  container-type: inline-size;
+}
+
+.application-update-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+@container (max-width: 520px) {
+  .application-update-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .application-update-actions {
+    justify-content: flex-start;
+  }
+}
+
+.application-update-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.application-update-description,
+.application-update-warning {
+  margin: 0;
+  padding: 0 var(--space-6) var(--space-4);
+  color: var(--text-muted);
+  font-size: 0.73rem;
+  line-height: 1.45;
+}
+
+.application-update-warning {
+  color: #d6bd7a;
+}
+
+.application-update-settings > .task-settings-field-error {
+  padding: 0 var(--space-6) var(--space-4);
+}
+
 .task-settings-field {
   min-width: 0;
   margin: 0;
@@ -5310,8 +5435,13 @@ body {
   }
 
   .task-settings-routing-grid,
-  .task-settings-insertion-grid {
+  .task-settings-insertion-grid,
+  .application-update-grid {
     grid-template-columns: 1fr;
+  }
+
+  .application-update-actions {
+    justify-content: flex-start;
   }
 
   .task-settings-routing-grid,

@@ -4,10 +4,19 @@ use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 use tempfile::NamedTempFile;
 
-pub const CONFIG_VERSION: u32 = 2;
+pub const CONFIG_VERSION: u32 = 3;
 const CONFIG_FILE_NAME: &str = "config.json";
 const VERSION_1_BACKUP_FILE_NAME: &str = "config.v1.backup.json";
+const VERSION_2_BACKUP_FILE_NAME: &str = "config.v2.backup.json";
 const LEGACY_CONFIG_FILE_NAME: &str = ".octarine_config.json";
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "snake_case")]
+pub enum UpdateChannel {
+    #[default]
+    Stable,
+    Beta,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "snake_case")]
@@ -138,6 +147,7 @@ pub struct AppConfig {
     pub inbox_file: String,
     pub default_unprojected_destination: UnprojectedDestination,
     pub templates: DestinationTemplates,
+    pub update_channel: UpdateChannel,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub journal_migration: Option<JournalMigration>,
 }
@@ -153,6 +163,7 @@ impl Default for AppConfig {
             inbox_file: "inbox.md".to_string(),
             default_unprojected_destination: UnprojectedDestination::Inbox,
             templates: DestinationTemplates::default(),
+            update_channel: UpdateChannel::Stable,
             journal_migration: None,
         }
     }
@@ -198,6 +209,20 @@ struct AppConfigV1 {
     journal_dir: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AppConfigV2 {
+    version: u32,
+    vault_dir: String,
+    journal_folder: String,
+    daily_filename_pattern: String,
+    project_folder: String,
+    inbox_file: String,
+    default_unprojected_destination: UnprojectedDestination,
+    templates: DestinationTemplates,
+    journal_migration: Option<JournalMigration>,
+}
+
 #[derive(Debug, Default, Deserialize)]
 struct LegacyConfig {
     vault_dir: Option<String>,
@@ -208,9 +233,28 @@ pub fn load_or_migrate_config(
     home_dir: &Path,
     platform_config_dir: &Path,
 ) -> Result<(AppConfig, PathBuf), String> {
+    load_or_migrate_config_from_previous_identifier(home_dir, platform_config_dir, None)
+}
+
+pub fn load_or_migrate_config_from_previous_identifier(
+    home_dir: &Path,
+    platform_config_dir: &Path,
+    previous_platform_config_dir: Option<&Path>,
+) -> Result<(AppConfig, PathBuf), String> {
     fs::create_dir_all(platform_config_dir)
         .map_err(|e| format!("Failed to create application config directory: {e}"))?;
     let config_path = platform_config_dir.join(CONFIG_FILE_NAME);
+
+    if !config_path.exists() {
+        if let Some(previous_config_path) = previous_platform_config_dir
+            .map(|directory| directory.join(CONFIG_FILE_NAME))
+            .filter(|path| path.is_file())
+        {
+            fs::copy(&previous_config_path, &config_path).map_err(|e| {
+                format!("Failed to migrate config from previous application identifier: {e}")
+            })?;
+        }
+    }
 
     let config = if config_path.exists() {
         load_current_or_migrate_versioned(home_dir, &config_path)?
@@ -252,17 +296,18 @@ fn load_current_or_migrate_versioned(home_dir: &Path, path: &Path) -> Result<App
 
     match probe.version {
         CONFIG_VERSION => load_versioned_config(&content),
+        2 => {
+            let version_two: AppConfigV2 = serde_json::from_str(&content)
+                .map_err(|e| format!("Failed to parse version 2 config: {e}"))?;
+            back_up_versioned_config(path, VERSION_2_BACKUP_FILE_NAME)?;
+            let migrated = migrate_v2(version_two)?;
+            save_config(path, &migrated)?;
+            Ok(migrated)
+        }
         1 => {
             let version_one: AppConfigV1 = serde_json::from_str(&content)
                 .map_err(|e| format!("Failed to parse version 1 config: {e}"))?;
-            let backup_path = path
-                .parent()
-                .ok_or_else(|| "Config path has no parent directory.".to_string())?
-                .join(VERSION_1_BACKUP_FILE_NAME);
-            if !backup_path.exists() {
-                fs::copy(path, &backup_path)
-                    .map_err(|e| format!("Failed to back up version 1 config: {e}"))?;
-            }
+            back_up_versioned_config(path, VERSION_1_BACKUP_FILE_NAME)?;
             let migrated = migrate_v1(home_dir, version_one)?;
             save_config(path, &migrated)?;
             Ok(migrated)
@@ -271,6 +316,18 @@ fn load_current_or_migrate_versioned(home_dir: &Path, path: &Path) -> Result<App
             "Unsupported config version {version} (expected {CONFIG_VERSION})."
         )),
     }
+}
+
+fn back_up_versioned_config(path: &Path, backup_file_name: &str) -> Result<(), String> {
+    let backup_path = path
+        .parent()
+        .ok_or_else(|| "Config path has no parent directory.".to_string())?
+        .join(backup_file_name);
+    if !backup_path.exists() {
+        fs::copy(path, &backup_path)
+            .map_err(|e| format!("Failed to back up versioned config: {e}"))?;
+    }
+    Ok(())
 }
 
 fn load_versioned_config(content: &str) -> Result<AppConfig, String> {
@@ -313,6 +370,28 @@ fn migrate_v1(home_dir: &Path, config: AppConfigV1) -> Result<AppConfig, String>
     }
 
     Ok(migrated)
+}
+
+fn migrate_v2(config: AppConfigV2) -> Result<AppConfig, String> {
+    if config.version != 2 {
+        return Err(format!(
+            "Cannot migrate config version {} as version 2.",
+            config.version
+        ));
+    }
+
+    Ok(AppConfig {
+        version: CONFIG_VERSION,
+        vault_dir: config.vault_dir,
+        journal_folder: config.journal_folder,
+        daily_filename_pattern: config.daily_filename_pattern,
+        project_folder: config.project_folder,
+        inbox_file: config.inbox_file,
+        default_unprojected_destination: config.default_unprojected_destination,
+        templates: config.templates,
+        update_channel: UpdateChannel::Stable,
+        journal_migration: config.journal_migration,
+    })
 }
 
 fn absolute_for_comparison(configured: &str, home_dir: &Path) -> PathBuf {
@@ -500,10 +579,64 @@ mod tests {
         assert_eq!(config, AppConfig::default());
         assert_eq!(path, app_config.join(CONFIG_FILE_NAME));
         let saved = fs::read_to_string(path).unwrap();
-        assert!(saved.contains("\"version\": 2"));
+        assert!(saved.contains("\"version\": 3"));
+        assert!(saved.contains("\"update_channel\": \"stable\""));
         assert!(saved.contains("\"journal_folder\": \"journals\""));
         assert!(saved.contains("\"daily_note\""));
         assert!(!saved.contains("\"dailyNote\""));
+    }
+
+    #[test]
+    fn migrates_version_two_with_stable_channel_and_keeps_backup() {
+        let temp = tempdir().unwrap();
+        let home = temp.path().join("home");
+        let app_config = temp.path().join("config/net.auranimnus.octarine");
+        fs::create_dir(&home).unwrap();
+        fs::create_dir_all(&app_config).unwrap();
+        let mut version_two = serde_json::to_value(AppConfig::default()).unwrap();
+        version_two["version"] = serde_json::json!(2);
+        version_two
+            .as_object_mut()
+            .unwrap()
+            .remove("update_channel");
+        let original = serde_json::to_string_pretty(&version_two).unwrap();
+        fs::write(app_config.join(CONFIG_FILE_NAME), &original).unwrap();
+
+        let (config, _) = load_or_migrate_config(&home, &app_config).unwrap();
+
+        assert_eq!(config.version, CONFIG_VERSION);
+        assert_eq!(config.update_channel, UpdateChannel::Stable);
+        assert_eq!(
+            fs::read_to_string(app_config.join(VERSION_2_BACKUP_FILE_NAME)).unwrap(),
+            original
+        );
+    }
+
+    #[test]
+    fn copies_previous_identifier_config_without_deleting_source() {
+        let temp = tempdir().unwrap();
+        let home = temp.path().join("home");
+        let previous = temp.path().join("config/com.octarine.app");
+        let current = temp.path().join("config/net.auranimnus.octarine");
+        fs::create_dir(&home).unwrap();
+        fs::create_dir_all(&previous).unwrap();
+        let source = AppConfig {
+            update_channel: UpdateChannel::Beta,
+            ..AppConfig::default()
+        };
+        save_config(&previous.join(CONFIG_FILE_NAME), &source).unwrap();
+
+        let (config, path) =
+            load_or_migrate_config_from_previous_identifier(&home, &current, Some(&previous))
+                .unwrap();
+
+        assert_eq!(config, source);
+        assert_eq!(path, current.join(CONFIG_FILE_NAME));
+        assert!(previous.join(CONFIG_FILE_NAME).exists());
+        assert_eq!(
+            fs::read_to_string(&path).unwrap(),
+            fs::read_to_string(previous.join(CONFIG_FILE_NAME)).unwrap()
+        );
     }
 
     #[test]
@@ -607,7 +740,7 @@ mod tests {
 
         let (config, _) = load_or_migrate_config(&home, &app_config).unwrap();
 
-        assert_eq!(config.version, 2);
+        assert_eq!(config.version, CONFIG_VERSION);
         assert_eq!(config.vault_dir, "~/notes");
         assert_eq!(config.journal_folder, "journals/daily");
         assert_eq!(config.journal_migration, None);

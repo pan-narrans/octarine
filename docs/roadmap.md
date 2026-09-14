@@ -50,6 +50,20 @@ This document contains planned work. Items here are not current capabilities or 
 - Mobile and browser targets.
 - CRDT-based, end-to-end encrypted peer synchronization and auditable merge review.
 
+## Distribution and Updates
+
+- [x] Migrate desktop shell to Tauri 2 and application identifier to `net.auranimnus.octarine`.
+- [x] Add stable/beta update preference, automatic check, explicit install confirmation, and signed
+      direct/AppImage update path.
+- [x] Simplify v1 distribution to signed self-updating macOS DMG and Linux AppImage.
+- [x] Add launch plus 24-hour checks, explicit restart confirmation, retry/download fallback, and
+      signed downgrade support.
+- [x] Configure public release endpoints and updater signing secrets before first published build.
+- [x] Add GitHub Actions draft release builds and publish-triggered updater manifest deployment.
+- [x] Add stable/beta SemVer routing and explicit signed channel rollback workflow.
+- Run signed upgrade, downgrade, rollback, failure, and Gatekeeper smoke matrix before v1 publication.
+- Reconsider Homebrew, APT, DNF, Linux ARM64, macOS Intel, and Windows only after demonstrated demand.
+
 Performance numbers, platform support, encryption, and synchronization must not be advertised as current until verified.
 
 ## First Production Deployment Transition
