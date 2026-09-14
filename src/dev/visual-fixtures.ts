@@ -188,6 +188,10 @@ export function taskStatusFromMarkdown(rawMarkdown: string): Task["status"] {
           : "todo";
 }
 
+function mockVisualIPC(handler: Parameters<typeof mockIPC>[0]): void {
+  mockIPC(handler, { shouldMockEvents: true });
+}
+
 export function installVisualFixtures(scenario: VisualScenario): void {
   let tasks = scenario === "empty" ? [] : populatedTasks();
   let pendingRename = { source: "octarine", destination: "product" };
@@ -216,7 +220,6 @@ export function installVisualFixtures(scenario: VisualScenario): void {
     migrationSource: null,
   };
   let updateChannel: UpdateChannel = "stable";
-  let eventListenerId = 0;
   const files = new Map<string, string>([
     [
       `/visual/journal/${localDate()}.md`,
@@ -230,11 +233,9 @@ export function installVisualFixtures(scenario: VisualScenario): void {
   ]);
 
   mockWindows("main");
-  mockIPC((command, payload) => {
+  mockVisualIPC((command, payload) => {
     const args = (payload ?? {}) as Record<string, unknown>;
     switch (command) {
-      case "tauri":
-        return ++eventListenerId;
       case "get_tasks":
         return tasks.map((entry) => ({ ...entry }));
       case "get_custom_views":
