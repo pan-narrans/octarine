@@ -1,0 +1,24 @@
+title = "Octarine secret scanning"
+minVersion = "8.25.0"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Committed updater value is public verification key, never private signing key"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "secret"
+regexes = ['''F33725EBCF6DA44''']
+paths = ['''(^|/)src-tauri/src/updates\.rs$''']
+
+[[allowlists]]
+description = "Generated dependencies, build products, reports, and local agent tooling"
+paths = [
+  '''(^|/)\.agents/''',
+  '''(^|/)node_modules/''',
+  '''(^|/)src-tauri/target/''',
+  '''(^|/)storybook-static/''',
+  '''(^|/)playwright-report/''',
+  '''(^|/)test-results/''',
+]

@@ -21,7 +21,7 @@ jobs:
       channel: ${{ steps.metadata.outputs.channel }}
     steps:
       - name: Check out tagged source
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
 
@@ -63,6 +63,30 @@ jobs:
           echo "channel=$channel" >> "$GITHUB_OUTPUT"
           echo "Validated Octarine $tag_version for $channel channel."
 
+  visual:
+    name: Visual regression gate
+    needs: validate
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Set up pinned Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install chromium
+
+      - name: Run visual regression suite
+        run: npm run visual:test
+
   quality:
     name: Release quality gate
     needs: validate
@@ -70,7 +94,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Check out tagged source
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Install Tauri system dependencies
         run: |
@@ -86,7 +110,7 @@ jobs:
             xdg-utils
 
       - name: Set up pinned Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: .node-version
           cache: npm
@@ -109,6 +133,27 @@ jobs:
       - name: Build frontend
         run: npm run build
 
+      - name: Test frontend
+        run: npm run test
+
+      - name: Test updater manifest routing
+        run: npm run test:updater-manifests
+
+      - name: Test release configuration
+        run: npm run test:release-config
+
+      - name: Test release smoke-report validation
+        run: npm run test:release-smoke
+
+      - name: Test public-release verification
+        run: npm run test:public-release
+
+      - name: Check third-party notices
+        run: npm run licenses:check
+
+      - name: Run visual regression suite
+        run: npm run visual:test
+
       - name: Check Rust formatting
         working-directory: src-tauri
         run: cargo fmt --all -- --check
@@ -123,7 +168,7 @@ jobs:
 
   updater-artifacts:
     name: Signed updater (${{ matrix.label }})
-    needs: [validate, quality]
+    needs: [validate, quality, visual]
     permissions:
       contents: write
     strategy:
@@ -145,7 +190,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Check out tagged source
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Install Linux system dependencies
         if: runner.os == 'Linux'
@@ -164,7 +209,7 @@ jobs:
             xdg-utils
 
       - name: Set up pinned Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: .node-version
           cache: npm
@@ -176,7 +221,7 @@ jobs:
         run: rustup target add ${{ matrix.target }}
 
       - name: Build signed updater artifact
-        uses: tauri-apps/tauri-action@v1
+        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}

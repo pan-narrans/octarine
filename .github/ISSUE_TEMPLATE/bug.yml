@@ -1,0 +1,51 @@
+name: Bug report
+description: Report reproducible Octarine defect
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Remove vault contents, filesystem paths, credentials, and other private data before submission.
+  - type: input
+    id: version
+    attributes:
+      label: Octarine version
+      placeholder: v1.0.0-beta.1
+    validations:
+      required: true
+  - type: dropdown
+    id: operating-system
+    attributes:
+      label: Operating system
+      options:
+        - macOS 15+ Apple Silicon
+        - Ubuntu
+        - Fedora
+        - Unsupported platform
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Observed behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: Report contains no private vault data, credentials, updater keys, or sensitive paths.
+          required: true

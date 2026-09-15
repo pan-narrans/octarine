@@ -1,6 +1,7 @@
-dist
-node_modules
-src-tauri/target
-package-lock.json
-Cargo.lock
-.agents
+dist/
+node_modules/
+src-tauri/target/
+storybook-static/
+playwright-report/
+test-results/
+THIRD_PARTY_LICENSES.md

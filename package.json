@@ -2,6 +2,8 @@
   "name": "octarine-client",
   "private": true,
   "version": "0.1.0",
+  "license": "MIT",
+  "repository": "github:pan-narrans/octarine",
   "type": "module",
   "engines": {
     "node": ">=26.3.1 <27"
@@ -15,6 +17,11 @@
     "visual:test": "playwright test",
     "visual:update": "playwright test --update-snapshots",
     "test:updater-manifests": "node --test .github/scripts/update-manifests.test.mjs",
+    "test:release-config": "node --test .github/scripts/release-config.test.mjs",
+    "test:release-smoke": "node --test .github/scripts/validate-smoke-report.test.mjs",
+    "test:public-release": "node --test .github/scripts/verify-public-release.test.mjs",
+    "licenses:generate": "node scripts/generate-third-party-notices.mjs --write",
+    "licenses:check": "node scripts/generate-third-party-notices.mjs --check",
     "preview": "vite preview",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",

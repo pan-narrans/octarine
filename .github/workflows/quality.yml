@@ -15,12 +15,12 @@ concurrency:
 
 jobs:
   quality:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 30
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Install Tauri system dependencies
         run: |
@@ -36,7 +36,7 @@ jobs:
             xdg-utils
 
       - name: Set up pinned Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: .node-version
           cache: npm
@@ -59,8 +59,26 @@ jobs:
       - name: Build frontend
         run: npm run build
 
+      - name: Test frontend
+        run: npm run test
+
       - name: Test updater manifest routing
         run: npm run test:updater-manifests
+
+      - name: Test release configuration
+        run: npm run test:release-config
+
+      - name: Test release smoke-report validation
+        run: npm run test:release-smoke
+
+      - name: Test public-release verification
+        run: npm run test:public-release
+
+      - name: Check third-party notices
+        run: npm run licenses:check
+
+      - name: Run visual regression suite
+        run: npm run visual:test
 
       - name: Check Rust formatting
         working-directory: src-tauri

@@ -3,6 +3,8 @@ name = "octarine"
 version = "0.1.0"
 edition = "2021"
 description = "Octarine Core Backend Caching & Synchronization Engine"
+license = "MIT"
+repository = "https://github.com/pan-narrans/octarine"
 
 [lib]
 name = "octarine"

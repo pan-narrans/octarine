@@ -15,7 +15,6 @@ A worktree is an ownership boundary. At most one writing agent may own a worktre
 - `docs/development/`: enforceable contributor rules.
 - `docs/specifications/`: normative descriptions of implemented formats and interfaces.
 - `docs/adr/`: durable architecture decisions.
-- `.agents/`: pinned, project-agnostic task skills.
 
 ## Current Git Model
 
@@ -87,9 +86,3 @@ Run `npm run ipc:generate` after changing a shared Rust DTO and commit the gener
 - `docs/safeguards.md`: regression-prevention invariants learned from failures.
 
 A change that alters user-visible behavior, an interface, an architectural invariant, or a contributor command must update its owning documentation in the same change. Do not rewrite an ADR to hide history; supersede it with a new ADR when a decision changes.
-
-## Skills
-
-The `.agents` submodule contains reusable procedures, not Octarine policy. A skill must discover and obey this repository's rules. Project-specific overrides must not be added inside `.agents`.
-
-Pin `.agents` to a reviewed revision and update it through a focused submodule change. A skill correction belongs in the submodule's source repository.

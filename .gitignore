@@ -5,6 +5,7 @@
 
 # Agent Temporal State
 .agent-session/
+.agents/
 
 # Rust / Cargo
 target/
