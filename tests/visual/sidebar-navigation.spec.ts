@@ -8,6 +8,7 @@ test.describe("Sidebar navigation visual regression", () => {
     ["default", "default.png"],
     ["project-selected", "project-selected.png"],
     ["context-selected", "context-selected.png"],
+    ["beta-channel", "beta-channel.png"],
     ["project-rename-available", "project-rename-available.png"],
     ["project-rename-editing", "project-rename-editing.png"],
     ["inactive-projects-hidden", "inactive-projects-hidden.png"],
@@ -45,6 +46,7 @@ test.describe("Collapsed sidebar visual regression", () => {
 
   test("closed", async ({ page }) => {
     await page.goto(storyUrl("mobile-closed"));
+    await expect(page.getByRole("button", { name: "Open navigation" })).toBeVisible();
     await expect(page).toHaveScreenshot("mobile-closed.png");
   });
 
@@ -53,6 +55,12 @@ test.describe("Collapsed sidebar visual regression", () => {
     await page.getByRole("button", { name: "Open navigation" }).click();
     await expect(page.getByRole("complementary", { name: "Octarine navigation" })).toBeVisible();
     await expect(page).toHaveScreenshot("mobile-open.png");
+  });
+
+  test("beta channel open", async ({ page }) => {
+    await page.goto(storyUrl("beta-channel-mobile-open"));
+    await expect(page.getByRole("complementary", { name: "Octarine navigation" })).toBeVisible();
+    await expect(page).toHaveScreenshot("beta-channel-mobile-open.png");
   });
 });
 

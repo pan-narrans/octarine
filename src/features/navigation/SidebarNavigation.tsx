@@ -13,6 +13,7 @@ import {
   Tag,
   X,
 } from "lucide-react";
+import type { UpdateChannel } from "../../generated/ipc/UpdateChannel";
 import type { CustomView } from "../../types";
 
 interface ProjectNode {
@@ -33,6 +34,8 @@ interface SidebarNavigationProps {
   onSelectSection: (section: string, filter?: string) => void;
   onShowInactiveProjectsChange: (showInactiveProjects: boolean) => void;
   onRenameProject?: (sourceProject: string, destinationProject: string) => Promise<void> | void;
+  appVersion?: string;
+  updateChannel?: UpdateChannel;
   beforeCollections?: ReactNode;
   footer?: ReactNode;
 }
@@ -117,6 +120,8 @@ export function SidebarNavigation({
   onSelectSection,
   onShowInactiveProjectsChange,
   onRenameProject,
+  appVersion,
+  updateChannel = "stable",
   beforeCollections,
   footer,
 }: SidebarNavigationProps) {
@@ -288,125 +293,146 @@ export function SidebarNavigation({
       aria-label="Octarine navigation"
       onClickCapture={closeAfterNavigation}
     >
-      <h2>
-        Octarine <span>🌌</span>
-      </h2>
+      <div className="sidebar-scroll-content">
+        <h2 className="sidebar-brand">
+          <span className="sidebar-brand-name">Octarine</span>
+          <span className="sidebar-brand-mark" aria-hidden="true" />
+          {updateChannel === "beta" && <span className="sidebar-beta-badge">Beta</span>}
+        </h2>
 
-      <div className="sidebar-section">
-        <h4>Smart Views</h4>
-        <ul className="sidebar-list">
-          <li
-            className={`sidebar-item ${isActive("all") ? "active" : ""}`}
-            onClick={() => selectSection("all")}
-          >
-            <Inbox size={16} /> All Tasks
-          </li>
-          <li
-            className={`sidebar-item ${isActive("todo") ? "active" : ""}`}
-            onClick={() => selectSection("todo")}
-          >
-            <CheckCircle2 size={16} color="#9ca3af" /> Not Started
-          </li>
-          <li
-            className={`sidebar-item ${isActive("doing") ? "active" : ""}`}
-            onClick={() => selectSection("doing")}
-          >
-            <Loader2 size={16} className="animate-spin" color="#a78bfa" /> In Progress
-          </li>
-          <li
-            className={`sidebar-item ${isActive("events") ? "active" : ""}`}
-            onClick={() => selectSection("events")}
-          >
-            <Calendar size={16} color="#818cf8" /> Schedule Events
-          </li>
-        </ul>
+        <div className="sidebar-section">
+          <h4>Smart Views</h4>
+          <ul className="sidebar-list">
+            <li
+              className={`sidebar-item ${isActive("all") ? "active" : ""}`}
+              onClick={() => selectSection("all")}
+            >
+              <Inbox size={16} /> All Tasks
+            </li>
+            <li
+              className={`sidebar-item ${isActive("todo") ? "active" : ""}`}
+              onClick={() => selectSection("todo")}
+            >
+              <CheckCircle2 size={16} color="#9ca3af" /> Not Started
+            </li>
+            <li
+              className={`sidebar-item ${isActive("doing") ? "active" : ""}`}
+              onClick={() => selectSection("doing")}
+            >
+              <Loader2 size={16} className="animate-spin" color="#a78bfa" /> In Progress
+            </li>
+            <li
+              className={`sidebar-item ${isActive("events") ? "active" : ""}`}
+              onClick={() => selectSection("events")}
+            >
+              <Calendar size={16} color="#818cf8" /> Schedule Events
+            </li>
+          </ul>
+        </div>
+
+        {beforeCollections}
+
+        {customViews.length > 0 && (
+          <div className="sidebar-section">
+            <h4>Custom Query Dashboards</h4>
+            <ul className="sidebar-list">
+              {customViews.map((view) => {
+                const filterLine = view.query_raw
+                  .split("\n")
+                  .find((line) => line.trim().startsWith("filter:"));
+                const filter = filterLine
+                  ? filterLine.trim().slice("filter:".length).trim().replace(/"/g, "")
+                  : "";
+
+                return (
+                  <li
+                    key={`${view.title}-${view.line_number}`}
+                    className={`sidebar-item ${isActive(`view:${view.title}`) ? "active" : ""}`}
+                    onClick={() => selectSection(`view:${view.title}`, filter)}
+                  >
+                    <Layers size={16} /> {view.title}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
+
+        {projectCatalogSize > 0 && (
+          <div className="sidebar-section">
+            <div className="sidebar-section-heading">
+              <h4>Projects</h4>
+              <button
+                type="button"
+                className={`sidebar-project-visibility-toggle ${
+                  showInactiveProjects ? "active" : ""
+                }`}
+                aria-pressed={showInactiveProjects}
+                onClick={() => onShowInactiveProjectsChange(!showInactiveProjects)}
+              >
+                <Eye size={12} />
+                Show inactive
+              </button>
+            </div>
+            <ul className="sidebar-list sidebar-project-list">
+              {Object.values(projectTree).map((node) => renderProjectNode(node))}
+            </ul>
+          </div>
+        )}
+
+        {contexts.length > 0 && (
+          <div className="sidebar-section">
+            <h4>Contexts</h4>
+            <ul className="sidebar-list">
+              {contexts.map((context) => (
+                <li
+                  key={context}
+                  className={`sidebar-item ${isActive(`ctx:${context}`) ? "active" : ""}`}
+                  onClick={() => selectSection(`ctx:${context}`)}
+                >
+                  <Tag size={16} /> @{context}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {tags.length > 0 && (
+          <div className="sidebar-section">
+            <h4>Tags</h4>
+            <ul className="sidebar-list">
+              {tags.map((tag) => (
+                <li
+                  key={tag}
+                  className={`sidebar-item ${isActive(`tag:${tag}`) ? "active" : ""}`}
+                  onClick={() => selectSection(`tag:${tag}`)}
+                >
+                  <Hash size={16} /> #{tag}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {footer}
       </div>
 
-      {beforeCollections}
-
-      {customViews.length > 0 && (
-        <div className="sidebar-section">
-          <h4>Custom Query Dashboards</h4>
-          <ul className="sidebar-list">
-            {customViews.map((view) => {
-              const filterLine = view.query_raw
-                .split("\n")
-                .find((line) => line.trim().startsWith("filter:"));
-              const filter = filterLine
-                ? filterLine.trim().slice("filter:".length).trim().replace(/"/g, "")
-                : "";
-
-              return (
-                <li
-                  key={`${view.title}-${view.line_number}`}
-                  className={`sidebar-item ${isActive(`view:${view.title}`) ? "active" : ""}`}
-                  onClick={() => selectSection(`view:${view.title}`, filter)}
-                >
-                  <Layers size={16} /> {view.title}
-                </li>
-              );
-            })}
-          </ul>
+      {appVersion && (
+        <div
+          className="sidebar-release-identity"
+          aria-label={`Octarine version ${appVersion}${
+            updateChannel === "beta" ? ", Beta channel" : ""
+          }`}
+        >
+          <span>v{appVersion}</span>
+          {updateChannel === "beta" && (
+            <>
+              <span aria-hidden="true">·</span>
+              <span>Beta channel</span>
+            </>
+          )}
         </div>
       )}
-
-      {projectCatalogSize > 0 && (
-        <div className="sidebar-section">
-          <div className="sidebar-section-heading">
-            <h4>Projects</h4>
-            <button
-              type="button"
-              className={`sidebar-project-visibility-toggle ${
-                showInactiveProjects ? "active" : ""
-              }`}
-              aria-pressed={showInactiveProjects}
-              onClick={() => onShowInactiveProjectsChange(!showInactiveProjects)}
-            >
-              <Eye size={12} />
-              Show inactive
-            </button>
-          </div>
-          <ul className="sidebar-list sidebar-project-list">
-            {Object.values(projectTree).map((node) => renderProjectNode(node))}
-          </ul>
-        </div>
-      )}
-
-      {contexts.length > 0 && (
-        <div className="sidebar-section">
-          <h4>Contexts</h4>
-          <ul className="sidebar-list">
-            {contexts.map((context) => (
-              <li
-                key={context}
-                className={`sidebar-item ${isActive(`ctx:${context}`) ? "active" : ""}`}
-                onClick={() => selectSection(`ctx:${context}`)}
-              >
-                <Tag size={16} /> @{context}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {tags.length > 0 && (
-        <div className="sidebar-section">
-          <h4>Tags</h4>
-          <ul className="sidebar-list">
-            {tags.map((tag) => (
-              <li
-                key={tag}
-                className={`sidebar-item ${isActive(`tag:${tag}`) ? "active" : ""}`}
-                onClick={() => selectSection(`tag:${tag}`)}
-              >
-                <Hash size={16} /> #{tag}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {footer}
     </aside>
   );
 

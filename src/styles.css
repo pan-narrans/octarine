@@ -60,6 +60,14 @@ body {
   display: flex;
   flex-direction: column;
   padding: 2rem 1.5rem;
+  overflow: hidden;
+}
+
+.sidebar-scroll-content {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
   overflow-y: auto;
 }
 
@@ -70,9 +78,6 @@ body {
 
 .sidebar h2 {
   font-size: 1.8rem;
-  background: linear-gradient(135deg, var(--color-violet), var(--color-indigo));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
   letter-spacing: -0.05em;
   margin-bottom: 2rem;
   font-weight: 700;
@@ -81,8 +86,31 @@ body {
   gap: 0.5rem;
 }
 
-.sidebar h2 span {
-  font-size: 1.25rem;
+.sidebar-brand-name {
+  background: linear-gradient(135deg, var(--color-violet), var(--color-indigo));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.sidebar-brand-mark {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex: 0 0 auto;
+  background: var(--color-violet);
+}
+
+.sidebar-beta-badge {
+  padding: 0.2rem 0.35rem;
+  border: 1px solid rgba(167, 139, 250, 0.5);
+  border-radius: 999px;
+  background: rgba(139, 92, 246, 0.14);
+  color: #d8c7ff;
+  -webkit-text-fill-color: #d8c7ff;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
 }
 
 .sidebar-section {
@@ -304,6 +332,16 @@ body {
 
 .sidebar-footer {
   margin-top: auto;
+}
+
+.sidebar-release-identity {
+  padding-top: var(--space-4);
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  line-height: 1.25;
 }
 
 .sidebar-settings-link {
