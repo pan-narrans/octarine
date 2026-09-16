@@ -49,28 +49,84 @@ Before first public release:
 
 ## Release Process
 
-1. Stabilize `release/<version>` and synchronize `package.json`, `src-tauri/Cargo.toml`, and
-   `src-tauri/tauri.conf.json` versions.
-2. Merge verified release into `master`.
-3. Create and push annotated tag on `master`:
+### Prepare Release Line
+
+1. Create protected `release/<version>` from latest `master`, for example `release/0.1.0`.
+2. Select features for release. Each feature or fix reaches release branch through short-lived branch
+   and PR. Never commit directly to release branch.
+3. Keep unrelated or later work outside release branch.
+
+### Publish Beta Iteration
+
+1. Prepare version through PR so `package.json`, `src-tauri/Cargo.toml`, and
+   `src-tauri/tauri.conf.json` all contain exact prerelease version, such as `0.1.0-beta.1`.
+2. Verify release-branch tip and create annotated tag there:
 
    ```bash
-   git tag -a v1.0.0 -m "Octarine v1.0.0"
-   git push origin v1.0.0
+   git tag -a v0.1.0-beta.1 -m "Octarine v0.1.0-beta.1"
+   git push origin v0.1.0-beta.1
    ```
 
-   Use SemVer prerelease tags such as `v1.1.0-beta.1` for beta channel.
+3. Let `Draft release` workflow validate and build artifacts.
+4. Complete smoke tests, then publish GitHub prerelease manually. Publication advances Beta updater
+   manifest; Stable manifest stays unchanged.
 
-4. `Draft release` workflow validates tag, runs complete quality gate, and builds:
+When testing finds bug:
+
+1. Create `fix/<slug>` from same release branch.
+2. Commit fix on that branch and merge it through PR into release branch.
+3. Prepare next prerelease version through PR, such as `0.1.0-beta.2`.
+4. Create new annotated tag on new release-branch tip. Never move `v0.1.0-beta.1`.
+5. Build, smoke-test, and publish new prerelease. Existing tag remains rollback target.
+
+```text
+release/0.1.0
+
+A──B──C  v0.1.0-beta.1
+      \
+       D──E──F  v0.1.0-beta.2
+```
+
+After stable `v0.1.0` exists, do not publish another `v0.1.0-beta.N`; SemVer considers stable
+`0.1.0` newer than every prerelease for same core version. Start next line, such as
+`v0.1.1-beta.1` or `v0.2.0-beta.1`.
+
+### Promote Stable Release
+
+1. Prepare stable version through PR into release branch so all configured versions contain exact
+   stable version, such as `0.1.0`.
+2. Run complete release verification.
+3. Merge `release/0.1.0` into `master` through PR using merge commit.
+4. Create and push annotated tag on resulting `master` tip:
+
+   ```bash
+   git tag -a v0.1.0 -m "Octarine v0.1.0"
+   git push origin v0.1.0
+   ```
+
+5. `Draft release` workflow validates tag, runs complete quality gate, and builds:
    - signed direct macOS Apple Silicon updater and DMG;
    - signed Linux x86_64 AppImage updater.
-5. Review draft assets and test installation. Do not publish failed or incomplete release.
-6. Publish draft manually. `Publish updater manifests` validates immutable signed artifact URLs,
+6. Review draft assets and test installation. Do not publish failed or incomplete release.
+7. Publish draft manually. `Publish updater manifests` validates immutable signed artifact URLs,
    points stable at current stable publication, selects greater SemVer across stable and beta for beta
    channel, then deploys through GitHub Pages.
+8. Delete release branch after stable publication unless maintained release line still needs fixes.
 
 Publishing release makes matching update channel discover it. Draft creation alone changes no live
 updater manifest. Pages may return 404 for channel with no published release yet.
+
+## Automation Alignment
+
+Before using this branch model for releases, repository automation must enforce it:
+
+- Quality and Security workflows run for PRs targeting `master` or `release/**`.
+- Prerelease tag validation requires tag commit to belong to matching protected release branch.
+- Stable tag validation requires tag commit to belong to `master`.
+- GitHub rules protect `master`, `release/**`, and published `v*` tags.
+
+Current automation must be reviewed and updated as part of branch-model migration. Do not create Beta
+tag from release branch while workflow still requires every tag to belong to `master`.
 
 ## Manual Channel Rollback
 
