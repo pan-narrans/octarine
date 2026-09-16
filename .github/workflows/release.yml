@@ -36,12 +36,6 @@ jobs:
             exit 1
           fi
 
-          git fetch origin master
-          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/master; then
-            echo "Release tag must point to a commit on master." >&2
-            exit 1
-          fi
-
           tag_version="${GITHUB_REF_NAME#v}"
           tauri_version="$(jq -r '.version' src-tauri/tauri.conf.json)"
           package_version="$(jq -r '.version' package.json)"
@@ -56,8 +50,21 @@ jobs:
 
           if [[ "$tag_version" == *-* ]]; then
             channel="beta"
+            release_version="${tag_version%%-*}"
+            release_branch="release/$release_version"
+            git fetch origin \
+              "refs/heads/$release_branch:refs/remotes/origin/$release_branch"
+            if ! git merge-base --is-ancestor "$GITHUB_SHA" "origin/$release_branch"; then
+              echo "Prerelease tag must point to a commit on $release_branch." >&2
+              exit 1
+            fi
           else
             channel="stable"
+            git fetch origin master
+            if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/master; then
+              echo "Stable release tag must point to a commit on master." >&2
+              exit 1
+            fi
           fi
 
           echo "channel=$channel" >> "$GITHUB_OUTPUT"

@@ -59,12 +59,14 @@ describe("public release configuration", () => {
   });
 
   it("runs complete quality gates before signed release builds", async () => {
-    const [qualityWorkflow, releaseWorkflow, publishWorkflow, channelWorkflow] = await Promise.all([
-      readFile(new URL(".github/workflows/quality.yml", rootUrl), "utf8"),
-      readFile(new URL(".github/workflows/release.yml", rootUrl), "utf8"),
-      readFile(new URL(".github/workflows/publish-updater-pages.yml", rootUrl), "utf8"),
-      readFile(new URL(".github/workflows/set-updater-channel.yml", rootUrl), "utf8"),
-    ]);
+    const [qualityWorkflow, securityWorkflow, releaseWorkflow, publishWorkflow, channelWorkflow] =
+      await Promise.all([
+        readFile(new URL(".github/workflows/quality.yml", rootUrl), "utf8"),
+        readFile(new URL(".github/workflows/security.yml", rootUrl), "utf8"),
+        readFile(new URL(".github/workflows/release.yml", rootUrl), "utf8"),
+        readFile(new URL(".github/workflows/publish-updater-pages.yml", rootUrl), "utf8"),
+        readFile(new URL(".github/workflows/set-updater-channel.yml", rootUrl), "utf8"),
+      ]);
     const requiredCommands = [
       "npm run test",
       "npm run test:release-config",
@@ -80,7 +82,16 @@ describe("public release configuration", () => {
         assert.ok(workflow.includes(`run: ${command}\n`), `${command} missing from workflow`);
       }
     }
+    for (const workflow of [qualityWorkflow, securityWorkflow]) {
+      assert.match(workflow, /pull_request:\n\s+branches: \[master, "release\/\*\*"\]/);
+      assert.match(workflow, /push:\n\s+branches: \[master, "release\/\*\*"\]/);
+      assert.doesNotMatch(workflow, /branches: \[[^\]]*develop/);
+    }
     assert.match(releaseWorkflow, /needs: \[validate, quality, visual\]/);
+    assert.match(releaseWorkflow, /release_version="\$\{tag_version%%-\*\}"/);
+    assert.match(releaseWorkflow, /release_branch="release\/\$release_version"/);
+    assert.match(releaseWorkflow, /origin\/\$release_branch/);
+    assert.match(releaseWorkflow, /Stable release tag must point to a commit on master\./);
     assert.match(publishWorkflow, /--pattern smoke-report\.json/);
     assert.match(publishWorkflow, /validate-smoke-report\.mjs/);
     assert.match(publishWorkflow, /Verify public source clone/);
@@ -88,10 +99,6 @@ describe("public release configuration", () => {
     assert.match(channelWorkflow, /--pattern smoke-report\.json/);
     assert.match(channelWorkflow, /validate-smoke-report\.mjs/);
     assert.match(channelWorkflow, /verify-public-release\.mjs/);
-    const securityWorkflow = await readFile(
-      new URL(".github/workflows/security.yml", rootUrl),
-      "utf8",
-    );
     assert.match(securityWorkflow, /gitleaks\/gitleaks-action@[a-f0-9]{40}/);
     assert.match(securityWorkflow, /GITLEAKS_VERSION: "8\.30\.1"/);
     assert.match(securityWorkflow, /rustsec\/audit-check@[a-f0-9]{40}/);
