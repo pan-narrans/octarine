@@ -22,9 +22,10 @@ Agents must not create or remove branches or worktrees, commit, amend, rebase, m
 `master` is only permanent branch. It represents source of latest stable release. Direct work and
 direct pushes are forbidden.
 
-Protected `release/<version>` branches integrate selected work for specific releases. Example:
+Unprotected `release/<version>` branches integrate selected work for specific releases. Example:
 `release/0.1.0`. Do not include leading `v` in branch name. Multiple release branches may coexist
-when versions require independent development.
+when versions require independent development. Pull requests remain required project policy even
+though GitHub does not enforce them for release branches.
 
 No permanent `develop` branch exists. No permanent `beta` branch exists. Beta is release channel
 represented by SemVer prerelease tags, GitHub prereleases, and `updates/beta.json`.
@@ -58,7 +59,7 @@ release branch. Record exceptional base choice in first PR targeting that releas
 | `hotfix/*`                               | `master`                     | Repair published stable line    |
 | `master` or hotfix follow-up work branch | affected active `release/*`  | Forward stable fix              |
 
-Never commit directly to `master` or `release/*`. Every change reaches protected branch through PR.
+Never commit directly to `master` or `release/*`. Every change reaches its target through PR.
 Use GitHub term "pull request" (PR); merge request (MR) means same workflow on other platforms.
 
 ## Work-Start Checklist
@@ -96,9 +97,9 @@ release/0.2.0      ──PR──> master        ──stable tag─> v0.2.0
 Only one release line should normally feed public Beta channel at a time, even when multiple release
 branches exist. Switching Beta release line is deliberate release decision.
 
-## Protected Branch Rules
+## Repository Rules
 
-Apply ruleset to `master` and `release/**`:
+Apply branch ruleset only to `master`:
 
 - Require pull request before merge.
 - Require Quality and Security status checks.
@@ -108,8 +109,15 @@ Apply ruleset to `master` and `release/**`:
 - Do not allow administrator bypass.
 - Require no approval count while repository has one maintainer; author cannot approve own PR.
 
-Keep short-lived work branches unprotected so their owner can rebase them when needed. Never rewrite
-shared branch without coordination.
+Keep `release/**` and short-lived work branches unprotected. Release changes still use PRs by project
+policy so CI, review history, and ownership stay visible. Never rewrite shared branch without
+coordination.
+
+Apply tag ruleset to `v*`:
+
+- Require successful Quality and Security checks on target commit before tag creation.
+- Block tag updates and deletion.
+- Do not allow administrator bypass.
 
 ## Commits
 
@@ -148,10 +156,11 @@ docs(contributing): clarify worktree ownership
 ## Tags
 
 - Create annotated tags only after required CI and release review pass.
-- Tag exact protected-branch tip being released.
+- Tag exact release-branch or `master` tip being released.
 - `v<version>-beta.<n>` tags belong to matching `release/<version>` branch.
 - Stable `v<version>` tags belong to `master` after release promotion.
 - Never move, recreate, or delete published release tag.
+- Require successful Quality and Security checks for every `v*` tag.
 - Protect `v*` tags against updates and deletion.
 
 ## Reusable Skills

@@ -51,7 +51,7 @@ Before first public release:
 
 ### Prepare Release Line
 
-1. Create protected `release/<version>` from latest `master`, for example `release/0.1.0`.
+1. Create unprotected `release/<version>` from latest `master`, for example `release/0.1.0`.
 2. Select features for release. Each feature or fix reaches release branch through short-lived branch
    and PR. Never commit directly to release branch.
 3. Keep unrelated or later work outside release branch.
@@ -60,7 +60,8 @@ Before first public release:
 
 1. Prepare version through PR so `package.json`, `src-tauri/Cargo.toml`, and
    `src-tauri/tauri.conf.json` all contain exact prerelease version, such as `0.1.0-beta.1`.
-2. Verify release-branch tip and create annotated tag there:
+2. Verify successful Quality and Security checks on release-branch tip, then create annotated tag
+   there:
 
    ```bash
    git tag -a v0.1.0-beta.1 -m "Octarine v0.1.0-beta.1"
@@ -95,7 +96,7 @@ After stable `v0.1.0` exists, do not publish another `v0.1.0-beta.N`; SemVer con
 
 1. Prepare stable version through PR into release branch so all configured versions contain exact
    stable version, such as `0.1.0`.
-2. Run complete release verification.
+2. Run complete release verification and confirm successful Quality and Security checks.
 3. Merge `release/0.1.0` into `master` through PR using merge commit.
 4. Create and push annotated tag on resulting `master` tip:
 
@@ -121,9 +122,11 @@ updater manifest. Pages may return 404 for channel with no published release yet
 Before using this branch model for releases, repository automation must enforce it:
 
 - Quality and Security workflows run for PRs targeting `master` or `release/**`.
-- Prerelease tag validation requires tag commit to belong to matching protected release branch.
+- Prerelease tag validation requires tag commit to belong to matching release branch.
 - Stable tag validation requires tag commit to belong to `master`.
-- GitHub rules protect `master`, `release/**`, and published `v*` tags.
+- GitHub branch rules protect only `master`; `release/**` remains unprotected.
+- GitHub tag rules require successful Quality and Security checks for every `v*` tag and block tag
+  updates and deletion.
 
 Current automation must be reviewed and updated as part of branch-model migration. Do not create Beta
 tag from release branch while workflow still requires every tag to belong to `master`.

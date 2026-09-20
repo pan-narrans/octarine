@@ -21,11 +21,12 @@ A worktree is an ownership boundary. At most one writing agent may own a worktre
 `master` is the only permanent branch and represents latest stable source. Work never lands directly
 on `master`.
 
-Each planned version gets protected integration branch named `release/<version>`, such as
-`release/0.1.0`. Features and fixes target release selected for them. Multiple release branches may
+Each planned version gets unprotected integration branch named `release/<version>`, such as
+`release/0.1.0`. Features and fixes target release selected for them through pull requests even
+though GitHub does not enforce branch protection on release branches. Multiple release branches may
 exist concurrently when versions need independent development. Beta is distribution channel
 represented by prerelease tags and updater manifest, not permanent branch. Repository has no
-permanent `develop` or `beta` branch.
+permanent `develop` or `beta` branch. `master` is only protected branch.
 
 Short-lived branches use one of these forms:
 
@@ -42,7 +43,7 @@ branches. See `docs/development/git.md`.
 
 Beta tags such as `v0.1.0-beta.1` point to verified tips of corresponding release branch. Stable
 release is merged through pull request into `master`, then tagged there as `v0.1.0`. Published tags
-are immutable.
+are immutable. Every `v*` tag requires successful Quality and Security checks on target commit.
 
 ## Verification
 

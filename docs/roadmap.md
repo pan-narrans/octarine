@@ -75,7 +75,8 @@ Before first public Beta:
 3. Update Quality and Security workflows to cover PRs targeting `master` and `release/**`.
 4. Update release validation so prerelease tags belong to matching `release/*` branch and stable tags
    belong to `master`.
-5. Protect `master`, `release/**`, and `v*` tags against bypass, force updates, and deletion.
+5. Protect only `master` among branches; keep `release/**` unprotected. Protect `v*` tags against
+   updates and deletion, and require successful Quality and Security checks.
 6. Stop using and remove permanent `develop` branch after all intended work is represented elsewhere.
 7. Follow `docs/development/releasing.md` for Beta iterations and stable promotion.
 

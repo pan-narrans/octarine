@@ -44,6 +44,7 @@ Every change:
 
 GitHub Actions `Quality` workflow must run complete frontend, generated-contract, and Rust gates for
 pull requests targeting `master` or `release/**`. Branch-model migration is incomplete until those
-triggers are configured. Local verification remains required before opening a pull request.
+triggers are configured. Every `v*` tag requires successful Quality and Security checks on target
+commit. Local verification remains required before opening a pull request.
 
 Commits and external actions remain subject to explicit authorization; they are not part of the default definition of done.
