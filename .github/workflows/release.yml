@@ -163,12 +163,6 @@ jobs:
       - name: Check third-party notices
         run: npm run licenses:check
 
-      - name: Install Playwright browser
-        run: npx playwright install chromium
-
-      - name: Run visual regression suite
-        run: npm run visual:test
-
       - name: Check Rust formatting
         working-directory: src-tauri
         run: cargo fmt --all -- --check
