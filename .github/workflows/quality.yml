@@ -74,6 +74,11 @@ jobs:
       - name: Test public-release verification
         run: npm run test:public-release
 
+      - name: Fetch cross-platform Rust dependencies
+        run: |
+          cargo fetch --manifest-path src-tauri/Cargo.toml --locked --target aarch64-apple-darwin
+          cargo fetch --manifest-path src-tauri/Cargo.toml --locked --target x86_64-unknown-linux-gnu
+
       - name: Check third-party notices
         run: npm run licenses:check
 
