@@ -74,11 +74,13 @@ jobs:
       - name: Test public-release verification
         run: npm run test:public-release
 
+      - name: Fetch cross-platform Rust dependencies
+        run: |
+          cargo fetch --manifest-path src-tauri/Cargo.toml --locked --target aarch64-apple-darwin
+          cargo fetch --manifest-path src-tauri/Cargo.toml --locked --target x86_64-unknown-linux-gnu
+
       - name: Check third-party notices
         run: npm run licenses:check
-
-      - name: Run visual regression suite
-        run: npm run visual:test
 
       - name: Check Rust formatting
         working-directory: src-tauri
@@ -91,3 +93,26 @@ jobs:
       - name: Test Rust
         working-directory: src-tauri
         run: cargo test --all-targets
+
+  visual:
+    name: visual
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Set up pinned Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install chromium
+
+      - name: Run visual regression suite
+        run: npm run visual:test

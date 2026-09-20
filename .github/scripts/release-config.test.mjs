@@ -76,10 +76,17 @@ describe("public release configuration", () => {
       "npm run licenses:check",
       "npm run visual:test",
     ];
+    const requiredCargoFetches = [
+      "cargo fetch --manifest-path src-tauri/Cargo.toml --locked --target aarch64-apple-darwin",
+      "cargo fetch --manifest-path src-tauri/Cargo.toml --locked --target x86_64-unknown-linux-gnu",
+    ];
 
     for (const workflow of [qualityWorkflow, releaseWorkflow]) {
       for (const command of requiredCommands) {
         assert.ok(workflow.includes(`run: ${command}\n`), `${command} missing from workflow`);
+      }
+      for (const command of requiredCargoFetches) {
+        assert.ok(workflow.includes(command), `${command} missing from workflow`);
       }
     }
     for (const workflow of [qualityWorkflow, securityWorkflow]) {
@@ -102,6 +109,7 @@ describe("public release configuration", () => {
     assert.match(securityWorkflow, /gitleaks\/gitleaks-action@[a-f0-9]{40}/);
     assert.match(securityWorkflow, /GITLEAKS_VERSION: "8\.30\.1"/);
     assert.match(securityWorkflow, /rustsec\/audit-check@[a-f0-9]{40}/);
+    assert.match(securityWorkflow, /working-directory: src-tauri/);
   });
 
   it("pins every workflow action to an immutable commit", async () => {
