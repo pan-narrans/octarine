@@ -27,6 +27,7 @@ Octarine uses a dark, interstellar workspace aesthetic: deep navy surfaces, rest
 ## Components and interaction
 
 - Sidebar items are compact rounded rows. Active items use a violet-tinted surface and a violet left indicator; hover increases contrast without changing the overall dark language.
+- Sidebar shows a small Beta badge beside Octarine only when Beta update channel is selected. Version sits in sidebar footer; Beta channel state is named there too.
 - Search and task cards use translucent surfaces with 1px borders and 12px radii. Focus states use the violet accent and glow.
 - A task card's complete surface is the single entry point to the structured task editor, including keyboard activation with Enter or Space. Status controls remain independent and task cards do not expose a separate edit button.
 - Shared radii are exposed as `--radius-control` (6px), `--radius-md` (8px), and `--radius-card`/`--radius-modal` (12px).

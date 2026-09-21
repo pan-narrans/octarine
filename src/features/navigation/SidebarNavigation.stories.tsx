@@ -49,11 +49,38 @@ export const ContextSelected: Story = {
   args: { selectedSection: "ctx:focus" },
 };
 
+export const BetaChannel: Story = {
+  args: {
+    appVersion: "0.1.0-beta.1",
+    updateChannel: "beta",
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText("Beta", { selector: ".sidebar-beta-badge" })).toBeVisible();
+    await expect(
+      canvas.getByLabelText("Octarine version 0.1.0-beta.1, Beta channel"),
+    ).toBeVisible();
+  },
+};
+
 export const MobileClosed: Story = {
   globals: { viewport: { value: "octarineMobile", isRotated: false } },
 };
 
 export const MobileOpen: Story = {
+  globals: { viewport: { value: "octarineMobile", isRotated: false } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("button", { name: "Open navigation" }));
+    await expect(canvas.getByRole("complementary", { name: "Octarine navigation" })).toBeVisible();
+  },
+};
+
+export const BetaChannelMobileOpen: Story = {
+  args: {
+    appVersion: "0.1.0-beta.1",
+    updateChannel: "beta",
+  },
   globals: { viewport: { value: "octarineMobile", isRotated: false } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);

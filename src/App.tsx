@@ -1396,6 +1396,8 @@ export function App() {
         onSelectSection={handleSidebarItemClick}
         onShowInactiveProjectsChange={handleShowInactiveProjectsChange}
         onRenameProject={handleSidebarProjectRename}
+        appVersion={applicationUpdates.runtime?.currentVersion}
+        updateChannel={applicationUpdates.runtime?.channel}
         beforeCollections={
           <>
             {/* Collapsible Journals Virtual Explorer Tree (Swapped to First!) */}
