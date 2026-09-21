@@ -66,17 +66,19 @@ This document contains planned work. Items here are not current capabilities or 
 
 Performance numbers, platform support, encryption, and synchronization must not be advertised as current until verified.
 
-## First Production Deployment Transition
+## Release-Branch Model Transition
 
-Before the first production deployment:
+Before first public Beta:
 
-1. [x] Create `develop` from the verified integration state.
-2. [x] Target ongoing feature work at `develop`.
-3. Stabilize a release on `release/<version>`.
-4. Run the complete release suite and update synchronized versions and `CHANGELOG.md`.
-5. Merge the verified release into `master`.
-6. Create an annotated `v<version>` tag on `master`.
-7. Build production artifacts from that tag.
-8. Merge release fixes back into `develop`.
+1. Move unpushed work from legacy `develop` checkout to short-lived work branches.
+2. Create `release/0.1.0` from selected verified baseline.
+3. Update Quality and Security workflows to cover PRs targeting `master` and `release/**`.
+4. Update release validation so prerelease tags belong to matching `release/*` branch and stable tags
+   belong to `master`.
+5. Protect only `master` among branches; keep `release/**` unprotected. Protect `v*` tags against
+   updates and deletion, and require successful Quality and Security checks.
+6. Stop using and remove permanent `develop` branch after all intended work is represented elsewhere.
+7. Follow `docs/development/releasing.md` for Beta iterations and stable promotion.
 
-After this transition, `master` represents production. Hotfixes branch from `master`, return to `master` with a new tag, and are also merged into `develop`.
+After first stable publication, `master` represents production. Hotfixes branch from `master`, return
+through PR with new stable tag, and are forwarded through PR into affected active release branches.

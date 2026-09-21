@@ -16,21 +16,34 @@ A worktree is an ownership boundary. At most one writing agent may own a worktre
 - `docs/specifications/`: normative descriptions of implemented formats and interfaces.
 - `docs/adr/`: durable architecture decisions.
 
-## Current Git Model
+## Git Model
 
-`develop` is the integration branch. Short-lived branches target `develop` and use one of these forms:
+`master` is the only permanent branch and represents latest stable source. Work never lands directly
+on `master`.
+
+Each planned version gets unprotected integration branch named `release/<version>`, such as
+`release/0.1.0`. Features and fixes target release selected for them through pull requests even
+though GitHub does not enforce branch protection on release branches. Multiple release branches may
+exist concurrently when versions need independent development. Beta is distribution channel
+represented by prerelease tags and updater manifest, not permanent branch. Repository has no
+permanent `develop` or `beta` branch. `master` is only protected branch.
+
+Short-lived branches use one of these forms:
 
 - `feature/<issue>-<slug>`
 - `fix/<issue>-<slug>`
 - `docs/<slug>`
 - `refactor/<slug>`
 - `chore/<slug>`
-- `release/<version>`
 - `hotfix/<issue>-<slug>`
 
-Omit the issue number when no issue exists. Short-lived task branches are squash-merged. See `docs/development/git.md`.
+Omit issue number when no issue exists. Short-lived task branches are squash-merged into selected
+`release/*` branch. Stable hotfixes target `master` and are forwarded into affected active release
+branches. See `docs/development/git.md`.
 
-`master` remains unchanged until the first production deployment. Releases stabilize on `release/<version>` from `develop`; after verification, the release is merged into `master`, tagged, and built. From that first deployment onward, `master` represents production.
+Beta tags such as `v0.1.0-beta.1` point to verified tips of corresponding release branch. Stable
+release is merged through pull request into `master`, then tagged there as `v0.1.0`. Published tags
+are immutable. Every `v*` tag requires successful Quality and Security checks on target commit.
 
 ## Verification
 
@@ -52,7 +65,9 @@ cargo clippy --all-targets -- -D warnings
 cargo test --all-targets
 ```
 
-Run `npm run ipc:generate` after changing a shared Rust DTO and commit the generated files. These commands are enforced by the `Quality` workflow for pull requests targeting `develop` or `master`, and on pushes to `develop`. See `docs/development/testing.md` for scope-aware verification.
+Run `npm run ipc:generate` after changing a shared Rust DTO and commit generated files. These commands
+must be enforced by `Quality` workflow for pull requests targeting `master` or `release/**`. See
+`docs/development/testing.md` for scope-aware verification.
 
 ## Architectural Invariants
 
