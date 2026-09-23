@@ -2,8 +2,8 @@
 
 Generated from production dependency lockfiles. Do not edit manually.
 
-- Cargo.lock SHA-256: `f94d8c8b848df1a35b79afe58fd989dc7bcf04c402f558d71a43e8afa3ff13c3`
-- package-lock.json SHA-256: `f83bcbcaebf15e4fa0761abd0a4d84c607cdd8dabf3b5390af236d003ebb9a46`
+- Cargo.lock SHA-256: `2974a3204c11262c40ac5d20bca30959528b7c2684e365ecc27a94e2b490e3a6`
+- package-lock.json SHA-256: `7d1e559f47542e316fa8e4ca7b894e1c268cb43807ba0663390ca7aee6775e49`
 
 ## Rust components
 

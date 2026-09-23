@@ -2574,7 +2574,7 @@ dependencies = [
 
 [[package]]
 name = "octarine"
-version = "0.1.0-beta.3"
+version = "0.1.0-beta.4"
 dependencies = [
  "chrono",
  "hex",
