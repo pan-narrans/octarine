@@ -49,13 +49,21 @@ describe("public release configuration", () => {
   });
 
   it("keeps updater artifact generation in release-only overlay", async () => {
-    const [base, release] = await Promise.all([
+    const [base, release, updaterSource] = await Promise.all([
       readJson("src-tauri/tauri.conf.json"),
       readJson("src-tauri/tauri.release.conf.json"),
+      readFile(new URL("src-tauri/src/updates.rs", rootUrl), "utf8"),
     ]);
+    const publicKey = updaterSource.match(/const UPDATER_PUBLIC_KEY: &str = "([^"]+)";/)?.[1];
 
     assert.equal(base.bundle.createUpdaterArtifacts, undefined);
     assert.equal(release.bundle.createUpdaterArtifacts, true);
+    assert.ok(publicKey, "runtime updater public key missing");
+    assert.equal(release.plugins.updater.pubkey, publicKey);
+    assert.match(
+      Buffer.from(publicKey, "base64").toString("utf8"),
+      /^untrusted comment: minisign public key:/,
+    );
   });
 
   it("runs complete quality gates before signed release builds", async () => {

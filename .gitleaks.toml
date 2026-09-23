@@ -10,7 +10,7 @@ targetRules = ["generic-api-key"]
 condition = "AND"
 regexTarget = "secret"
 regexes = ['''F33725EBCF6DA44''']
-paths = ['''(^|/)src-tauri/src/updates\.rs$''']
+paths = ['''(^|/)src-tauri/(src/updates\.rs|tauri\.release\.conf\.json)$''']
 
 [[allowlists]]
 description = "Generated dependencies, build products, reports, and local agent tooling"
