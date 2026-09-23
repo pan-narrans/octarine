@@ -107,6 +107,10 @@ describe("public release configuration", () => {
     assert.match(releaseWorkflow, /release_branch="release\/\$release_version"/);
     assert.match(releaseWorkflow, /origin\/\$release_branch/);
     assert.match(releaseWorkflow, /Stable release tag must point to a commit on master\./);
+    assert.match(
+      releaseWorkflow,
+      /- label: macOS Apple Silicon\n\s+runner: macos-latest\n\s+target: aarch64-apple-darwin\n\s+distribution: direct\n\s+bundles: app,dmg/,
+    );
     assert.match(publishWorkflow, /--pattern smoke-report\.json/);
     assert.match(publishWorkflow, /validate-smoke-report\.mjs/);
     assert.match(publishWorkflow, /Verify public source clone/);
