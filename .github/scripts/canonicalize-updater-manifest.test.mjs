@@ -14,6 +14,20 @@ function draftManifest() {
   };
 }
 
+function apiManifest() {
+  const source = draftManifest();
+  source.platforms["darwin-aarch64"].url =
+    "https://api.github.com/repos/pan-narrans/octarine/releases/assets/101";
+  source.platforms["linux-x86_64"].url =
+    "https://api.github.com/repos/pan-narrans/octarine/releases/assets/102";
+  return source;
+}
+
+const releaseAssets = [
+  { id: 101, name: "octarine_0.1.0-beta.5_aarch64.app.tar.gz" },
+  { id: 102, name: "octarine_0.1.0-beta.5_amd64.AppImage" },
+];
+
 describe("updater manifest canonicalization", () => {
   it("replaces draft release paths with immutable tag paths", () => {
     const source = draftManifest();
@@ -28,6 +42,26 @@ describe("updater manifest canonicalization", () => {
       "https://github.com/pan-narrans/octarine/releases/download/v0.1.0-beta.5/octarine.AppImage",
     );
     assert.match(source.platforms["darwin-aarch64"].url, /untagged-draft-id/);
+  });
+
+  it("maps GitHub API asset IDs to immutable release paths", () => {
+    const result = canonicalizeUpdaterManifest(apiManifest(), "v0.1.0-beta.5", releaseAssets);
+
+    assert.equal(
+      result.platforms["darwin-aarch64"].url,
+      "https://github.com/pan-narrans/octarine/releases/download/v0.1.0-beta.5/octarine_0.1.0-beta.5_aarch64.app.tar.gz",
+    );
+    assert.equal(
+      result.platforms["linux-x86_64"].url,
+      "https://github.com/pan-narrans/octarine/releases/download/v0.1.0-beta.5/octarine_0.1.0-beta.5_amd64.AppImage",
+    );
+  });
+
+  it("rejects unknown GitHub API asset IDs", () => {
+    assert.throws(
+      () => canonicalizeUpdaterManifest(apiManifest(), "v0.1.0-beta.5", []),
+      /asset ID 101 is unknown/,
+    );
   });
 
   it("rejects tag and manifest version mismatch", () => {

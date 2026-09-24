@@ -270,6 +270,10 @@ jobs:
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/release"
           gh release download "$RELEASE_TAG" --pattern latest.json --dir "$RUNNER_TEMP/release"
+          release_id="$(gh release view "$RELEASE_TAG" --json databaseId --jq .databaseId)"
+          gh api "repos/$GITHUB_REPOSITORY/releases/$release_id/assets?per_page=100" \
+            > "$RUNNER_TEMP/release-assets.json"
           node .github/scripts/canonicalize-updater-manifest.mjs \
-            "$RUNNER_TEMP/release/latest.json" "$RELEASE_TAG" "$RUNNER_TEMP/canonical-latest.json"
+            "$RUNNER_TEMP/release/latest.json" "$RELEASE_TAG" \
+            "$RUNNER_TEMP/canonical-latest.json" "$RUNNER_TEMP/release-assets.json"
           gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/canonical-latest.json#latest.json" --clobber
