@@ -17,6 +17,7 @@
     "visual:test": "playwright test",
     "visual:update": "playwright test --update-snapshots",
     "test:updater-manifests": "node --test .github/scripts/update-manifests.test.mjs",
+    "test:canonical-updater-manifest": "node --test .github/scripts/canonicalize-updater-manifest.test.mjs",
     "test:release-config": "node --test .github/scripts/release-config.test.mjs",
     "test:release-smoke": "node --test .github/scripts/validate-smoke-report.test.mjs",
     "test:public-release": "node --test .github/scripts/verify-public-release.test.mjs",
