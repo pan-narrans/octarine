@@ -275,5 +275,5 @@ jobs:
             > "$RUNNER_TEMP/release-assets.json"
           node .github/scripts/canonicalize-updater-manifest.mjs \
             "$RUNNER_TEMP/release/latest.json" "$RELEASE_TAG" \
-            "$RUNNER_TEMP/canonical-latest.json" "$RUNNER_TEMP/release-assets.json"
-          gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/canonical-latest.json#latest.json" --clobber
+            "$RUNNER_TEMP/release/latest.json" "$RUNNER_TEMP/release-assets.json"
+          gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/release/latest.json" --clobber
