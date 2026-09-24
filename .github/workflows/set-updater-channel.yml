@@ -59,9 +59,6 @@ jobs:
           mkdir -p "$RUNNER_TEMP/target" site/updates
           cp update-site/index.html site/index.html
           gh release download "$TARGET_TAG" --pattern latest.json --dir "$RUNNER_TEMP/target"
-          gh release download "$TARGET_TAG" --pattern smoke-report.json --dir "$RUNNER_TEMP/target"
-          node .github/scripts/validate-smoke-report.mjs \
-            "$RUNNER_TEMP/target/smoke-report.json" "$TARGET_TAG"
           version="$(node .github/scripts/update-manifests.mjs validate "$RUNNER_TEMP/target/latest.json")"
           if [[ "$TARGET_TAG" != "v$version" ]]; then
             echo "Release tag $TARGET_TAG does not match manifest version $version." >&2
@@ -76,6 +73,11 @@ jobs:
           if [[ "$TARGET_CHANNEL" == "stable" && "$release_channel" != "stable" ]]; then
             echo "Stable channel cannot target prerelease $TARGET_TAG." >&2
             exit 1
+          fi
+          if [[ "$TARGET_CHANNEL" == "stable" ]]; then
+            gh release download "$TARGET_TAG" --pattern smoke-report.json --dir "$RUNNER_TEMP/target"
+            node .github/scripts/validate-smoke-report.mjs \
+              "$RUNNER_TEMP/target/smoke-report.json" "$TARGET_TAG"
           fi
 
           cp "$RUNNER_TEMP/target/latest.json" "site/updates/$TARGET_CHANNEL.json"

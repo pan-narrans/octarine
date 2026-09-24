@@ -65,6 +65,9 @@ jobs:
       - name: Test updater manifest routing
         run: npm run test:updater-manifests
 
+      - name: Test updater manifest canonicalization
+        run: npm run test:canonical-updater-manifest
+
       - name: Test release configuration
         run: npm run test:release-config
 

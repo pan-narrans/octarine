@@ -44,8 +44,8 @@ Before first public release:
    `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` repository secrets.
 3. Complete public-source readiness review.
 4. Verify DMG and AppImage installation instructions using draft release assets.
-5. Pass signed update smoke matrix on macOS 15 Sequoia Apple Silicon, current Ubuntu LTS, and current
-   stable Fedora.
+5. Before stable publication, pass signed update smoke matrix on macOS 15 Sequoia Apple Silicon,
+   current Ubuntu LTS, and current stable Fedora.
 
 ## Release Process
 
@@ -69,8 +69,11 @@ Before first public release:
    ```
 
 3. Let `Draft release` workflow validate and build artifacts.
-4. Complete smoke tests, then publish GitHub prerelease manually. Publication advances Beta updater
-   manifest; Stable manifest stays unchanged.
+4. Inspect signed draft artifacts, then publish GitHub prerelease manually. First deployed Beta
+   manifest establishes updater bootstrap; Stable manifest stays unchanged.
+5. Complete signed update, rollback, failure-path, Linux, and Gatekeeper smoke matrix before stable
+   promotion. Beta iterations may publish before this matrix because public Beta channel is required
+   to exercise self-updates.
 
 When testing finds bug:
 
@@ -78,7 +81,8 @@ When testing finds bug:
 2. Commit fix on that branch and merge it through PR into release branch.
 3. Prepare next prerelease version through PR, such as `0.1.0-beta.2`.
 4. Create new annotated tag on new release-branch tip. Never move `v0.1.0-beta.1`.
-5. Build, smoke-test, and publish new prerelease. Existing tag remains rollback target.
+5. Build and publish new prerelease. Existing tag remains rollback target; retain smoke evidence for
+   stable promotion.
 
 ```text
 release/0.1.0
@@ -114,8 +118,9 @@ After stable `v0.1.0` exists, do not publish another `v0.1.0-beta.N`; SemVer con
    channel, then deploys through GitHub Pages.
 8. Delete release branch after stable publication unless maintained release line still needs fixes.
 
-Publishing release makes matching update channel discover it. Draft creation alone changes no live
-updater manifest. Pages may return 404 for channel with no published release yet.
+Publishing prerelease makes Beta channel discover it. Draft creation alone changes no live updater
+manifest. Stable publication requires attached validated smoke report. Pages may return 404 for
+channel with no published release yet.
 
 ## Automation Alignment
 

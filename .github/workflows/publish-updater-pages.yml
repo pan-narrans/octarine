@@ -67,9 +67,6 @@ jobs:
           }
 
           download_manifest "$RELEASE_TAG" "$RUNNER_TEMP/release"
-          gh release download "$RELEASE_TAG" --pattern smoke-report.json --dir "$RUNNER_TEMP/release"
-          node .github/scripts/validate-smoke-report.mjs \
-            "$RUNNER_TEMP/release/smoke-report.json" "$RELEASE_TAG"
           manifest_channel="$(node .github/scripts/update-manifests.mjs channel "$RUNNER_TEMP/release/latest.json")"
 
           if [[ "$RELEASE_PRERELEASE" == "true" ]]; then
@@ -85,6 +82,9 @@ jobs:
             node .github/scripts/update-manifests.mjs select-beta \
               "${beta_args[@]}" --output site/updates/beta.json
           else
+            gh release download "$RELEASE_TAG" --pattern smoke-report.json --dir "$RUNNER_TEMP/release"
+            node .github/scripts/validate-smoke-report.mjs \
+              "$RUNNER_TEMP/release/smoke-report.json" "$RELEASE_TAG"
             if [[ "$manifest_channel" != "stable" ]]; then
               echo "GitHub stable flag does not match updater manifest version." >&2
               exit 1

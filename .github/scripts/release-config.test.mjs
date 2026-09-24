@@ -81,6 +81,7 @@ describe("public release configuration", () => {
       "npm run test:release-smoke",
       "npm run test:public-release",
       "npm run test:updater-manifests",
+      "npm run test:canonical-updater-manifest",
       "npm run licenses:check",
       "npm run visual:test",
     ];
@@ -103,6 +104,9 @@ describe("public release configuration", () => {
       assert.doesNotMatch(workflow, /branches: \[[^\]]*develop/);
     }
     assert.match(releaseWorkflow, /needs: \[validate, quality, visual\]/);
+    assert.match(releaseWorkflow, /finalize-updater-manifest:/);
+    assert.match(releaseWorkflow, /needs: \[validate, updater-artifacts\]/);
+    assert.match(releaseWorkflow, /canonicalize-updater-manifest\.mjs/);
     assert.match(releaseWorkflow, /release_version="\$\{tag_version%%-\*\}"/);
     assert.match(releaseWorkflow, /release_branch="release\/\$release_version"/);
     assert.match(releaseWorkflow, /origin\/\$release_branch/);
@@ -111,10 +115,15 @@ describe("public release configuration", () => {
       releaseWorkflow,
       /- label: macOS Apple Silicon\n\s+runner: macos-latest\n\s+target: aarch64-apple-darwin\n\s+distribution: direct\n\s+bundles: app,dmg/,
     );
-    assert.match(publishWorkflow, /--pattern smoke-report\.json/);
+    assert.match(publishWorkflow, /if \[\[ "\$RELEASE_PRERELEASE" == "true" \]\]; then/);
+    assert.match(
+      publishWorkflow,
+      /else\n\s+gh release download "\$RELEASE_TAG" --pattern smoke-report\.json/,
+    );
     assert.match(publishWorkflow, /validate-smoke-report\.mjs/);
     assert.match(publishWorkflow, /Verify public source clone/);
     assert.match(publishWorkflow, /verify-public-release\.mjs/);
+    assert.match(channelWorkflow, /if \[\[ "\$TARGET_CHANNEL" == "stable" \]\]; then/);
     assert.match(channelWorkflow, /--pattern smoke-report\.json/);
     assert.match(channelWorkflow, /validate-smoke-report\.mjs/);
     assert.match(channelWorkflow, /verify-public-release\.mjs/);
