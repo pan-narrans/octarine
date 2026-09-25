@@ -39,6 +39,7 @@ export const Moving: Story = {
 };
 
 export const Mobile: Story = {
+  tags: ["visual"],
   args: {
     destinationProject: null,
     destinationPath: "/Users/me/Octarine/journals/2026-09-09.md",

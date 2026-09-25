@@ -64,10 +64,12 @@ export const BetaChannel: Story = {
 };
 
 export const MobileClosed: Story = {
+  tags: ["visual"],
   globals: { viewport: { value: "octarineMobile", isRotated: false } },
 };
 
 export const MobileOpen: Story = {
+  tags: ["visual"],
   globals: { viewport: { value: "octarineMobile", isRotated: false } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -77,6 +79,7 @@ export const MobileOpen: Story = {
 };
 
 export const BetaChannelMobileOpen: Story = {
+  tags: ["visual"],
   args: {
     appVersion: "0.1.0-beta.1",
     updateChannel: "beta",

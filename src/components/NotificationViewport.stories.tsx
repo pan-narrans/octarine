@@ -170,6 +170,7 @@ export const Stack: Story = {
 };
 
 export const MobileInformation: Story = {
+  tags: ["visual"],
   args: {
     notifications: [
       {

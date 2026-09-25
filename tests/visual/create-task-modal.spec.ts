@@ -18,7 +18,7 @@ async function expectNotificationStory(page: Page, story: string, name: string) 
 test.describe("CreateTaskModal visual regression", () => {
   test("quick capture", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 1024 });
-    await expectCreateStory(page, "quick-capture", "quick-capture-desktop.png");
+    await expectCreateStory(page, "playground", "quick-capture-desktop.png");
   });
 
   test("expanded inherited project", async ({ page }) => {
@@ -36,7 +36,7 @@ test.describe("CreateTaskModal visual regression", () => {
   });
 
   test("successful create closes modal", async ({ page }) => {
-    await page.goto(createStoryUrl("quick-capture"));
+    await page.goto(createStoryUrl("playground"));
     await page.getByRole("button", { name: "Create Task" }).click();
 
     await expect(page.getByRole("dialog", { name: "New Task" })).toBeHidden();

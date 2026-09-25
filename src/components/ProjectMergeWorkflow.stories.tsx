@@ -200,6 +200,7 @@ export const Stopping: Story = { args: { stage: "stopping", progress: 71 } };
 export const PartialRecovery: Story = { args: { stage: "partial", recovery } };
 export const Success: Story = { args: { stage: "success" } };
 export const Narrow: Story = {
+  tags: ["visual"],
   args: { stage: "resolve", selectedConflictId: markdownConflict.id },
   globals: { viewport: { value: "octarineNarrow", isRotated: false } },
 };

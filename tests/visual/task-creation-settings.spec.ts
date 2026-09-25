@@ -14,7 +14,7 @@ test.describe("TaskCreationSettings visual regression", () => {
   });
 
   test("valid", async ({ page }) => {
-    await expectStory(page, "valid", "valid-desktop.png");
+    await expectStory(page, "playground", "valid-desktop.png");
   });
 
   test("invalid", async ({ page }) => {

@@ -108,5 +108,6 @@ export const Renaming: Story = { args: { executing: true } };
 export const PartialFailure: Story = { args: { recovery } };
 
 export const Mobile: Story = {
+  tags: ["visual"],
   globals: { viewport: { value: "octarineMobile", isRotated: false } },
 };

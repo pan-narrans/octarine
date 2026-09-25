@@ -110,6 +110,7 @@ export const Editing: Story = { render: () => <Harness initialEvents={events} in
 export const Empty: Story = { render: () => <Harness initialEvents={[]} /> };
 
 export const Narrow: Story = {
+  tags: ["visual"],
   render: () => <Harness initialEvents={events} initiallyEditing />,
   globals: { viewport: { value: "octarineNarrow", isRotated: false } },
 };

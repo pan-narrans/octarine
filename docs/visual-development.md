@@ -85,6 +85,8 @@ For each visual request:
 
 Story coverage must name every reviewable state and affected breakpoint. Use Storybook's named viewport states instead of relying on an operator to resize the browser consistently. Stories must render the real shared component, never a permanent Storybook-only copy.
 
+Keep semantic component states visible in the default sidebar. Tag mechanical viewport, focus, and snapshot-only permutations with `visual`; Storybook excludes that tag by default to keep navigation focused. Use the sidebar tag filter to include `visual` stories during responsive review or baseline maintenance. These stories remain named, directly addressable, and available to Playwright.
+
 ### Automated visual regression
 
 Task-modal and task-card stories are covered by screenshot baselines in `tests/visual/`. Run `npm run visual:test` to compare their approved component states and viewports. The command starts Storybook when it is not already running.
