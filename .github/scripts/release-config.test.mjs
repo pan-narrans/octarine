@@ -110,6 +110,11 @@ describe("public release configuration", () => {
     assert.match(releaseWorkflow, /gh release view "\$RELEASE_TAG" --json databaseId/);
     assert.match(releaseWorkflow, /releases\/\$release_id\/assets\?per_page=100/);
     assert.match(releaseWorkflow, /"\$RUNNER_TEMP\/release-assets\.json"/);
+    assert.match(
+      releaseWorkflow,
+      /gh release upload "\$RELEASE_TAG" "\$RUNNER_TEMP\/release\/latest\.json" --clobber/,
+    );
+    assert.doesNotMatch(releaseWorkflow, /canonical-latest\.json|#latest\.json/);
     assert.match(releaseWorkflow, /release_version="\$\{tag_version%%-\*\}"/);
     assert.match(releaseWorkflow, /release_branch="release\/\$release_version"/);
     assert.match(releaseWorkflow, /origin\/\$release_branch/);
