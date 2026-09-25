@@ -60,5 +60,6 @@ type Story = StoryObj<typeof meta>;
 export const Bundles: Story = {};
 export const Empty: Story = { args: { bundles: [] } };
 export const Narrow: Story = {
+  tags: ["visual"],
   globals: { viewport: { value: "octarineNarrow", isRotated: false } },
 };

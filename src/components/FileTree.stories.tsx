@@ -104,6 +104,7 @@ export const ReadOnly: Story = {
 };
 
 export const Narrow: Story = {
+  tags: ["visual"],
   args: {
     initialOpen: true,
     selectedPath: "/vault/Projects/Octarine.md",

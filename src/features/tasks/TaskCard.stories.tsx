@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { useState } from "react";
+import { useState, type ComponentProps } from "react";
 import type { Task } from "../../types";
 import { TaskCard } from "./TaskCard";
 
@@ -41,9 +41,41 @@ const subtask: Task = {
   parent_hash: task.hash,
 };
 
+type TaskCardStoryArgs = ComponentProps<typeof TaskCard> & {
+  taskStatus: Task["status"];
+};
+
+const taskStatusMarkers: Record<Task["status"], string> = {
+  todo: " ",
+  doing: "/",
+  done: "x",
+  deferred: ">",
+  cancelled: "-",
+};
+
+function withTaskStatus(storyTask: Task, status: Task["status"]): Task {
+  return {
+    ...storyTask,
+    status,
+    raw_markdown: storyTask.raw_markdown.replace(
+      /^(\s*[-*+]\s+)\[[ xX/>-]\]/,
+      `$1[${taskStatusMarkers[status]}]`,
+    ),
+  };
+}
+
 const meta = {
   title: "Tasks/TaskCard",
   component: TaskCard,
+  render: ({ taskStatus, task: storyTask, ...args }) => (
+    <TaskCard {...args} task={withTaskStatus(storyTask, taskStatus)} />
+  ),
+  argTypes: {
+    taskStatus: {
+      control: "select",
+      options: ["todo", "doing", "done", "deferred", "cancelled"],
+    },
+  },
   decorators: [
     (Story) => (
       <div
@@ -61,19 +93,21 @@ const meta = {
   ],
   args: {
     task,
+    taskStatus: "todo",
     tasks: [task, subtask],
     onOpen: () => undefined,
     onStatusChange: () => undefined,
     showScheduleMetadata: false,
   },
-} satisfies Meta<typeof TaskCard>;
+} satisfies Meta<TaskCardStoryArgs>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Default: Story = {};
+export const Playground: Story = {};
 
 export const Focused: Story = {
+  tags: ["visual"],
   play: async ({ canvasElement }) => {
     const card = canvasElement.querySelector<HTMLElement>(
       '[role="button"][aria-label^="Edit task:"]',
@@ -84,6 +118,7 @@ export const Focused: Story = {
 
 export const Done: Story = {
   args: {
+    taskStatus: "done",
     task: {
       ...task,
       status: "done",
@@ -97,6 +132,7 @@ export const Done: Story = {
 
 export const Deferred: Story = {
   args: {
+    taskStatus: "deferred",
     task: {
       ...task,
       status: "deferred",
@@ -109,6 +145,7 @@ export const Deferred: Story = {
 
 export const Cancelled: Story = {
   args: {
+    taskStatus: "cancelled",
     task: {
       ...task,
       status: "cancelled",
@@ -164,6 +201,7 @@ export const DenseMetadata: Story = {
 };
 
 export const Narrow: Story = {
+  tags: ["visual"],
   args: {
     task: { ...task, raw_markdown: task.raw_markdown.split("\n")[0] },
     tasks: [],

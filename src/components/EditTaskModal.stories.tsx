@@ -76,9 +76,11 @@ export const Saving: Story = {
 };
 
 export const Tablet: Story = {
+  tags: ["visual"],
   globals: { viewport: { value: "octarineTablet", isRotated: false } },
 };
 
 export const Mobile: Story = {
+  tags: ["visual"],
   globals: { viewport: { value: "octarineMobile", isRotated: false } },
 };

@@ -78,31 +78,37 @@ export const Month: Story = { render: () => <Harness initialView="month" /> };
 export const Week: Story = { render: () => <Harness initialView="week" /> };
 
 export const MonthTablet: Story = {
+  tags: ["visual"],
   render: () => <Harness initialView="month" />,
   globals: { viewport: { value: "octarineTablet", isRotated: false } },
 };
 
 export const WeekTablet: Story = {
+  tags: ["visual"],
   render: () => <Harness initialView="week" />,
   globals: { viewport: { value: "octarineTablet", isRotated: false } },
 };
 
 export const MonthMobile: Story = {
+  tags: ["visual"],
   render: () => <Harness initialView="month" />,
   globals: { viewport: { value: "octarineMobile", isRotated: false } },
 };
 
 export const WeekMobile: Story = {
+  tags: ["visual"],
   render: () => <Harness initialView="week" />,
   globals: { viewport: { value: "octarineMobile", isRotated: false } },
 };
 
 export const MonthNarrow: Story = {
+  tags: ["visual"],
   render: () => <Harness initialView="month" />,
   globals: { viewport: { value: "octarineNarrow", isRotated: false } },
 };
 
 export const WeekNarrow: Story = {
+  tags: ["visual"],
   render: () => <Harness initialView="week" />,
   globals: { viewport: { value: "octarineNarrow", isRotated: false } },
 };

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { TaskDraftPreview } from "../types";
 import { CreateTaskModal } from "./CreateTaskModal";
@@ -78,6 +78,12 @@ function ReviewHarness({
   const [modalOpen, setModalOpen] = useState(initialModalOpen);
   const [notifications, setNotifications] = useState(initialNotifications);
 
+  useEffect(() => setInput(initialInput), [initialInput]);
+  useEffect(() => setPreview(initialPreview), [initialPreview]);
+  useEffect(() => setExpanded(initiallyExpanded), [initiallyExpanded]);
+  useEffect(() => setModalOpen(initialModalOpen), [initialModalOpen]);
+  useEffect(() => setNotifications(initialNotifications), [initialNotifications]);
+
   return (
     <main className="task-creation-review-surface">
       <header className="task-creation-review-header">
@@ -128,17 +134,26 @@ function ReviewHarness({
 const meta = {
   title: "Tasks/CreateTaskModal",
   component: ReviewHarness,
+  argTypes: {
+    expanded: { control: "boolean" },
+    creating: { control: "boolean" },
+    initialModalOpen: { control: "boolean" },
+  },
   args: {
     input: "Prepare launch brief +work/octarine @desk #launch",
     preview,
     expanded: false,
+    creating: false,
+    validationMessage: null,
+    initialModalOpen: true,
+    initialNotifications: [],
   },
 } satisfies Meta<typeof ReviewHarness>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const QuickCapture: Story = {};
+export const Playground: Story = {};
 
 export const ExpandedInheritedProject: Story = {
   args: { expanded: true },
@@ -167,11 +182,13 @@ export const ValidationError: Story = {
 };
 
 export const MobileExpanded: Story = {
+  tags: ["visual"],
   args: { expanded: true },
   globals: { viewport: { value: "octarineMobile", isRotated: false } },
 };
 
 export const MobileCreated: Story = {
+  tags: ["visual"],
   args: { initialModalOpen: false, initialNotifications: [successfulCreation] },
   globals: { viewport: { value: "octarineMobile", isRotated: false } },
 };

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { TaskCreationSettingsProps, TaskCreationSettingsValue } from "./TaskCreationSettings";
 import { TaskCreationSettings } from "./TaskCreationSettings";
@@ -32,6 +32,9 @@ function ReviewHarness(props: TaskCreationSettingsProps) {
   const [value, setValue] = useState(props.value);
   const [saved, setSaved] = useState(props.saved);
 
+  useEffect(() => setValue(props.value), [props.value]);
+  useEffect(() => setSaved(props.saved), [props.saved]);
+
   return (
     <main className="task-settings-review-surface">
       <TaskCreationSettings
@@ -48,21 +51,33 @@ function ReviewHarness(props: TaskCreationSettingsProps) {
   );
 }
 
+type SaveState = "idle" | "saving" | "saved";
+type TaskCreationSettingsStoryArgs = TaskCreationSettingsProps & { saveState: SaveState };
+
 const meta = {
   title: "Settings/TaskCreationSettings",
   component: TaskCreationSettings,
-  render: (args) => <ReviewHarness {...args} />,
+  render: ({ saveState, ...args }) => (
+    <ReviewHarness {...args} saving={saveState === "saving"} saved={saveState === "saved"} />
+  ),
+  argTypes: {
+    saveState: {
+      control: "select",
+      options: ["idle", "saving", "saved"],
+    },
+  },
   args: {
     value: settings,
+    saveState: "idle",
     onChange: () => undefined,
     onSave: () => undefined,
   },
-} satisfies Meta<typeof TaskCreationSettings>;
+} satisfies Meta<TaskCreationSettingsStoryArgs>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Valid: Story = {};
+export const Playground: Story = {};
 
 export const Invalid: Story = {
   args: {
@@ -88,11 +103,11 @@ export const MigrationRequired: Story = {
 };
 
 export const Saving: Story = {
-  args: { saving: true },
+  args: { saveState: "saving" },
 };
 
 export const Saved: Story = {
-  args: { saved: true },
+  args: { saveState: "saved" },
 };
 
 export const ProjectTemplate: Story = {
@@ -134,5 +149,6 @@ export const EndOfFileInsertion: Story = {
 };
 
 export const Narrow: Story = {
+  tags: ["visual"],
   globals: { viewport: { value: "octarineMobile", isRotated: false } },
 };

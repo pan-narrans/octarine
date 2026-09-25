@@ -99,14 +99,17 @@ type Story = StoryObj<typeof meta>;
 export const Default: Story = {};
 
 export const Tablet: Story = {
+  tags: ["visual"],
   globals: { viewport: { value: "octarineTablet", isRotated: false } },
 };
 
 export const Mobile: Story = {
+  tags: ["visual"],
   globals: { viewport: { value: "octarineMobile", isRotated: false } },
 };
 
 export const Narrow: Story = {
+  tags: ["visual"],
   globals: { viewport: { value: "octarineNarrow", isRotated: false } },
 };
 

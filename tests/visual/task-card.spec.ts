@@ -10,7 +10,7 @@ async function expectTaskCardScreenshot(page: Page, story: string, name: string)
 test.describe("TaskCard visual regression", () => {
   test("default", async ({ page }) => {
     await page.setViewportSize({ width: 520, height: 420 });
-    await expectTaskCardScreenshot(page, "default", "default.png");
+    await expectTaskCardScreenshot(page, "playground", "default.png");
   });
 
   test("keyboard focus", async ({ page }) => {

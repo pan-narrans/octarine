@@ -66,6 +66,7 @@ export const Available: Story = {
 };
 
 export const NarrowAvailable: Story = {
+  tags: ["visual"],
   args: Available.args,
   globals: { viewport: { value: "octarineNarrow", isRotated: false } },
 };

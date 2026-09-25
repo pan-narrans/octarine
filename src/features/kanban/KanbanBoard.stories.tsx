@@ -193,5 +193,6 @@ export const LargeGroup: Story = {
 };
 
 export const Narrow: Story = {
+  tags: ["visual"],
   globals: { viewport: { value: "octarineNarrow", isRotated: false } },
 };
