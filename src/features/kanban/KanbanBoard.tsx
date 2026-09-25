@@ -241,6 +241,7 @@ export function KanbanBoard({
               }`}
               key={column.status}
               aria-labelledby={`kanban-${column.status}`}
+              onDragEnter={(event) => setTarget(event, headerTarget)}
               onDragOver={(event) => setTarget(event, headerTarget)}
               onDrop={(event) => drop(event, headerTarget)}
             >
@@ -250,6 +251,10 @@ export function KanbanBoard({
                     ? "drop-active"
                     : ""
                 }`}
+                onDragEnter={(event) => {
+                  event.stopPropagation();
+                  setTarget(event, headerTarget);
+                }}
                 onDragOver={(event) => {
                   event.stopPropagation();
                   setTarget(event, headerTarget);
@@ -277,6 +282,10 @@ export function KanbanBoard({
                       className={`kanban-context-group ${active ? "drop-active" : ""}`}
                       key={group.context ?? "no-context"}
                       aria-label={group.context ? `Context ${group.context}` : "No context"}
+                      onDragEnter={(event) => {
+                        event.stopPropagation();
+                        setTarget(event, target);
+                      }}
                       onDragOver={(event) => {
                         event.stopPropagation();
                         setTarget(event, target);

@@ -45,6 +45,15 @@ function displayDescription(lines: string[]) {
   return lines.map((line) => line.replace(/^\s*-\s?/, "")).join("\n");
 }
 
+function editableTitle(header: string) {
+  const content = header.replace(TASK_PREFIX, "");
+  const metadataStart = content.search(METADATA);
+  if (metadataStart === -1) return content;
+
+  const title = content.slice(0, metadataStart);
+  return title.endsWith(" ") ? title.slice(0, -1) : title;
+}
+
 export function EditTaskModal({
   task,
   onClose,
@@ -69,11 +78,7 @@ export function EditTaskModal({
   const contexts = headerLine.match(/@[\w\-/]+/g) ?? [];
   const projects = headerLine.match(/\+[\w\-/]+/g) ?? [];
   const tags = headerLine.match(/#[\w\-/]+/g) ?? [];
-  let title = headerLine.replace(TASK_PREFIX, "");
-  title = title
-    .replace(/\([A-Da-d]\)\s*/g, "")
-    .replace(METADATA, "")
-    .trim();
+  const title = editableTitle(headerLine);
   const parentDescriptionIndexes: number[] = [];
   const subtaskLines: Array<{
     prefix: string;
@@ -120,11 +125,11 @@ export function EditTaskModal({
       return next.join("\n");
     });
   const updateTitle = (value: string) =>
-    updateHeader((header) =>
-      `${header.match(TASK_PREFIX)?.[1] ?? "- [ ] "}${value} ${header.match(METADATA)?.join(" ") ?? ""}`
-        .replace(/\s{2,}/g, " ")
-        .trim(),
-    );
+    updateHeader((header) => {
+      const metadata = header.match(METADATA) ?? [];
+      const suffix = metadata.length > 0 ? ` ${metadata.join(" ")}` : "";
+      return `${header.match(TASK_PREFIX)?.[1] ?? "- [ ] "}${value}${suffix}`;
+    });
   const updateStatus = (value: string) =>
     updateHeader((header) =>
       /^\s*[-*+]\s+\[.\]/.test(header)
@@ -179,7 +184,7 @@ export function EditTaskModal({
     const newSubtaskIndex = subtaskLines.filter(
       (subtask) => subtask.lineIndex < insertionIndex,
     ).length;
-    next.splice(insertionIndex, 0, `${" ".repeat(depth)}- [ ] New subtask`);
+    next.splice(insertionIndex, 0, `${" ".repeat(depth)}- [ ] `);
     setRawMarkdown(next.join("\n"));
     setSelectedTask(newSubtaskIndex);
   };
@@ -283,7 +288,7 @@ export function EditTaskModal({
               {subtaskLines.map((subtask, index) => (
                 <div
                   className="form-subtask-row"
-                  key={`${index}-${subtask.prefix}-${subtask.text}`}
+                  key={`${subtask.lineIndex}-${subtask.prefix}`}
                   style={{ marginLeft: `${Math.max(0, subtask.depth - rootSubtaskDepth) * 10}px` }}
                   data-selected={selectedTask === index ? "true" : undefined}
                   onPointerDown={() => setSelectedTask(index)}
@@ -293,6 +298,7 @@ export function EditTaskModal({
                     aria-label={`Subtask ${index + 1}`}
                     value={subtask.text}
                     onChange={(event) => updateSubtask(index, event.target.value)}
+                    placeholder="New subtask"
                   />
                   <FormTextarea
                     aria-label={`Description for subtask ${index + 1}`}

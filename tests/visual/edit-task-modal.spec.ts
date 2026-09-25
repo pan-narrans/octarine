@@ -41,6 +41,37 @@ test.describe("EditTaskModal visual regression", () => {
     await expect(priority).toHaveText("Medium (B)");
   });
 
+  test("preserves trailing spaces while editing task title", async ({ page }) => {
+    await page.goto(storyUrl("default"));
+    const title = page.locator("#task-title");
+
+    await title.fill("Plan the Storybook pilot ");
+
+    await expect(title).toHaveValue("Plan the Storybook pilot ");
+  });
+
+  test("accepts multiple typed characters in a subtask title", async ({ page }) => {
+    await page.goto(storyUrl("default"));
+    const subtask = page.getByRole("textbox", { name: "Subtask 1", exact: true });
+
+    await subtask.press("ControlOrMeta+A");
+    await subtask.pressSequentially("Updated subtask");
+
+    await expect(subtask).toHaveValue("Updated subtask");
+  });
+
+  test("adds an empty subtask title with placeholder text", async ({ page }) => {
+    await page.goto(storyUrl("default"));
+
+    await page.getByRole("button", { name: "+ Add subtask" }).click();
+    const subtask = page.getByRole("textbox", { name: "Subtask 4", exact: true });
+
+    await expect(subtask).toHaveValue("");
+    await expect(subtask).toHaveAttribute("placeholder", "New subtask");
+    await subtask.pressSequentially("Write regression test");
+    await expect(subtask).toHaveValue("Write regression test");
+  });
+
   test("empty task", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 1024 });
     await expectStoryScreenshot(page, "empty-task", "empty-task-desktop.png");

@@ -48,6 +48,12 @@ describe("public release configuration", () => {
     assert.equal(config.bundle.resources["../THIRD_PARTY_LICENSES.md"], "THIRD_PARTY_LICENSES.md");
   });
 
+  it("leaves drag and drop to the webview for Kanban interactions", async () => {
+    const config = await readJson("src-tauri/tauri.conf.json");
+
+    assert.equal(config.app.windows[0].dragDropEnabled, false);
+  });
+
   it("keeps updater artifact generation in release-only overlay", async () => {
     const [base, release, updaterSource] = await Promise.all([
       readJson("src-tauri/tauri.conf.json"),

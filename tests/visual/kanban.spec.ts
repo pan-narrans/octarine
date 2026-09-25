@@ -85,4 +85,22 @@ test.describe("Kanban visual regression", () => {
       doing.getByRole("button", { name: "Edit task: Confirm migration window" }),
     ).toBeVisible();
   });
+
+  test("uses final drag-enter column when WebKit omits drop", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto(storyUrl("interactive"));
+    const card = page.locator(".kanban-card", { hasText: "Confirm migration window" });
+    const todo = page.getByRole("region", { name: "To-do", exact: true });
+    const doing = page.getByRole("region", { name: "Doing", exact: true });
+    const dataTransfer = await page.evaluateHandle(() => new DataTransfer());
+
+    await card.dispatchEvent("dragstart", { dataTransfer });
+    await todo.locator(".kanban-column-content").dispatchEvent("dragover", { dataTransfer });
+    await doing.locator(".kanban-column-content").dispatchEvent("dragenter", { dataTransfer });
+    await card.dispatchEvent("dragend", { dataTransfer });
+
+    await expect(
+      doing.getByRole("button", { name: "Edit task: Confirm migration window" }),
+    ).toBeVisible();
+  });
 });
