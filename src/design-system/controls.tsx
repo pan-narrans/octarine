@@ -1,11 +1,6 @@
-import type {
-  ButtonHTMLAttributes,
-  InputHTMLAttributes,
-  SelectHTMLAttributes,
-  TextareaHTMLAttributes,
-} from "react";
+import type { ButtonHTMLAttributes, InputHTMLAttributes, TextareaHTMLAttributes } from "react";
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, X } from "lucide-react";
 import type { Task } from "../types";
 
 function classes(...values: Array<string | undefined>) {
@@ -13,11 +8,7 @@ function classes(...values: Array<string | undefined>) {
 }
 
 export function FormInput({ className, ...props }: InputHTMLAttributes<HTMLInputElement>) {
-  return <input className={classes("form-input", className)} {...props} />;
-}
-
-export function FormSelect({ className, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
-  return <select className={classes("form-select", className)} {...props} />;
+  return <input className={classes("form-control", "form-input", className)} {...props} />;
 }
 
 export interface FormDropdownOption {
@@ -70,7 +61,7 @@ export function FormDropdown({
       <button
         id={id}
         type="button"
-        className="form-select form-dropdown-trigger"
+        className="form-control form-dropdown-trigger"
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={`${id}-options`}
@@ -123,17 +114,10 @@ export function FormDropdown({
 }
 
 export function FormTextarea({ className, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea className={classes("form-textarea", className)} {...props} />;
+  return <textarea className={classes("form-control", "form-textarea", className)} {...props} />;
 }
 
-type ActionButtonVariant = "primary" | "secondary" | "danger" | "toggle";
-
-const actionButtonClasses: Record<ActionButtonVariant, string> = {
-  primary: "btn-save",
-  secondary: "btn-cancel",
-  danger: "btn-delete",
-  toggle: "markdown-toggle",
-};
+type ActionButtonVariant = "primary" | "secondary" | "danger";
 
 export function ActionButton({
   variant,
@@ -142,7 +126,69 @@ export function ActionButton({
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant: ActionButtonVariant }) {
   return (
-    <button type={type} className={classes(actionButtonClasses[variant], className)} {...props} />
+    <button
+      type={type}
+      className={classes("action-button", `action-button--${variant}`, className)}
+      {...props}
+    />
+  );
+}
+
+export function ToggleButton({
+  pressed,
+  className,
+  type = "button",
+  ...props
+}: Omit<ButtonHTMLAttributes<HTMLButtonElement>, "aria-pressed"> & { pressed: boolean }) {
+  return (
+    <button
+      type={type}
+      className={classes("toggle-button", pressed ? "active" : undefined, className)}
+      aria-pressed={pressed}
+      {...props}
+    />
+  );
+}
+
+export function DialogCloseButton({
+  label,
+  className,
+  type = "button",
+  ...props
+}: Omit<ButtonHTMLAttributes<HTMLButtonElement>, "aria-label" | "children"> & {
+  label: string;
+}) {
+  return (
+    <button
+      type={type}
+      className={classes("dialog-close-button", className)}
+      aria-label={label}
+      {...props}
+    >
+      <X size={18} aria-hidden="true" />
+    </button>
+  );
+}
+
+type IconButtonVariant = "neutral" | "danger";
+
+export function IconButton({
+  label,
+  variant = "neutral",
+  className,
+  type = "button",
+  ...props
+}: Omit<ButtonHTMLAttributes<HTMLButtonElement>, "aria-label"> & {
+  label: string;
+  variant?: IconButtonVariant;
+}) {
+  return (
+    <button
+      type={type}
+      className={classes("icon-button", `icon-button--${variant}`, className)}
+      aria-label={label}
+      {...props}
+    />
   );
 }
 

@@ -26,6 +26,18 @@ Octarine uses a dark, interstellar workspace aesthetic: deep navy surfaces, rest
 
 ## Components and interaction
 
+- Reusable primitives live in `src/design-system/`. Feature components may compose them, but
+  design-system modules must not import feature implementations or own domain logic.
+- Model visual intent as narrow semantic props. Actions use `primary`, `secondary`, or `danger`;
+  pressed controls use a separate toggle primitive; dialog dismissal and destructive icon actions
+  use shared icon controls.
+- Use shared form controls for text input, textarea, and dropdown behavior. Add new control primitive
+  only after at least two real consumers need same semantics, accessibility, and visual role.
+- Storybook places tokens under `Design System/Foundations` and reusable controls under
+  `Design System/Primitives`. Primitive stories cover meaningful default, disabled, validation,
+  destructive, focus, and constrained states where relevant. Feature compositions remain in their
+  product-area hierarchy.
+
 - Sidebar items are compact rounded rows. Active items use a violet-tinted surface and a violet left indicator; hover increases contrast without changing the overall dark language.
 - Sidebar shows a small Beta badge beside Octarine only when Beta update channel is selected. Version sits in sidebar footer; Beta channel state is named there too.
 - Search and task cards use translucent surfaces with 1px borders and 12px radii. Focus states use the violet accent and glow.
@@ -74,4 +86,8 @@ Octarine uses a dark, interstellar workspace aesthetic: deep navy surfaces, rest
 
 ## Maintenance
 
-The concrete tokens and styles live in `src/styles.css`; components live in `src/`. Before creating a one-off visual value, check whether an existing token or component treatment applies. Add a rule here only after it is intentionally adopted and verified in the rendered application.
+Concrete tokens and shared styles live in `src/styles.css`; reusable primitives live in
+`src/design-system/`; feature components live beside their product area in `src/`. Before creating a
+one-off visual value, check whether an existing token or component treatment applies. Keep local
+implementations local when semantics or behavior differ. Add a rule here only after it is
+intentionally adopted and verified in rendered application.

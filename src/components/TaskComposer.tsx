@@ -1,5 +1,11 @@
 import { Plus, Trash } from "lucide-react";
-import { FormDropdown, FormInput, FormTextarea, MetadataPill } from "../design-system/controls";
+import {
+  FormDropdown,
+  FormInput,
+  FormTextarea,
+  IconButton,
+  MetadataPill,
+} from "../design-system/controls";
 import type { TaskDraft, TaskPriority, TaskStatus } from "../types";
 import { inheritDraftProject } from "./task-composer-model";
 
@@ -84,10 +90,9 @@ export function TaskComposer({ draft, onChange, onRawMarkdownChange }: TaskCompo
                   }}
                   placeholder="Subtask title"
                 />
-                <button
-                  type="button"
-                  className="btn-icon trash"
-                  aria-label={`Remove subtask ${index + 1}`}
+                <IconButton
+                  variant="danger"
+                  label={`Remove subtask ${index + 1}`}
                   onClick={() =>
                     update(
                       "subtasks",
@@ -96,7 +101,7 @@ export function TaskComposer({ draft, onChange, onRawMarkdownChange }: TaskCompo
                   }
                 >
                   <Trash size={15} />
-                </button>
+                </IconButton>
               </div>
             ))}
           </div>
