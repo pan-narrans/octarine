@@ -340,6 +340,16 @@ body {
   margin-top: auto;
 }
 
+.sidebar-vault-button {
+  cursor: pointer;
+}
+
+.sidebar-vault-input:disabled,
+.sidebar-vault-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 .sidebar-release-identity {
   padding-top: var(--space-4);
   display: flex;
@@ -1834,7 +1844,7 @@ body {
 .checkbox.todo {
   border: 2px solid var(--text-muted);
 }
-.checkbox.todo:hover {
+.checkbox.todo:not(:disabled):hover {
   border-color: var(--color-violet);
 }
 
@@ -1866,6 +1876,13 @@ body {
 .subtask-checkbox-clickable:focus-visible {
   outline: 2px solid var(--color-violet);
   outline-offset: 2px;
+}
+
+.checkbox:disabled,
+.subtask-checkbox-clickable:disabled {
+  cursor: not-allowed;
+  filter: saturate(0.35);
+  opacity: 0.4;
 }
 
 /* Task Details */
@@ -3116,7 +3133,7 @@ body {
   position: relative;
 }
 
-.subtask-checkbox-clickable:hover {
+.subtask-checkbox-clickable:not(:disabled):hover {
   border-color: var(--color-violet);
   background-color: rgba(167, 139, 250, 0.05);
 }
@@ -3231,8 +3248,14 @@ body {
   padding: 4px;
 }
 
-.dialog-close-button:hover {
+.dialog-close-button:not(:disabled):hover {
   color: var(--text-primary);
+}
+
+.dialog-close-button:disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+  opacity: 0.3;
 }
 
 .modal-body {
@@ -3283,8 +3306,16 @@ body {
   transition: border-color 0.2s;
 }
 
-.form-control:focus {
+.form-control:focus:not(:disabled) {
   border-color: var(--color-violet);
+}
+
+.form-control:disabled {
+  border-color: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.015);
+  color: var(--text-muted);
+  -webkit-text-fill-color: var(--text-muted);
+  cursor: not-allowed;
 }
 
 .form-dropdown {
@@ -3298,6 +3329,10 @@ body {
   justify-content: space-between;
   text-align: left;
   cursor: pointer;
+}
+
+.form-dropdown-trigger:disabled svg {
+  opacity: 0.35;
 }
 
 .form-dropdown-trigger[aria-expanded="true"] {
@@ -3407,7 +3442,7 @@ body {
   color: var(--text-primary);
 }
 
-.action-button--secondary:hover {
+.action-button--secondary:not(:disabled):hover {
   background: var(--surface-control-hover);
 }
 
@@ -3418,13 +3453,14 @@ body {
   font-weight: 500;
 }
 
-.action-button--primary:hover {
+.action-button--primary:not(:disabled):hover {
   background: var(--color-violet-strong);
 }
 
-.action-button--primary:disabled {
+.action-button:disabled {
   cursor: not-allowed;
-  opacity: 0.7;
+  filter: saturate(0.35);
+  opacity: 0.45;
 }
 
 /* Modal Form Additions */
@@ -3440,7 +3476,7 @@ body {
   color: var(--color-danger);
   font-weight: 500;
 }
-.action-button--danger:hover {
+.action-button--danger:not(:disabled):hover {
   background: rgba(239, 68, 68, 0.2);
 }
 
@@ -3545,9 +3581,15 @@ body {
   align-items: center;
   justify-content: center;
 }
-.icon-button:hover {
+.icon-button:not(:disabled):hover {
   background: rgba(255, 255, 255, 0.1);
   color: var(--text-primary);
+}
+
+.icon-button:disabled {
+  cursor: not-allowed;
+  filter: saturate(0.35);
+  opacity: 0.4;
 }
 
 .icon-button--danger {
@@ -3558,7 +3600,7 @@ body {
   padding: 6px;
   border-radius: 4px;
 }
-.icon-button--danger:hover {
+.icon-button--danger:not(:disabled):hover {
   background: rgba(239, 68, 68, 0.1);
   color: var(--color-danger);
 }
@@ -3573,7 +3615,7 @@ body {
   border: 1px solid rgba(239, 68, 68, 0.5);
   color: var(--color-danger);
 }
-.modal-footer .action-button--danger:hover {
+.modal-footer .action-button--danger:not(:disabled):hover {
   background: rgba(239, 68, 68, 0.1);
 }
 
@@ -3608,6 +3650,12 @@ body {
   border-color: rgba(139, 92, 246, 0.65);
   background: rgba(139, 92, 246, 0.18);
   color: #d8c7ff;
+}
+
+.toggle-button:disabled {
+  cursor: not-allowed;
+  filter: saturate(0.35);
+  opacity: 0.4;
 }
 .modal-form {
   width: 100%;

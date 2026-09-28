@@ -1601,6 +1601,7 @@ export function App() {
               {isEditingVault ? (
                 <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
                   <input
+                    className="sidebar-vault-input"
                     type="text"
                     value={vaultInput}
                     onChange={(e) => setVaultInput(e.target.value)}
@@ -1619,6 +1620,7 @@ export function App() {
                   />
                   <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
                     <button
+                      className="sidebar-vault-button"
                       onClick={() => setIsEditingVault(false)}
                       style={{
                         background: "rgba(255, 255, 255, 0.05)",
@@ -1626,7 +1628,6 @@ export function App() {
                         color: "var(--text-muted)",
                         padding: "0.25rem 0.5rem",
                         borderRadius: "4px",
-                        cursor: "pointer",
                         fontSize: "0.75rem",
                         display: "flex",
                         alignItems: "center",
@@ -1637,6 +1638,7 @@ export function App() {
                       <X size={10} /> Cancel
                     </button>
                     <button
+                      className="sidebar-vault-button"
                       onClick={handleSaveVault}
                       style={{
                         background: "var(--color-violet)",
@@ -1644,7 +1646,6 @@ export function App() {
                         color: "white",
                         padding: "0.25rem 0.5rem",
                         borderRadius: "4px",
-                        cursor: "pointer",
                         fontSize: "0.75rem",
                         fontWeight: 600,
                         display: "flex",
