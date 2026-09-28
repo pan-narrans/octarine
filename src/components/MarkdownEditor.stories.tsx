@@ -1,3 +1,4 @@
+import { useRef, useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { MarkdownEditor } from "./MarkdownEditor";
 
@@ -59,4 +60,80 @@ export const BlankJournal: Story = {
   args: {
     initialContent: "# Journal — 2026-08-26\n\n",
   },
+};
+
+// Controlled persistence boundary for browser behavior tests; no native writes or timers.
+function PersistenceHarness() {
+  const [files, setFiles] = useState<Record<string, string>>({
+    "/fixture/note.md": "# Original note",
+    "/fixture/other.md": "# Other note",
+  });
+  const [path, setPath] = useState("/fixture/note.md");
+  const filesRef = useRef(files);
+  filesRef.current = files;
+  const [open, setOpen] = useState(true);
+  const [pending, setPending] = useState(false);
+  const [calls, setCalls] = useState(0);
+  const [original, setOriginal] = useState("");
+  const completion = useRef<{ resolve: () => void; reject: () => void } | null>(null);
+  return (
+    <>
+      <button disabled={!pending} onClick={() => completion.current?.resolve()}>
+        Complete save
+      </button>
+      <button disabled={!pending} onClick={() => completion.current?.reject()}>
+        Reject save
+      </button>
+      <button disabled={open} onClick={() => setOpen(true)}>
+        Reopen note
+      </button>
+      <button
+        onClick={() =>
+          setPath(path === "/fixture/note.md" ? "/fixture/other.md" : "/fixture/note.md")
+        }
+      >
+        Switch note
+      </button>
+      <button onClick={() => setFiles({ ...files, [path]: "# External edit" })}>
+        External edit
+      </button>
+      <output aria-label="Persisted content">{files[path]}</output>
+      <output aria-label="Save calls">{calls}</output>
+      <output aria-label="Original snapshot">{original}</output>
+      {open && (
+        <MarkdownEditor
+          filePath={path}
+          initialContent={files[path]}
+          onClose={() => setOpen(false)}
+          onSave={(content, originalContent) =>
+            new Promise<void>((resolve, reject) => {
+              setPending(true);
+              setCalls((count) => count + 1);
+              setOriginal(originalContent);
+              completion.current = {
+                resolve: () => {
+                  setPending(false);
+                  if (filesRef.current[path] !== originalContent) {
+                    reject(new Error("File changed"));
+                    return;
+                  }
+                  setFiles((current) => ({ ...current, [path]: content }));
+                  resolve();
+                },
+                reject: () => {
+                  setPending(false);
+                  reject(new Error("Fixture save rejected"));
+                },
+              };
+            })
+          }
+        />
+      )}
+    </>
+  );
+}
+
+export const Persistence: Story = {
+  tags: ["visual"],
+  render: () => <PersistenceHarness />,
 };

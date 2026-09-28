@@ -1,3 +1,4 @@
+import { saveEditorFile } from "./features/workspace/save-editor-file";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTaskStore } from "./hooks/use-task-store";
 import { useTauriEvents } from "./hooks/use-tauri-events";
@@ -259,6 +260,8 @@ export function App() {
   const cancelledProjectMerges = useRef(new Set<string>());
   const [todayJournalContent, setTodayJournalContent] = useState<string | null>(null);
   const [todayJournalPath, setTodayJournalPath] = useState<string>("");
+  const todayJournalPathRef = useRef(todayJournalPath);
+  todayJournalPathRef.current = todayJournalPath;
   const [todayJournalLoading, setTodayJournalLoading] = useState<boolean>(true);
 
   useEffect(() => {
@@ -543,7 +546,7 @@ export function App() {
         content = await readFileContent(filePath);
       } catch {
         // File does not exist yet, write empty string to scaffold it!
-        await writeFileContent(filePath, `# 📓 Journal Entry: ${todayStr}\n\n`);
+        await writeFileContent(filePath, `# 📓 Journal Entry: ${todayStr}\n\n`, null);
         content = `# 📓 Journal Entry: ${todayStr}\n\n`;
       }
       await fetchJournalTree();
@@ -571,7 +574,7 @@ export function App() {
         content = await readFileContent(filePath);
       } catch {
         // Silently scaffold today's journal note
-        await writeFileContent(filePath, `# 📓 Journal Entry: ${todayStr}\n\n`);
+        await writeFileContent(filePath, `# 📓 Journal Entry: ${todayStr}\n\n`, null);
         content = `# 📓 Journal Entry: ${todayStr}\n\n`;
       }
       setTodayJournalPath(filePath);
@@ -583,11 +586,12 @@ export function App() {
     }
   };
 
-  const handleSaveTodayJournalContent = async (content: string) => {
-    if (!todayJournalPath) return;
+  const handleSaveTodayJournalContent = async (content: string, originalContent: string) => {
+    if (!todayJournalPath) throw new Error("No journal note is open.");
     try {
-      await writeFileContent(todayJournalPath, content);
-      setTodayJournalContent(content);
+      const path = todayJournalPath;
+      await saveEditorFile(path, content, originalContent);
+      if (todayJournalPathRef.current === path) setTodayJournalContent(content);
     } catch (e) {
       console.error("Failed to save today's journal:", e);
       throw e;
@@ -742,15 +746,10 @@ export function App() {
     }
   };
 
-  const handleSaveFileContent = async (content: string) => {
-    if (!activeFilePath) return;
-    try {
-      await writeFileContent(activeFilePath, content);
-      setActiveFileContent(content);
-    } catch (e) {
-      console.error("Failed to save note:", e);
-      throw e;
-    }
+  const handleSaveFileContent = async (content: string, originalContent: string) => {
+    if (!activeFilePath) throw new Error("No note is open.");
+    // Editor owns its current buffer. A late save cannot replace another document's initial content.
+    await saveEditorFile(activeFilePath, content, originalContent);
   };
 
   const getSortedEventsForDay = (date: Date) =>

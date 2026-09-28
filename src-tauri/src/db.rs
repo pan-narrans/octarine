@@ -9,6 +9,50 @@ use std::time::UNIX_EPOCH;
 const CACHE_SCHEMA_VERSION: i64 = 2;
 const INDEX_FORMAT_VERSION: i64 = 2;
 
+/// Recover only positively identified SQLite corruption. Operational and schema errors propagate.
+/// Keep the original database and sidecars for inspection; the caller rebuilds from Markdown.
+pub fn open_rebuildable_cache(
+    path: &Path,
+) -> std::result::Result<Connection, Box<dyn std::error::Error>> {
+    match initialize_db(path) {
+        Ok(connection) => Ok(connection),
+        Err(rusqlite::Error::SqliteFailure(error, _))
+            if matches!(
+                error.code,
+                rusqlite::ErrorCode::DatabaseCorrupt | rusqlite::ErrorCode::NotADatabase
+            ) =>
+        {
+            let parent = path
+                .parent()
+                .ok_or_else(|| std::io::Error::other("Cache path has no parent"))?;
+            let recovery = tempfile::Builder::new()
+                .prefix("corrupt-cache-")
+                .tempdir_in(parent)?
+                .keep();
+            let mut originals = Vec::new();
+            for suffix in ["-wal", "-shm", ""] {
+                let mut name = path.as_os_str().to_os_string();
+                name.push(suffix);
+                let source = std::path::PathBuf::from(name);
+                if source.exists() {
+                    let file_name = source
+                        .file_name()
+                        .ok_or_else(|| std::io::Error::other("Invalid cache filename"))?;
+                    fs::copy(&source, recovery.join(file_name))?;
+                    originals.push(source);
+                }
+            }
+            // All backups must exist before removal. Remove main file last, so failed sidecar
+            // cleanup cannot leave a fresh database paired with an old WAL on next startup.
+            for source in originals {
+                fs::remove_file(source)?;
+            }
+            Ok(initialize_db(path)?)
+        }
+        Err(error) => Err(Box::new(error)),
+    }
+}
+
 pub fn initialize_db<P: AsRef<Path>>(db_path: P) -> Result<Connection> {
     let conn = Connection::open(db_path)?;
 

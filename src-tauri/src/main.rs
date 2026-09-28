@@ -9,12 +9,13 @@ use octarine::config::{
     validate_config_for_vault, TaskCreationConfig, UpdateChannel,
 };
 use octarine::db::{
-    boot_sweep_with_diagnostics, delete_file, index_single_file, initialize_db, query_tasks,
+    boot_sweep_with_diagnostics, delete_file, index_single_file, open_rebuildable_cache,
+    query_tasks,
 };
 use octarine::diagnostics::Diagnostics;
 use octarine::file_ops::{
     create_directory_on_disk, create_file_on_disk, delete_path_on_disk, read_file_content_on_disk,
-    rename_path_on_disk, scan_dir_tree, write_file_content_on_disk, FileNode,
+    rename_path_on_disk, scan_dir_tree, FileNode,
 };
 use octarine::parser::{ParsedCustomView, ParsedTask};
 use octarine::path_security::{
@@ -758,12 +759,34 @@ fn write_file_content(
     state: State<'_, AppState>,
     path: String,
     content: String,
-) -> Result<(), String> {
-    let path = resolve_content_path(&state, &path)?;
-    write_file_content_on_disk(&path, &content)?;
-    let conn = state.db.lock().unwrap();
-    index_single_file(&conn, &path).map_err(|e| e.to_string())?;
-    Ok(())
+    original_content: Option<String>,
+) -> Result<bool, WriteError> {
+    let vault_root = state
+        .vault_dir
+        .lock()
+        .map_err(|_| WriteError::operation_failed())?
+        .clone();
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| WriteError::operation_failed())?;
+    state.task_creation.save_file_content(
+        std::path::Path::new(&vault_root),
+        &conn,
+        std::path::Path::new(&path),
+        original_content.as_deref(),
+        &content,
+    )
+}
+
+#[tauri::command]
+fn reindex_file(state: State<'_, AppState>, path: String) -> Result<(), WriteError> {
+    let path = resolve_content_path(&state, &path).map_err(|_| WriteError::operation_failed())?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| WriteError::operation_failed())?;
+    index_single_file(&conn, &path).map_err(|_| WriteError::operation_failed())
 }
 
 fn initialize_app_state(app: &tauri::App) -> AppState {
@@ -849,7 +872,8 @@ fn initialize_app_state(app: &tauri::App) -> AppState {
         None
     };
 
-    let conn = initialize_db(&db_path).expect("failed to initialize SQLite Cache database");
+    let conn = open_rebuildable_cache(std::path::Path::new(&db_path))
+        .expect("failed to initialize SQLite Cache database");
 
     boot_sweep_with_diagnostics(&conn, &vault_dir, Some(&diagnostics))
         .expect("failed to run boot sweep");
@@ -910,6 +934,7 @@ fn main() {
             delete_path,
             rename_path,
             read_file_content,
+            reindex_file,
             write_file_content
         ])
         .setup(|app| {

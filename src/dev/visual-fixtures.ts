@@ -356,9 +356,21 @@ export function installVisualFixtures(scenario: VisualScenario): void {
         if (content === undefined) throw new Error(`Visual fixture file not found: ${args.path}`);
         return content;
       }
-      case "write_file_content":
-        files.set(String(args.path), String(args.content));
+      case "reindex_file":
         return undefined;
+      case "write_file_content": {
+        const current = files.get(String(args.path));
+        if (
+          args.originalContent === null ? current !== undefined : current !== args.originalContent
+        ) {
+          throw {
+            code: "source_changed",
+            message: "File changed on disk. Your edits remain unsaved.",
+          };
+        }
+        files.set(String(args.path), String(args.content));
+        return true;
+      }
       case "update_task_status": {
         const lineNumber = Number(args.lineNumber);
         const status = String(args.newStatus) as Task["status"];

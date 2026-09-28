@@ -54,6 +54,7 @@ npm run ipc:check
 npm run format:check
 npm run lint
 npm run build
+npm test
 ```
 
 The required Rust gate is:

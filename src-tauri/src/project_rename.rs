@@ -1,5 +1,5 @@
 use crate::db::{delete_file, index_files};
-use crate::file_ops::write_file_content_on_disk;
+use crate::file_ops::write_file_content_if_unchanged;
 use crate::parser::{parse_markdown_content, rewrite_project_tokens};
 use crate::path_security::resolve_descendant_within;
 use crate::project::ProjectPath;
@@ -422,7 +422,7 @@ where
             )
         })?;
         mutation_index += 1;
-        write_file_content_on_disk(&path.to_string_lossy(), &updated).map_err(|_| {
+        write_file_content_if_unchanged(&path, Some(&content), &updated).map_err(|_| {
             execution_error(
                 plan,
                 &completed,
@@ -550,6 +550,22 @@ fn validate_plan_sources(
                     "Project rename plan is stale. Run preflight again.",
                 )
             })?;
+        // Recheck every destination before any metadata rewrite or directory move.
+        // A collision discovered only during rename would leave an avoidable partial operation.
+        let stale = || {
+            ProjectRenameError::new(
+                ProjectRenameErrorCode::StalePlan,
+                "Project rename destination changed. Run preflight again.",
+            )
+        };
+        let destination =
+            resolve_descendant_within(vault_root, Path::new(&operation.destination_path), false)
+                .map_err(|_| stale())?;
+        if let Some(existing) = casefold_sibling(&destination).map_err(|_| stale())? {
+            if existing.canonicalize().map_err(|_| stale())? != source {
+                return Err(stale());
+            }
+        }
         if fingerprint_path(&source).map_err(|_| {
             ProjectRenameError::new(
                 ProjectRenameErrorCode::StalePlan,

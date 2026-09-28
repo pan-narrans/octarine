@@ -144,6 +144,25 @@ struct ProjectMergeSession {
 }
 
 impl TaskCreationService {
+    /// Persist editor bytes under the same lock as project mutations. False means only indexing failed.
+    pub fn save_file_content(
+        &self,
+        vault_root: &Path,
+        connection: &Connection,
+        path: &Path,
+        original: Option<&str>,
+        content: &str,
+    ) -> Result<bool, crate::writer::WriteError> {
+        let _guard = self
+            .write_lock
+            .lock()
+            .map_err(|_| crate::writer::WriteError::operation_failed())?;
+        let path = crate::path_security::resolve_descendant_within(vault_root, path, false)
+            .map_err(|_| crate::writer::WriteError::operation_failed())?;
+        crate::file_ops::write_file_content_if_unchanged(&path, original, content)?;
+        Ok(crate::db::index_single_file(connection, &path.to_string_lossy()).is_ok())
+    }
+
     pub fn preflight_project_merge(
         &self,
         vault_root: &Path,

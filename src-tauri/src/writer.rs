@@ -1,4 +1,4 @@
-use crate::file_ops::write_file_content_on_disk;
+use crate::file_ops::write_file_content_if_unchanged;
 use crate::CHECKLIST_CHAR_CLASS;
 use regex::Regex;
 use serde::Serialize;
@@ -189,6 +189,12 @@ pub fn move_task_in_file(
 
     let mut edited_lines = lines;
     let target_line = &edited_lines[line_idx];
+    let carriage_return = if target_line.ends_with('\r') {
+        "\r"
+    } else {
+        ""
+    };
+    let target_line = target_line.strip_suffix('\r').unwrap_or(target_line);
 
     // Determine the character to write
     let status_char = match new_status {
@@ -226,6 +232,7 @@ pub fn move_task_in_file(
         if let Some(context) = new_primary_context {
             new_line = replace_or_insert_primary_context(&new_line, context)?;
         }
+        new_line.push_str(carriage_return);
         edited_lines[line_idx] = new_line;
     } else {
         return Err(WriteError {
@@ -235,7 +242,7 @@ pub fn move_task_in_file(
     }
 
     let updated_content = edited_lines.join("\n");
-    write_file_content_on_disk(file_path, &updated_content)?;
+    write_file_content_if_unchanged(Path::new(file_path), Some(&content), &updated_content)?;
 
     Ok(())
 }
@@ -261,7 +268,10 @@ fn is_match_at_line(file_lines: &[String], start_idx: usize, original_lines: &[&
     }
 
     for (offset, orig_line) in original_lines.iter().enumerate() {
-        let disk_line = &file_lines[start_idx + offset];
+        // Parser source blocks use LF; compare text without CRLF's carriage return.
+        let disk_line = file_lines[start_idx + offset]
+            .strip_suffix('\r')
+            .unwrap_or(&file_lines[start_idx + offset]);
         if offset == 0 {
             // For the first line, compare stripped descriptions/contents ignoring the checkbox state,
             // to allow editing even if checkboxes are slightly different.
@@ -280,7 +290,7 @@ fn is_match_at_line(file_lines: &[String], start_idx: usize, original_lines: &[&
             }
         } else {
             // Subsequent note lines must match exactly
-            if disk_line != orig_line {
+            if disk_line != *orig_line {
                 return false;
             }
         }
@@ -325,6 +335,47 @@ fn locate_source_block(
     }
 }
 
+// Replacement/deletion must account for every descendant seen on disk. Never consume new
+// children or notes that were absent from the source snapshot sent by the editor.
+fn guarded_subtree_end(
+    lines: &[String],
+    start: usize,
+    original_lines: &[&str],
+) -> Result<usize, WriteError> {
+    for (offset, expected) in original_lines.iter().enumerate() {
+        if lines[start + offset]
+            .strip_suffix('\r')
+            .unwrap_or(&lines[start + offset])
+            != *expected
+        {
+            return Err(WriteError {
+                code: WriteErrorCode::SourceChanged,
+                message: "Task source changed. Please refresh before replacing or deleting it.",
+            });
+        }
+    }
+    let parent_indent = lines[start]
+        .chars()
+        .take_while(|c| c.is_whitespace())
+        .count();
+    let mut end = start + original_lines.len();
+    while end < lines.len() {
+        let line = &lines[end];
+        if line.trim().is_empty() {
+            end += 1;
+            continue;
+        }
+        if line.chars().take_while(|c| c.is_whitespace()).count() > parent_indent {
+            return Err(WriteError {
+                code: WriteErrorCode::SourceChanged,
+                message: "Task subtree changed. Please refresh before replacing or deleting it.",
+            });
+        }
+        break;
+    }
+    Ok(end)
+}
+
 pub fn validate_task_markdown_in_file(
     file_path: &str,
     original_line_number: usize,
@@ -345,7 +396,8 @@ pub fn validate_task_markdown_in_file(
             message: "The original task source is empty.",
         });
     }
-    locate_source_block(&lines, original_line_number, &original_lines)?;
+    let start = locate_source_block(&lines, original_line_number, &original_lines)?;
+    guarded_subtree_end(&lines, start, &original_lines)?;
     Ok(())
 }
 
@@ -374,6 +426,12 @@ pub fn update_event_schedule_in_file(
 
     let mut edited_lines = lines;
     let target_line = &edited_lines[line_idx];
+    let carriage_return = if target_line.ends_with('\r') {
+        "\r"
+    } else {
+        ""
+    };
+    let target_line = target_line.strip_suffix('\r').unwrap_or(target_line);
 
     // Strip out any existing s: and dur: tags from the target line
     let re_s = get_re_s();
@@ -397,11 +455,11 @@ pub fn update_event_schedule_in_file(
         }
     }
 
-    let new_line = format!("{}{}", line_clean, suffix);
+    let new_line = format!("{}{}{}", line_clean, suffix, carriage_return);
     edited_lines[line_idx] = new_line;
 
     let updated_content = edited_lines.join("\n");
-    write_file_content_on_disk(file_path, &updated_content)?;
+    write_file_content_if_unchanged(Path::new(file_path), Some(&content), &updated_content)?;
 
     Ok(())
 }
@@ -433,31 +491,28 @@ pub fn update_task_markdown_in_file(
 
     let start_idx = locate_source_block(&lines, original_line_number, &original_block_lines)?;
 
-    let parent_indent = lines[start_idx]
-        .chars()
-        .take_while(|c| c.is_whitespace())
-        .count();
-    let mut end_idx = start_idx + original_block_lines.len();
-    while end_idx < lines.len() {
-        let line = &lines[end_idx];
-        if line.trim().is_empty()
-            || line.chars().take_while(|c| c.is_whitespace()).count() > parent_indent
-        {
-            end_idx += 1;
-        } else {
-            break;
-        }
-    }
+    let end_idx = guarded_subtree_end(&lines, start_idx, &original_block_lines)?;
 
     // 4. Splice the new lines into the vector
-    let new_block_lines: Vec<String> = new_raw_markdown
+    let carriage_return = if lines[start_idx].ends_with('\r') {
+        "\r"
+    } else {
+        ""
+    };
+    let replacement = new_raw_markdown.replace("\r\n", "\n");
+    let replacement_line_count = replacement.split('\n').count();
+    let new_block_lines: Vec<String> = replacement
         .split('\n')
-        .map(|s| s.to_string())
+        .enumerate()
+        .map(|(index, line)| {
+            let has_newline = index + 1 < replacement_line_count || end_idx < lines.len();
+            format!("{line}{}", if has_newline { carriage_return } else { "" })
+        })
         .collect();
     lines.splice(start_idx..end_idx, new_block_lines);
 
     let updated_content = lines.join("\n");
-    write_file_content_on_disk(file_path, &updated_content)?;
+    write_file_content_if_unchanged(Path::new(file_path), Some(&file_content), &updated_content)?;
 
     Ok(())
 }
@@ -470,24 +525,16 @@ pub fn delete_task_markdown_in_file(
     let content = fs::read_to_string(file_path).map_err(|_| WriteError::source_missing())?;
     let mut lines: Vec<String> = content.split('\n').map(str::to_string).collect();
     let original_lines: Vec<&str> = original_raw_markdown.lines().collect();
-    let start_idx = locate_source_block(&lines, original_line_number, &original_lines)?;
-    let parent_indent = lines[start_idx]
-        .chars()
-        .take_while(|c| c.is_whitespace())
-        .count();
-    let mut end_idx = start_idx + original_lines.len();
-    while end_idx < lines.len() {
-        let line = &lines[end_idx];
-        if line.trim().is_empty()
-            || line.chars().take_while(|c| c.is_whitespace()).count() > parent_indent
-        {
-            end_idx += 1;
-        } else {
-            break;
-        }
+    if original_lines.is_empty() {
+        return Err(WriteError {
+            code: WriteErrorCode::InvalidSource,
+            message: "Original task source is empty.",
+        });
     }
+    let start_idx = locate_source_block(&lines, original_line_number, &original_lines)?;
+    let end_idx = guarded_subtree_end(&lines, start_idx, &original_lines)?;
     lines.drain(start_idx..end_idx);
-    write_file_content_on_disk(file_path, &lines.join("\n"))?;
+    write_file_content_if_unchanged(Path::new(file_path), Some(&content), &lines.join("\n"))?;
     Ok(())
 }
 
@@ -845,7 +892,7 @@ mod tests {
         update_task_markdown_in_file(
             file_path.to_str().unwrap(),
             1,
-            "- [ ] Parent",
+            "- [ ] Parent\n    - [ ] Old child\n        - [ ] Old grandchild",
             "- [ ] Parent updated\n    - [ ] Replacement child",
         )
         .unwrap();

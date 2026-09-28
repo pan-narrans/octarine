@@ -9,7 +9,7 @@ interface DashboardProps {
   journalContent: string | null;
   journalPath: string;
   journalLoading: boolean;
-  onSaveJournal: (content: string) => Promise<void>;
+  onSaveJournal: (content: string, originalContent: string) => Promise<void>;
   onOpenTask: (task: Task) => void;
   onStatusChange: (task: Task, status: Task["status"]) => void;
 }

@@ -45,7 +45,8 @@ Rename operates on segment identity. `work` to `job` changes `+work` and descend
 
 Preflight reports task-token rewrites, file and directory moves, descendant impact, and collisions.
 Execution requires current opaque preflight token. Destination and case-fold collisions block
-execution. Case-only rename uses temporary sibling path for case-insensitive macOS filesystems.
+execution. Planned filesystem destinations are checked again before the first rewrite, so a newly
+created destination rejects a stale plan without partially renaming metadata. Case-only rename uses temporary sibling path for case-insensitive macOS filesystems.
 
 Only explicit project tokens in task metadata change. Markdown links, prose, code, comments, and
 ignored file contents remain unchanged. Ordinary files and ignored paths inside renamed directory

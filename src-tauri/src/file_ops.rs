@@ -166,6 +166,79 @@ pub fn write_file_content_on_disk(path_str: &str, content: &str) -> Result<(), S
     Ok(())
 }
 
+/// `None` means create only; `Some` must match the exact bytes last read by the editor.
+/// This checks again immediately before replacement, but is not an OS compare-and-swap.
+pub fn write_file_content_if_unchanged(
+    path: &Path,
+    original: Option<&str>,
+    content: &str,
+) -> Result<(), crate::writer::WriteError> {
+    guarded_write_with_hook(path, original, content, || {})
+}
+
+fn guarded_write_with_hook<F: FnOnce()>(
+    path: &Path,
+    original: Option<&str>,
+    content: &str,
+    before_commit: F,
+) -> Result<(), crate::writer::WriteError> {
+    use crate::writer::{WriteError, WriteErrorCode};
+    let changed = || {
+        WriteError {
+        code: WriteErrorCode::SourceChanged,
+        message: "File changed on disk. Your edits remain unsaved; reopen the file after copying your changes.",
+    }
+    };
+    let validate = || match fs::read_to_string(path) {
+        Ok(current) if original == Some(current.as_str()) => Ok(()),
+        Ok(_) => Err(changed()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            if original.is_none() {
+                Ok(())
+            } else {
+                Err(WriteError::source_missing())
+            }
+        }
+        Err(_) => Err(WriteError::operation_failed()),
+    };
+    validate()?;
+    let parent = path.parent().ok_or_else(WriteError::operation_failed)?;
+    let mut temporary =
+        NamedTempFile::new_in(parent).map_err(|_| WriteError::operation_failed())?;
+    temporary
+        .write_all(content.as_bytes())
+        .map_err(|_| WriteError::operation_failed())?;
+    if original.is_some() {
+        let permissions = fs::metadata(path)
+            .map_err(|_| WriteError::operation_failed())?
+            .permissions();
+        temporary
+            .as_file_mut()
+            .set_permissions(permissions)
+            .map_err(|_| WriteError::operation_failed())?;
+    }
+    temporary
+        .as_file_mut()
+        .sync_all()
+        .map_err(|_| WriteError::operation_failed())?;
+    before_commit();
+    validate()?;
+    if original.is_some() {
+        temporary
+            .persist(path)
+            .map_err(|_| WriteError::operation_failed())?;
+    } else {
+        temporary.persist_noclobber(path).map_err(|error| {
+            if error.error.kind() == std::io::ErrorKind::AlreadyExists {
+                changed()
+            } else {
+                WriteError::operation_failed()
+            }
+        })?;
+    }
+    Ok(())
+}
+
 use regex::Regex;
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
@@ -298,6 +371,26 @@ mod tests {
 
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    fn guarded_save_rechecks_source_after_preparing_replacement() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("note.md");
+        for original in [Some("Original"), None] {
+            if let Some(content) = original {
+                fs::write(&path, content).unwrap();
+            } else if path.exists() {
+                fs::remove_file(&path).unwrap();
+            }
+            let error = guarded_write_with_hook(&path, original, "Unsaved", || {
+                fs::write(&path, "External edit").unwrap();
+            })
+            .unwrap_err();
+            assert_eq!(error.code, crate::writer::WriteErrorCode::SourceChanged);
+            assert_eq!(fs::read_to_string(&path).unwrap(), "External edit");
+            assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 1);
+        }
+    }
 
     #[test]
     fn test_atomic_write_preserves_content_and_permissions() {

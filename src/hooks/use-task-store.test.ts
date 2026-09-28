@@ -114,3 +114,80 @@ describe("optimistic Kanban moves", () => {
     expect(useTaskStore.getState().error).toBe("Task changed.");
   });
 });
+
+describe("task status persistence", () => {
+  it("keeps current tasks while saving and reconciles backend result", async () => {
+    const original = task();
+    const indexed = task({ status: "done", hash: "saved" });
+    let finish: () => void = () => undefined;
+    ipc.updateTaskStatus.mockReturnValue(new Promise<void>((resolve) => (finish = resolve)));
+    ipc.getTasks.mockResolvedValue([indexed]);
+    useTaskStore.setState({ tasks: [original], activeFilter: "+work" });
+
+    const saving = useTaskStore
+      .getState()
+      .updateTaskStatus(original.file_path!, original.line_number, original.raw_markdown, "done");
+    expect(useTaskStore.getState().loading).toBe(true);
+    expect(useTaskStore.getState().tasks).toEqual([original]);
+    expect(ipc.updateTaskStatus).toHaveBeenCalledWith(
+      original.file_path,
+      original.line_number,
+      original.raw_markdown,
+      "done",
+    );
+    finish();
+    await saving;
+    expect(ipc.getTasks).toHaveBeenCalledWith("+work");
+    expect(useTaskStore.getState()).toMatchObject({
+      tasks: [indexed],
+      loading: false,
+      error: null,
+    });
+  });
+
+  it.each(["source_changed", "source_missing", "source_ambiguous"])(
+    "%s refreshes authoritative tasks and keeps conflict visible",
+    async (code) => {
+      const original = task();
+      const external = task({ hash: "external", description: "External edit" });
+      useTaskStore.setState({ tasks: [original] });
+      ipc.updateTaskStatus.mockRejectedValue({ code, message: "Refresh source." });
+      ipc.getTasks.mockResolvedValue([external]);
+      await useTaskStore
+        .getState()
+        .updateTaskStatus("/vault/work.md", 1, original.raw_markdown, "done");
+      expect(useTaskStore.getState()).toMatchObject({
+        tasks: [external],
+        loading: false,
+        error: "Refresh source.",
+      });
+    },
+  );
+
+  it("failed write retains tasks and clears loading without reporting success", async () => {
+    const original = task();
+    useTaskStore.setState({ tasks: [original] });
+    ipc.updateTaskStatus.mockRejectedValue({ code: "operation_failed", message: "Write failed." });
+    await useTaskStore
+      .getState()
+      .updateTaskStatus("/vault/work.md", 1, original.raw_markdown, "done");
+    expect(ipc.getTasks).not.toHaveBeenCalled();
+    expect(useTaskStore.getState()).toMatchObject({
+      tasks: [original],
+      loading: false,
+      error: "Write failed.",
+    });
+  });
+
+  it("failed refresh retains last known tasks and exposes refresh failure", async () => {
+    const original = task();
+    useTaskStore.setState({ tasks: [original] });
+    ipc.getTasks.mockRejectedValue(new Error("Cache unavailable"));
+    await useTaskStore.getState().fetchTasks();
+    expect(useTaskStore.getState()).toMatchObject({
+      tasks: [original],
+      loading: false,
+      error: "Cache unavailable",
+    });
+  });
+});

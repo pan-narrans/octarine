@@ -10,7 +10,7 @@ import { Save, X, Check, Loader2 } from "lucide-react";
 interface MarkdownEditorProps {
   filePath: string;
   initialContent: string;
-  onSave: (content: string) => Promise<void>;
+  onSave: (content: string, originalContent: string) => Promise<void>;
   onClose: () => void;
   projects?: string[];
   contexts?: string[];
@@ -27,6 +27,11 @@ export function MarkdownEditor({
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const onSaveRef = useRef(onSave);
+  const initialContentRef = useRef(initialContent);
+  const savedContentRef = useRef(initialContent);
+  const savingViewRef = useRef<EditorView | null>(null);
+  const statusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  initialContentRef.current = initialContent;
   const projectsRef = useRef(projects);
   const contextsRef = useRef(contexts);
 
@@ -246,22 +251,33 @@ export function MarkdownEditor({
   );
 
   const triggerSave = useCallback(async () => {
-    if (!viewRef.current) return;
-    const currentContent = viewRef.current.state.doc.toString();
+    const view = viewRef.current;
+    if (!view || savingViewRef.current) return;
+    const currentContent = view.state.doc.toString();
+    if (currentContent === savedContentRef.current.replace(/\r\n/g, "\n")) return;
 
+    savingViewRef.current = view;
+    if (statusTimerRef.current !== null) clearTimeout(statusTimerRef.current);
     setSaving(true);
     setSaveStatus(null);
     try {
-      await onSaveRef.current(currentContent);
-      setIsDirty(false);
-      setSaveStatus(true);
-      setTimeout(() => setSaveStatus(null), 2000);
+      await onSaveRef.current(currentContent, savedContentRef.current);
+      // An old document's completion must never mark a newer editor session as saved.
+      if (viewRef.current !== view) return;
+      savedContentRef.current = currentContent;
+      const dirty = view.state.doc.toString() !== currentContent;
+      setIsDirty(dirty);
+      setSaveStatus(dirty ? null : true);
+      if (!dirty) statusTimerRef.current = setTimeout(() => setSaveStatus(null), 2000);
     } catch (e) {
+      if (viewRef.current !== view) return;
       console.error("Save failed:", e);
       setSaveStatus(false);
-      setTimeout(() => setSaveStatus(null), 3000);
     } finally {
-      setSaving(false);
+      if (savingViewRef.current === view) {
+        savingViewRef.current = null;
+        if (viewRef.current === view) setSaving(false);
+      }
     }
   }, []);
 
@@ -283,7 +299,9 @@ export function MarkdownEditor({
     // Listener extension to track changes and mark document "dirty"
     const changeListener = EditorView.updateListener.of((update) => {
       if (update.docChanged) {
-        setIsDirty(true);
+        setIsDirty(update.state.doc.toString() !== savedContentRef.current.replace(/\r\n/g, "\n"));
+        setSaveStatus(null);
+        if (statusTimerRef.current !== null) clearTimeout(statusTimerRef.current);
       }
     });
 
@@ -302,7 +320,7 @@ export function MarkdownEditor({
     ];
 
     const state = EditorState.create({
-      doc: initialContent,
+      doc: initialContentRef.current,
       extensions,
     });
 
@@ -312,6 +330,10 @@ export function MarkdownEditor({
     });
 
     viewRef.current = view;
+    savedContentRef.current = initialContentRef.current;
+    savingViewRef.current = null;
+    setSaving(false);
+    setSaveStatus(null);
     setIsDirty(false);
 
     // Focus editor automatically on load
@@ -319,9 +341,20 @@ export function MarkdownEditor({
 
     // Cleanup on unmount
     return () => {
+      if (statusTimerRef.current !== null) clearTimeout(statusTimerRef.current);
+      if (viewRef.current === view) viewRef.current = null;
       view.destroy();
     };
-  }, [customCompletionSource, filePath, initialContent, triggerSave]);
+  }, [customCompletionSource, filePath, triggerSave]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view || savingViewRef.current || initialContent === savedContentRef.current) return;
+    // Parent save acknowledgements and external refreshes must not erase a dirty buffer.
+    if (view.state.doc.toString() !== savedContentRef.current.replace(/\r\n/g, "\n")) return;
+    savedContentRef.current = initialContent;
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: initialContent } });
+  }, [initialContent]);
 
   return (
     <div className="editor-workspace">

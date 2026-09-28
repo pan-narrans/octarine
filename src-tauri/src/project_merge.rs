@@ -880,7 +880,10 @@ where
         }
         operation_index += 1;
         let operation = format!("Install {}", entry.destination_path);
-        let destination = resolve_plan_path(&vault_root, &entry.destination_path, false)?;
+        let destination =
+            resolve_plan_path(&vault_root, &entry.destination_path, false).map_err(|error| {
+                fail_commit(&vault_root, &recovery_root, &mut manifest, error.message)
+            })?;
         if destination.exists() || fs::symlink_metadata(&destination).is_ok() {
             if let Err(error) = recover_original(
                 &vault_root,
@@ -898,7 +901,10 @@ where
                 ));
             }
         }
-        let staged_path = resolve_plan_path(&vault_root, &entry.staged_path, true)?;
+        let staged_path =
+            resolve_plan_path(&vault_root, &entry.staged_path, true).map_err(|error| {
+                fail_commit(&vault_root, &recovery_root, &mut manifest, error.message)
+            })?;
         if let Some(parent) = destination.parent() {
             if let Err(error) = fs::create_dir_all(parent) {
                 return Err(fail_commit(
@@ -917,7 +923,9 @@ where
                 format!("Staged merge output could not be installed: {error}"),
             ));
         }
-        finish_recovery_operation(&recovery_root, &mut manifest, &operation)?;
+        finish_recovery_operation(&recovery_root, &mut manifest, &operation).map_err(|error| {
+            fail_commit(&vault_root, &recovery_root, &mut manifest, error.message)
+        })?;
     }
 
     for source_path in source_paths_to_recover(plan) {
@@ -926,7 +934,9 @@ where
         }
         operation_index += 1;
         let operation = format!("Recover source {source_path}");
-        let source = resolve_plan_path(&vault_root, &source_path, false)?;
+        let source = resolve_plan_path(&vault_root, &source_path, false).map_err(|error| {
+            fail_commit(&vault_root, &recovery_root, &mut manifest, error.message)
+        })?;
         if source.exists() || fs::symlink_metadata(&source).is_ok() {
             if let Err(error) = recover_original(
                 &vault_root,
@@ -944,15 +954,19 @@ where
                 ));
             }
         }
-        finish_recovery_operation(&recovery_root, &mut manifest, &operation)?;
+        finish_recovery_operation(&recovery_root, &mut manifest, &operation).map_err(|error| {
+            fail_commit(&vault_root, &recovery_root, &mut manifest, error.message)
+        })?;
     }
 
     if !continue_before_operation(operation_index) {
         return Err(stop_commit(&vault_root, &recovery_root, &mut manifest));
     }
     let cleanup_operation = format!("Remove empty source project {}", plan.source_project);
-    remove_empty_source_project_directories(&vault_root, plan)?;
-    finish_recovery_operation(&recovery_root, &mut manifest, &cleanup_operation)?;
+    remove_empty_source_project_directories(&vault_root, plan)
+        .map_err(|error| fail_commit(&vault_root, &recovery_root, &mut manifest, error.message))?;
+    finish_recovery_operation(&recovery_root, &mut manifest, &cleanup_operation)
+        .map_err(|error| fail_commit(&vault_root, &recovery_root, &mut manifest, error.message))?;
 
     if let Some(connection) = connection {
         operation_index += 1;
@@ -972,7 +986,8 @@ where
             &recovery_root,
             &mut manifest,
             "Reconcile derived task index",
-        )?;
+        )
+        .map_err(|error| fail_commit(&vault_root, &recovery_root, &mut manifest, error.message))?;
     }
 
     let completed_at = chrono::Utc::now();
@@ -980,10 +995,14 @@ where
     manifest.status = ProjectMergeRecoveryStatus::Successful;
     manifest.completed_at = Some(completed_at.to_rfc3339());
     manifest.expires_at = Some(expires_at.to_rfc3339());
-    write_recovery_manifest(&recovery_root, &manifest)?;
-    let staging_root = merge_workspace_path(&vault_root, "staging", &plan.operation_id)?;
+    write_recovery_manifest(&recovery_root, &manifest)
+        .map_err(|error| fail_commit(&vault_root, &recovery_root, &mut manifest, error.message))?;
+    let staging_root = merge_workspace_path(&vault_root, "staging", &plan.operation_id)
+        .map_err(|error| fail_commit(&vault_root, &recovery_root, &mut manifest, error.message))?;
     if staging_root.exists() {
-        remove_workspace(&vault_root, &staging_root)?;
+        remove_workspace(&vault_root, &staging_root).map_err(|error| {
+            fail_commit(&vault_root, &recovery_root, &mut manifest, error.message)
+        })?;
     }
     Ok(ProjectMergeResult {
         prepared_token: prepared.prepared_token.clone(),
@@ -2639,6 +2658,44 @@ mod tests {
         fs::create_dir_all(vault.join("projects/old/api")).unwrap();
         fs::create_dir_all(vault.join("projects/new/api")).unwrap();
         (temp, vault)
+    }
+
+    #[test]
+    fn missing_staged_output_after_first_install_returns_recovery_report() {
+        let (_temp, vault) = vault();
+        fs::write(vault.join("a.md"), "- [ ] A +old\n").unwrap();
+        fs::write(vault.join("b.md"), "- [ ] B +old\n").unwrap();
+        let plan = plan_project_merge(&vault, "projects", "old", "new").unwrap();
+        let prepared = prepare_project_merge(&vault, &plan, &[]).unwrap();
+        assert_eq!(prepared.entries.len(), 2);
+        let error =
+            execute_prepared_project_merge_with_hook(&vault, None, &plan, &prepared, |operation| {
+                if operation == 1 {
+                    fs::remove_file(vault.join(&prepared.entries[1].staged_path)).unwrap();
+                }
+                true
+            })
+            .unwrap_err();
+        assert_eq!(error.code, ProjectMergeErrorCode::PartialFailure);
+        let recovery = error.recovery.unwrap();
+        assert_eq!(recovery.completed_operations.len(), 1);
+        assert!(!recovery.pending_operations.is_empty());
+        assert_eq!(
+            fs::read_to_string(vault.join("a.md")).unwrap(),
+            "- [ ] A +new\n"
+        );
+        for (name, original) in [("a.md", "- [ ] A +old\n"), ("b.md", "- [ ] B +old\n")] {
+            assert_eq!(
+                fs::read_to_string(
+                    vault
+                        .join(&recovery.recovery_path)
+                        .join("originals")
+                        .join(name)
+                )
+                .unwrap(),
+                original
+            );
+        }
     }
 
     #[test]
