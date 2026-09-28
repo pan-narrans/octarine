@@ -109,8 +109,9 @@ or duplicate events. Assert indexed state at notification time instead.
 
 ## Prioritized Remaining Work
 
-1. Editor navigation: persisted drafts or explicit unsaved-navigation confirmation. Pending-save
-   acknowledgements are isolated now, but leaving an unsaved document can still discard its buffer.
+1. Editor recovery: persisted drafts or native quit protection, plus draft relocation on file
+   rename/delete. In-process navigation now retains buffers, source preconditions, and pending saves;
+   reload, crash, or application exit still loses unsaved text.
 2. Destructive races: case-only filesystem collisions and external changes during the final
    validation/replacement window. Guarded commits and unseen-child rejection reduce risk; existing
    per-file atomic writes remain neither a global transaction nor filesystem compare-and-swap.
@@ -125,9 +126,11 @@ or duplicate events. Assert indexed state at notification time instead.
 6. Native desktop smoke automation: external edits, restart, configured-root changes, and conflict
    feedback on supported operating systems.
 
-Persisted drafts, crash/session recovery, autosave, and unsaved-navigation confirmation are absent.
-Tests for those guarantees require implementation first. Existing fixtures, browser callback harness,
-and synchronous event seam are reusable infrastructure, not evidence that those features exist.
+Persisted drafts, crash/restart recovery, autosave, and native quit protection are absent. Tests for
+those guarantees require implementation first. Editor session unit tests and rendered close/reopen
+tests prove memory-only navigation retention, including rejected writes after unmount and pending
+save deduplication across remounts. Existing fixtures, browser callback harness, and synchronous event
+seam are reusable infrastructure, not evidence of native lifecycle guarantees.
 
 ## Scope-Aware Definition of Done
 

@@ -161,9 +161,15 @@ buffers. Completions from old document sessions cannot reset another editor's st
 existing notifications. A durable write with failed indexing resolves as saved and offers a separate
 native reindex action; retrying the cache does not rewrite Markdown.
 
-Persisted drafts, crash recovery, autosave, and unsaved-navigation confirmation remain absent.
-Switching or closing an unsaved document can still discard its in-memory draft. Browser component
-tests exercise callback ordering; Rust integration tests establish disk preconditions and recovery.
+Unsaved buffers and pending writes survive editor close, sidebar navigation, and note/journal
+switching in a memory-only session registry keyed by full file path. Reopening restores text and its
+original source precondition; external changes still cause a save conflict. Pending writes remain
+deduplicated across remounts, and failed writes retain their draft even with no editor mounted.
+Clean closed sessions are released. Drafts do not follow file renames or deletes automatically.
+
+Persisted drafts, crash/restart recovery, autosave, and native quit protection remain absent; exiting
+or reloading the application discards memory-only drafts. Browser component tests exercise callback
+ordering; Rust integration tests establish disk preconditions and recovery.
 
 ## Current Structural Limitations
 

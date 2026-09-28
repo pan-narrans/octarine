@@ -92,3 +92,60 @@ test("external refresh preserves dirty text and its original save precondition",
   await expect(page.getByLabel("Persisted content")).toHaveText("# External edit");
   await expect(editor).toContainText("Local unsaved work");
 });
+
+test("close and navigation restore independent unsaved buffers", async ({ page }) => {
+  const editor = page.locator(".cm-content");
+  await editor.fill("First draft");
+  await page.getByRole("button", { name: "Close", exact: true }).click();
+  await page.getByRole("button", { name: "External edit" }).click();
+  await page.getByRole("button", { name: "Reopen note" }).click();
+  await expect(editor).toHaveText("First draft");
+  await page.getByRole("button", { name: "Switch note" }).click();
+  await editor.fill("Second draft");
+  await page.getByRole("button", { name: "Switch note" }).click();
+  await expect(editor).toHaveText("First draft");
+  await expect(page.getByTitle("Unsaved changes")).toBeVisible();
+  await editor.press("ControlOrMeta+s");
+  await expect(page.getByLabel("Original snapshot")).toHaveText("# Original note");
+  await page.getByRole("button", { name: "Complete save", exact: true }).click();
+  await expect(editor).toHaveText("First draft");
+  await expect(page.getByTitle("Unsaved changes")).toBeVisible();
+  await page.getByRole("button", { name: "Switch note" }).click();
+  await expect(editor).toHaveText("Second draft");
+});
+
+test("reopening pending save preserves newer edits and prevents duplicate writes", async ({
+  page,
+}) => {
+  const editor = page.locator(".cm-content");
+  await editor.fill("Submitted draft");
+  await editor.press("ControlOrMeta+s");
+  await page.getByRole("button", { name: "Close", exact: true }).click();
+  await page.getByRole("button", { name: "Reopen note" }).click();
+  await expect(page.getByRole("button", { name: "Saving...", exact: true })).toBeDisabled();
+  await expect(editor).toHaveText("Submitted draft");
+  await editor.fill("Newer draft");
+  await editor.press("ControlOrMeta+s");
+  await expect(page.getByLabel("Save calls")).toHaveText("1");
+  await page.getByRole("button", { name: "Complete save", exact: true }).click();
+  await expect(editor).toHaveText("Newer draft");
+  await expect(page.getByTitle("Unsaved changes")).toBeVisible();
+  await editor.press("ControlOrMeta+s");
+  await expect(page.getByLabel("Original snapshot")).toHaveText("Submitted draft");
+  await page.getByRole("button", { name: "Complete save", exact: true }).click();
+  await expect(page.getByTitle("Unsaved changes")).toHaveCount(0);
+});
+
+test("save failure after close restores retryable draft", async ({ page }) => {
+  const editor = page.locator(".cm-content");
+  await editor.fill("Recoverable draft");
+  await editor.press("ControlOrMeta+s");
+  await page.getByRole("button", { name: "Close", exact: true }).click();
+  await page.getByRole("button", { name: "Reject save", exact: true }).click();
+  await page.getByRole("button", { name: "Reopen note" }).click();
+  await expect(editor).toHaveText("Recoverable draft");
+  await expect(page.getByRole("button", { name: "Save (Cmd+S)", exact: true })).toBeEnabled();
+  await editor.press("ControlOrMeta+s");
+  await page.getByRole("button", { name: "Complete save", exact: true }).click();
+  await expect(page.getByLabel("Persisted content")).toHaveText("Recoverable draft");
+});
