@@ -5,3 +5,6 @@ storybook-static/
 playwright-report/
 test-results/
 THIRD_PARTY_LICENSES.md
+
+# Literal Markdown regression inputs; formatting is part of the fixture.
+src-tauri/tests/fixtures/

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
-import { ArrowRight, FolderInput, X } from "lucide-react";
-import { ActionButton } from "../design-system/controls";
+import { ArrowRight, FolderInput } from "lucide-react";
+import { ActionButton, DialogCloseButton } from "../design-system/controls";
 
 export interface ProjectMoveConfirmationProps {
   taskTitle: string;
@@ -88,15 +88,7 @@ export function ProjectMoveConfirmation({
             <h2 id="project-move-title">Move task to another project?</h2>
             <p id="project-move-description">{taskTitle}</p>
           </div>
-          <button
-            className="modal-close"
-            type="button"
-            onClick={onCancel}
-            aria-label="Cancel project move"
-            disabled={moving}
-          >
-            <X size={18} />
-          </button>
+          <DialogCloseButton label="Cancel project move" onClick={onCancel} disabled={moving} />
         </header>
 
         <div className="project-move-body">

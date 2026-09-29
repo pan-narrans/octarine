@@ -1,3 +1,11 @@
+import { saveEditorFile } from "./features/workspace/save-editor-file";
+import { isEditorPathWithin } from "./features/workspace/editor-sessions";
+import {
+  deleteEditorPath,
+  renameEditorPath,
+  renameEditorProject,
+  mergeEditorProjects,
+} from "./features/workspace/file-mutations";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTaskStore } from "./hooks/use-task-store";
 import { useTauriEvents } from "./hooks/use-tauri-events";
@@ -53,8 +61,6 @@ import {
   moveTaskProject,
   cancelProjectMerge,
   deleteProjectMergeRecovery,
-  executeProjectRename,
-  executeProjectMerge,
   listProjectMergeRecovery,
   openProjectMergeRecovery,
   parseCreateTaskError,
@@ -78,13 +84,11 @@ import { useApplicationUpdates } from "./features/settings/use-application-updat
 import {
   createDirectory,
   createFile,
-  deletePath,
   getJournalConfig,
   getVaultConfig,
   readFileContent,
   readJournalTree,
   readVaultTree,
-  renamePath,
   setVaultConfig,
   writeFileContent,
 } from "./features/workspace/ipc";
@@ -259,6 +263,8 @@ export function App() {
   const cancelledProjectMerges = useRef(new Set<string>());
   const [todayJournalContent, setTodayJournalContent] = useState<string | null>(null);
   const [todayJournalPath, setTodayJournalPath] = useState<string>("");
+  const todayJournalPathRef = useRef(todayJournalPath);
+  todayJournalPathRef.current = todayJournalPath;
   const [todayJournalLoading, setTodayJournalLoading] = useState<boolean>(true);
 
   useEffect(() => {
@@ -543,7 +549,7 @@ export function App() {
         content = await readFileContent(filePath);
       } catch {
         // File does not exist yet, write empty string to scaffold it!
-        await writeFileContent(filePath, `# 📓 Journal Entry: ${todayStr}\n\n`);
+        await writeFileContent(filePath, `# 📓 Journal Entry: ${todayStr}\n\n`, null);
         content = `# 📓 Journal Entry: ${todayStr}\n\n`;
       }
       await fetchJournalTree();
@@ -571,7 +577,7 @@ export function App() {
         content = await readFileContent(filePath);
       } catch {
         // Silently scaffold today's journal note
-        await writeFileContent(filePath, `# 📓 Journal Entry: ${todayStr}\n\n`);
+        await writeFileContent(filePath, `# 📓 Journal Entry: ${todayStr}\n\n`, null);
         content = `# 📓 Journal Entry: ${todayStr}\n\n`;
       }
       setTodayJournalPath(filePath);
@@ -583,11 +589,12 @@ export function App() {
     }
   };
 
-  const handleSaveTodayJournalContent = async (content: string) => {
-    if (!todayJournalPath) return;
+  const handleSaveTodayJournalContent = async (content: string, originalContent: string) => {
+    if (!todayJournalPath) throw new Error("No journal note is open.");
     try {
-      await writeFileContent(todayJournalPath, content);
-      setTodayJournalContent(content);
+      const path = todayJournalPath;
+      await saveEditorFile(path, content, originalContent);
+      if (todayJournalPathRef.current === path) setTodayJournalContent(content);
     } catch (e) {
       console.error("Failed to save today's journal:", e);
       throw e;
@@ -628,11 +635,10 @@ export function App() {
 
   const handleDeletePath = async (path: string) => {
     try {
-      await deletePath(path);
-      if (activeFilePath === path) {
-        setActiveFilePath(null);
-        setActiveFileContent(null);
-      }
+      await deleteEditorPath(path);
+      setActiveFilePath((current) =>
+        current && isEditorPathWithin(current, path) ? null : current,
+      );
       await fetchDirTree();
     } catch (e) {
       console.error("Failed to delete path:", e);
@@ -679,10 +685,11 @@ export function App() {
         await beginProjectRename(sourceProject, destinationProject);
         return;
       }
-      await renamePath(oldPath, newPath);
-      if (activeFilePath === oldPath) {
-        setActiveFilePath(newPath);
-      }
+      await renameEditorPath(oldPath, newPath);
+      // Reopen from the tree to load the destination's current source snapshot.
+      setActiveFilePath((current) =>
+        current && isEditorPathWithin(current, oldPath) ? null : current,
+      );
       await fetchDirTree();
     } catch (e) {
       console.error("Failed to rename path:", e);
@@ -742,15 +749,10 @@ export function App() {
     }
   };
 
-  const handleSaveFileContent = async (content: string) => {
-    if (!activeFilePath) return;
-    try {
-      await writeFileContent(activeFilePath, content);
-      setActiveFileContent(content);
-    } catch (e) {
-      console.error("Failed to save note:", e);
-      throw e;
-    }
+  const handleSaveFileContent = async (content: string, originalContent: string) => {
+    if (!activeFilePath) throw new Error("No note is open.");
+    // Editor owns its current buffer. A late save cannot replace another document's initial content.
+    await saveEditorFile(activeFilePath, content, originalContent);
   };
 
   const getSortedEventsForDay = (date: Date) =>
@@ -1021,27 +1023,10 @@ export function App() {
     const plan = pendingProjectRename;
     setRenamingProject(true);
     try {
-      const result = await executeProjectRename(plan.planToken);
-      if (activeFilePath) {
-        const relative = activeFilePath.startsWith(`${activeVaultPath}/`)
-          ? activeFilePath.slice(activeVaultPath.length + 1)
-          : null;
-        if (relative) {
-          for (const move of plan.moves) {
-            if (relative === move.sourcePath) {
-              setActiveFilePath(`${activeVaultPath}/${move.destinationPath}`);
-              break;
-            }
-            const prefix = `${move.sourcePath}/`;
-            if (relative.startsWith(prefix)) {
-              setActiveFilePath(
-                `${activeVaultPath}/${move.destinationPath}/${relative.slice(prefix.length)}`,
-              );
-              break;
-            }
-          }
-        }
-      }
+      const result = await renameEditorProject(activeVaultPath, plan.planToken);
+      setActiveFilePath((current) =>
+        current && isEditorPathWithin(current, activeVaultPath) ? null : current,
+      );
       if (selectedSection.startsWith("proj:")) {
         const selectedProject = selectedSection.slice("proj:".length);
         const renamed = renamedProjectValue(
@@ -1272,7 +1257,7 @@ export function App() {
     const plan = pendingProjectMerge;
     setProjectMergeStage("committing");
     try {
-      const result = await executeProjectMerge(plan.planToken);
+      const result = await mergeEditorProjects(activeVaultPath, plan.planToken);
       setProjectMergeResult(result);
       setProjectMergeStage("success");
       setProjectMergeRecovery(null);
@@ -1287,10 +1272,9 @@ export function App() {
           setSelectedSection(`proj:${plan.destinationProject}`);
         }
       }
-      if (activeFilePath?.startsWith(`${activeVaultPath}/${plan.projectFolder}/`)) {
-        setActiveFilePath(null);
-        setActiveFileContent(null);
-      }
+      setActiveFilePath((current) =>
+        current && isEditorPathWithin(current, activeVaultPath) ? null : current,
+      );
       const [, bundles] = await Promise.all([
         Promise.all([fetchTasks(), fetchCustomViews(), fetchDirTree()]),
         listProjectMergeRecovery(),
@@ -1601,6 +1585,7 @@ export function App() {
               {isEditingVault ? (
                 <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
                   <input
+                    className="sidebar-vault-input"
                     type="text"
                     value={vaultInput}
                     onChange={(e) => setVaultInput(e.target.value)}
@@ -1619,6 +1604,7 @@ export function App() {
                   />
                   <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
                     <button
+                      className="sidebar-vault-button"
                       onClick={() => setIsEditingVault(false)}
                       style={{
                         background: "rgba(255, 255, 255, 0.05)",
@@ -1626,7 +1612,6 @@ export function App() {
                         color: "var(--text-muted)",
                         padding: "0.25rem 0.5rem",
                         borderRadius: "4px",
-                        cursor: "pointer",
                         fontSize: "0.75rem",
                         display: "flex",
                         alignItems: "center",
@@ -1637,6 +1622,7 @@ export function App() {
                       <X size={10} /> Cancel
                     </button>
                     <button
+                      className="sidebar-vault-button"
                       onClick={handleSaveVault}
                       style={{
                         background: "var(--color-violet)",
@@ -1644,7 +1630,6 @@ export function App() {
                         color: "white",
                         padding: "0.25rem 0.5rem",
                         borderRadius: "4px",
-                        cursor: "pointer",
                         fontSize: "0.75rem",
                         fontWeight: 600,
                         display: "flex",

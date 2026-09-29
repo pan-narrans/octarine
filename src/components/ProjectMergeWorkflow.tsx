@@ -11,7 +11,6 @@ import {
   Info,
   LockKeyhole,
   ShieldCheck,
-  X,
 } from "lucide-react";
 import type {
   ProjectMergeConflict,
@@ -20,7 +19,7 @@ import type {
   ProjectMergeRecoveryReport,
   ProjectMergeResolutionAction,
 } from "../types";
-import { ActionButton } from "../design-system/controls";
+import { ActionButton, DialogCloseButton } from "../design-system/controls";
 
 export type ProjectMergeWorkflowStage =
   | "offer"
@@ -527,15 +526,7 @@ export function ProjectMergeWorkflow({
             <h2 id="project-merge-title">{title}</h2>
             <p>{description}</p>
           </div>
-          <button
-            className="modal-close"
-            type="button"
-            onClick={onClose}
-            disabled={busy}
-            aria-label="Close project merge"
-          >
-            <X size={18} />
-          </button>
+          <DialogCloseButton label="Close project merge" onClick={onClose} disabled={busy} />
         </header>
 
         {stage !== "offer" && <MergeSteps stage={stage} />}

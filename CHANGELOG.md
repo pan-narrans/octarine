@@ -10,4 +10,4 @@ Notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - Signed stable/beta self-updates for direct macOS and Linux AppImage distributions.
 - Public-release security, license, visual, and smoke-test gates.
 
-[Unreleased]: https://github.com/pan-narrans/octarine/compare/master...develop
+[Unreleased]: https://github.com/pan-narrans/octarine/compare/master...release/0.1.0

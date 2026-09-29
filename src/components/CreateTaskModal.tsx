@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
-import { ChevronDown, ChevronUp, FileText, X } from "lucide-react";
-import { ActionButton, FormInput } from "../design-system/controls";
+import { ChevronDown, ChevronUp, FileText } from "lucide-react";
+import { ActionButton, DialogCloseButton, FormInput } from "../design-system/controls";
 import type { TaskDraftPreview } from "../types";
 import { TaskComposer } from "./TaskComposer";
 
@@ -85,15 +85,11 @@ export function CreateTaskModal({
             <h2 id="create-task-title">New Task</h2>
             <p>Capture now. Shape details when needed.</p>
           </div>
-          <button
-            className="modal-close"
-            type="button"
+          <DialogCloseButton
+            label="Close new task dialog"
             onClick={requestClose}
-            aria-label="Close"
             disabled={creating}
-          >
-            <X size={18} />
-          </button>
+          />
         </header>
 
         <div className="create-task-body">

@@ -10,9 +10,10 @@ Required commands:
 npm run format:check
 npm run lint
 npm run build
+npm test
 ```
 
-Frontend tests become a required gate with the first meaningful Vitest and React Testing Library suite; do not add an empty test command merely to claim coverage.
+Vitest behavior tests are part of the required frontend gate. Browser component tests use the existing Playwright/Storybook stack; no additional React testing framework is required.
 
 ## Naming
 
@@ -62,7 +63,7 @@ Feature-specific code stays with its feature. Shared code should have at least t
 
 ## Testing
 
-When the frontend test layer is introduced:
+Frontend testing conventions:
 
 - Start with pure feature logic and IPC adapters.
 - Mock at the typed IPC boundary.

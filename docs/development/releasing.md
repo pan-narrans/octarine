@@ -124,7 +124,7 @@ channel with no published release yet.
 
 ## Automation Alignment
 
-Before using this branch model for releases, repository automation must enforce it:
+Repository automation enforces branch and tag policy:
 
 - Quality and Security workflows run for PRs targeting `master` or `release/**`.
 - Prerelease tag validation requires tag commit to belong to matching release branch.
@@ -133,8 +133,9 @@ Before using this branch model for releases, repository automation must enforce 
 - GitHub tag rules require successful Quality and Security checks for every `v*` tag and block tag
   updates and deletion.
 
-Current automation must be reviewed and updated as part of branch-model migration. Do not create Beta
-tag from release branch while workflow still requires every tag to belong to `master`.
+Release configuration tests verify repository-owned workflow constraints and derive expected current
+Dependabot target from package release version to detect release-cycle drift. Hosted GitHub branch
+and tag rules are configured separately and require direct repository-rules inspection.
 
 ## Manual Channel Rollback
 

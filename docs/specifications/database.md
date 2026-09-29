@@ -42,3 +42,16 @@ Increment `CACHE_SCHEMA_VERSION` when a physical schema change requires invalida
 ## Durable Data Boundary
 
 Do not place user-authored or irreplaceable state in disposable cache tables. Before merge review or other audit history becomes real user data, move it into separately migrated durable storage with explicit backup and retention behavior.
+
+## Corrupt Cache Startup
+
+`open_rebuildable_cache` retries initialization only for SQLite `DatabaseCorrupt` or `NotADatabase`
+errors. It copies the failed database and existing WAL/SHM sidecars into a unique `corrupt-cache-*`
+directory beside the cache before removing originals (main database last). Failed backup or cleanup
+aborts recovery. Successful recovery creates an empty versioned database; the normal boot sweep
+rebuilds tasks and custom views from Markdown. Recovery copies remain for manual inspection/removal.
+
+Permission, locking, I/O, and unsupported-schema errors propagate without replacing the database.
+This is reactive startup recovery, not a complete integrity scan or detection of arbitrary incorrect
+rows in an otherwise valid database. Version invalidation remains the mechanism for rebuilding
+stale indexed meaning; Markdown never changes during either recovery path.

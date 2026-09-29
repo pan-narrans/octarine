@@ -1,11 +1,14 @@
 import { useState } from "react";
-import { Trash, X } from "lucide-react";
+import { Trash } from "lucide-react";
 import {
   ActionButton,
+  DialogCloseButton,
   FormDropdown,
   FormInput,
   FormTextarea,
+  IconButton,
   MetadataPill,
+  ToggleButton,
 } from "../design-system/controls";
 import { Task } from "../types";
 
@@ -233,22 +236,10 @@ export function EditTaskModal({
         <header className="modal-header">
           <h2 id="edit-task-title">Edit Task</h2>
           <div className="modal-header-actions">
-            <ActionButton
-              variant="toggle"
-              className={showMarkdown ? "active" : ""}
-              onClick={() => setShowMarkdown((open) => !open)}
-              aria-pressed={showMarkdown}
-            >
+            <ToggleButton pressed={showMarkdown} onClick={() => setShowMarkdown((open) => !open)}>
               Markdown
-            </ActionButton>
-            <button
-              className="modal-close"
-              type="button"
-              onClick={onClose}
-              aria-label="Close edit task dialog"
-            >
-              <X size={18} />
-            </button>
+            </ToggleButton>
+            <DialogCloseButton label="Close edit task dialog" onClick={onClose} />
           </div>
         </header>
         <div className="modal-body">
@@ -316,8 +307,9 @@ export function EditTaskModal({
                     className="subtask-description"
                     placeholder="Add subtask description..."
                   />
-                  <button
-                    type="button"
+                  <IconButton
+                    variant="danger"
+                    label={`Remove subtask ${index + 1}`}
                     onClick={() => {
                       setSelectedTask(null);
                       setRawMarkdown((previous) => {
@@ -328,11 +320,9 @@ export function EditTaskModal({
                         return next.join("\n");
                       });
                     }}
-                    className="btn-icon trash"
-                    aria-label={`Remove subtask ${index + 1}`}
                   >
                     <Trash size={16} />
-                  </button>
+                  </IconButton>
                 </div>
               ))}
               <button type="button" onClick={addSubtask} className="add-subtask">

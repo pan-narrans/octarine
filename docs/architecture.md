@@ -78,6 +78,8 @@ Task queries join normalized tag and ordered context associations and return the
 
 The cache stores separate schema and index-format versions. Startup preserves indexed rows when both versions match, skips unchanged files by modification time plus content hash, and removes records for files no longer present. A version mismatch clears derived rows once so the following sweep rebuilds them from Markdown.
 
+Startup quarantines SQLite files positively identified as corrupt or not a database, preserves database and sidecars under a unique `corrupt-cache-*` directory, then creates a fresh cache for the Markdown boot sweep. Operational and unsupported-schema failures propagate without replacing the cache.
+
 Disposable database is stored as `net.auranimnus.octarine/index.sqlite3` under operating system's
 platform cache directory. Cache is rebuilt after identifier migration. Older cache files are ignored
 and may be removed manually because Markdown remains authoritative.
@@ -102,7 +104,7 @@ and build matrix.
 
 ## Filesystem Watcher
 
-`src-tauri/src/watcher.rs` watches the initial vault recursively. For changed Markdown files it opens SQLite, indexes or deletes the file, and then emits a frontend event.
+`src-tauri/src/watcher.rs` watches the initial vault recursively. For changed Markdown files it opens SQLite, indexes or deletes the file, and then emits a frontend event. Synchronous event reconciliation is separate from channel/thread ownership so deterministic tests can deliver duplicate, delayed, and rename events directly. Paths are resolved within the vault before indexing. Directory and rename events reconcile the complete vault so old descendant records disappear; outside ignore files and symlink escapes do not trigger indexing.
 
 The active native watcher is owned by application state. Reconfiguring the vault constructs and validates a replacement watcher, reindexes the selected vault, and then swaps it into state; dropping the previous watcher closes its event channel and event loop. The journal root is intentionally not indexed or watched as part of the task vault.
 
@@ -142,6 +144,39 @@ after 30 days; partial, stopped, and failed recovery remains until manual deleti
 `src-tauri/src/query_dsl.rs` supports boolean expressions, parentheses, projects, contexts, tags, priorities, and comparisons for due date, status, and type. Supported relative dates are currently `today` and `tomorrow`.
 
 The compiler validates a complete expression tree and emits SQL made from allowlisted fields and operators, with user values carried separately as bound parameters. Task columns are fully qualified for joined queries.
+
+## Editor Persistence
+
+Markdown editor keeps an exact last-read/saved source snapshot. Whole-file saves send that snapshot
+through typed IPC; Rust rejects changed or missing source with structured write errors. New journal
+scaffolding uses explicit create-only semantics. The guarded writer checks source before staging and
+again immediately before atomic replacement, preserving permissions. This is not an OS-level
+compare-and-swap and cannot exclude an external write in the final validation/replacement window.
+Task status, schedule, subtree edits/deletes, and project metadata rewrites share that guarded commit.
+Subtree replacement/deletion also rejects descendants absent from the caller's original source.
+
+The editor allows typing during a pending save, deduplicates save shortcuts, advances only the
+acknowledged snapshot, and retains newer edits as dirty. Parent refreshes do not overwrite dirty
+buffers. Completions from old document sessions cannot reset another editor's state. Save errors use
+existing notifications. A durable write with failed indexing resolves as saved and offers a separate
+native reindex action; retrying the cache does not rewrite Markdown.
+
+Unsaved buffers and pending writes survive editor close, sidebar navigation, and note/journal
+switching in a memory-only session registry keyed by full file path. Reopening restores text and its
+original source precondition; external changes still cause a save conflict. Pending writes remain
+deduplicated across remounts, and failed writes retain their draft even with no editor mounted.
+Clean closed sessions are released. App file rename/delete rejects affected dirty or saving sessions,
+including closed drafts and descendants of directories. Rename also checks destination drafts.
+Project rename/merge guards all vault sessions because metadata rewrites can reach outside the moved
+project. Affected editors become read-only during native execution, including editors opened while
+execution is pending; overlapping mutations are rejected and failure releases the lock. Successful
+mutations close affected note editors so reopening loads the current source at its new location.
+These frontend checks conservatively compare case-folded paths; Rust still authorizes canonical
+filesystem paths. External renames/deletes and other application instances do not share this guard.
+
+Persisted drafts, crash/restart recovery, autosave, and native quit protection remain absent; exiting
+or reloading the application discards memory-only drafts. Browser component tests exercise callback
+ordering; Rust integration tests establish disk preconditions and recovery.
 
 ## Current Structural Limitations
 

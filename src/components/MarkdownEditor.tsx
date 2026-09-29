@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { EditorState } from "@codemirror/state";
+import { Compartment, EditorState } from "@codemirror/state";
 import { EditorView, keymap, highlightActiveLine, lineNumbers, tooltips } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { autocompletion, CompletionContext, CompletionResult } from "@codemirror/autocomplete";
 import { Save, X, Check, Loader2 } from "lucide-react";
+import { editorSessions, type EditorSession } from "../features/workspace/editor-sessions";
 
 interface MarkdownEditorProps {
   filePath: string;
   initialContent: string;
-  onSave: (content: string) => Promise<void>;
+  onSave: (content: string, originalContent: string) => Promise<void>;
   onClose: () => void;
   projects?: string[];
   contexts?: string[];
@@ -27,6 +28,10 @@ export function MarkdownEditor({
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const onSaveRef = useRef(onSave);
+  const initialContentRef = useRef(initialContent);
+  const sessionRef = useRef<EditorSession | null>(null);
+  const statusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  initialContentRef.current = initialContent;
   const projectsRef = useRef(projects);
   const contextsRef = useRef(contexts);
 
@@ -246,28 +251,19 @@ export function MarkdownEditor({
   );
 
   const triggerSave = useCallback(async () => {
-    if (!viewRef.current) return;
-    const currentContent = viewRef.current.state.doc.toString();
-
-    setSaving(true);
-    setSaveStatus(null);
     try {
-      await onSaveRef.current(currentContent);
-      setIsDirty(false);
-      setSaveStatus(true);
-      setTimeout(() => setSaveStatus(null), 2000);
+      await sessionRef.current?.save(onSaveRef.current);
     } catch (e) {
       console.error("Save failed:", e);
-      setSaveStatus(false);
-      setTimeout(() => setSaveStatus(null), 3000);
-    } finally {
-      setSaving(false);
     }
   }, []);
 
   // Initialize CodeMirror 6 View
   useEffect(() => {
     if (!containerRef.current) return;
+    const session = editorSessions.open(filePath, initialContentRef.current);
+    sessionRef.current = session;
+    const readOnly = new Compartment();
 
     // Custom Keymap including Cmd+S / Ctrl+S to save
     const saveKeymap = keymap.of([
@@ -283,11 +279,16 @@ export function MarkdownEditor({
     // Listener extension to track changes and mark document "dirty"
     const changeListener = EditorView.updateListener.of((update) => {
       if (update.docChanged) {
-        setIsDirty(true);
+        const content = update.state.doc.toString();
+        if (content !== session.content) session.edit(content);
       }
     });
 
     const extensions = [
+      readOnly.of([
+        EditorState.readOnly.of(session.locked),
+        EditorView.editable.of(!session.locked),
+      ]),
       history(),
       markdown(),
       oneDark,
@@ -302,7 +303,7 @@ export function MarkdownEditor({
     ];
 
     const state = EditorState.create({
-      doc: initialContent,
+      doc: session.content,
       extensions,
     });
 
@@ -312,16 +313,44 @@ export function MarkdownEditor({
     });
 
     viewRef.current = view;
-    setIsDirty(false);
+    const syncSession = () => {
+      if (view.state.readOnly !== session.locked) {
+        view.dispatch({
+          effects: readOnly.reconfigure([
+            EditorState.readOnly.of(session.locked),
+            EditorView.editable.of(!session.locked),
+          ]),
+        });
+      }
+      if (view.state.doc.toString() !== session.content) {
+        view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: session.content } });
+      }
+      setSaving(session.saving);
+      setIsDirty(session.dirty);
+      setSaveStatus(session.saved ? true : null);
+      if (statusTimerRef.current !== null) clearTimeout(statusTimerRef.current);
+      if (session.saved) statusTimerRef.current = setTimeout(() => setSaveStatus(null), 2000);
+    };
+    const unsubscribe = session.subscribe(syncSession);
+    session.refresh(initialContentRef.current);
+    syncSession();
 
     // Focus editor automatically on load
     view.focus();
 
     // Cleanup on unmount
     return () => {
+      if (statusTimerRef.current !== null) clearTimeout(statusTimerRef.current);
+      if (viewRef.current === view) viewRef.current = null;
+      if (sessionRef.current === session) sessionRef.current = null;
+      unsubscribe();
       view.destroy();
     };
-  }, [customCompletionSource, filePath, initialContent, triggerSave]);
+  }, [customCompletionSource, filePath, triggerSave]);
+
+  useEffect(() => {
+    sessionRef.current?.refresh(initialContent);
+  }, [initialContent]);
 
   return (
     <div className="editor-workspace">

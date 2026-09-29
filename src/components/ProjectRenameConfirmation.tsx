@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
-import { AlertTriangle, ArrowRight, FilePenLine, FolderInput, Link2Off, X } from "lucide-react";
+import { AlertTriangle, ArrowRight, FilePenLine, FolderInput, Link2Off } from "lucide-react";
 import type { ProjectRenamePlan, ProjectRenameRecoveryReport } from "../types";
-import { ActionButton } from "../design-system/controls";
+import { ActionButton, DialogCloseButton } from "../design-system/controls";
 
 export interface ProjectRenameConfirmationProps {
   plan: ProjectRenamePlan;
@@ -73,15 +73,7 @@ export function ProjectRenameConfirmation({
                 : "Review every affected source before continuing."}
             </p>
           </div>
-          <button
-            className="modal-close"
-            type="button"
-            onClick={onCancel}
-            aria-label="Close project rename"
-            disabled={executing}
-          >
-            <X size={18} />
-          </button>
+          <DialogCloseButton label="Close project rename" onClick={onCancel} disabled={executing} />
         </header>
 
         <div className="project-rename-body">

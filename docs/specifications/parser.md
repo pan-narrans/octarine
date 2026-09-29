@@ -47,3 +47,12 @@ Parser changes must cover:
 ## Safe-Write Boundary
 
 The writer receives the original raw block with each edit, uses the expected location, and falls back to a nearby source search after line shifts. A fallback succeeds only when exactly one nearby block matches. Writes are independent of the SQLite cache and replace files atomically. Write commands return stable structured codes for missing, changed, ambiguous, invalid, and operational failures.
+
+Task source blocks use LF separators even when input files use CRLF. Source matching compares line
+text independently of those separators. Status/context and schedule edits retain each existing line
+ending; raw-block replacement uses the target block's line-ending style. Unrelated file bytes are
+preserved. This does not define general Markdown formatting normalization.
+
+Destructive subtree writes require the complete original subtree. Additional indented content after
+the supplied block rejects replacement/deletion rather than being silently consumed. Task status
+and schedule changes still operate on the supplied task header/notes without deleting descendants.

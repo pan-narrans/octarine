@@ -2,8 +2,9 @@
 
 ## Supported Versions
 
-Octarine has no public production release yet. Security fixes target latest `develop` branch until
-v1.0.0. After v1, latest stable release receives security fixes; unsupported versions must update.
+Octarine has no public production release yet. Security fixes for current release cycle target
+`release/0.1.0`. After stable publication, latest stable release on `master` receives security fixes;
+unsupported versions must update.
 
 ## Reporting Vulnerabilities
 
