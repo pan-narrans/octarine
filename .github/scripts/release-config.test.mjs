@@ -9,6 +9,20 @@ async function readJson(path) {
 }
 
 describe("public release configuration", () => {
+  it("targets dependency updates at the current release branch", async () => {
+    const [packageJson, dependabotConfig] = await Promise.all([
+      readJson("package.json"),
+      readFile(new URL(".github/dependabot.yml", rootUrl), "utf8"),
+    ]);
+    const releaseVersion = packageJson.version.split("-")[0];
+    const targetBranches = [...dependabotConfig.matchAll(/^\s+target-branch:\s+(\S+)$/gm)].map(
+      (match) => match[1],
+    );
+
+    assert.equal(targetBranches.length, 3);
+    assert.deepEqual(targetBranches, Array(3).fill(`release/${releaseVersion}`));
+  });
+
   it("uses public MIT metadata without a repository submodule", async () => {
     const [packageJson, cargoToml, license, gitignore] = await Promise.all([
       readJson("package.json"),
