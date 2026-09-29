@@ -109,8 +109,9 @@ or duplicate events. Assert indexed state at notification time instead.
 
 ## Prioritized Remaining Work
 
-1. Editor recovery: persisted drafts or native quit protection, plus draft relocation on file
-   rename/delete. In-process navigation now retains buffers, source preconditions, and pending saves;
+1. Editor recovery: persisted drafts or native quit protection, plus recovery after external file
+   rename/delete. App-initiated rename/delete/merge now rejects affected drafts or pending saves and
+   locks editors during execution. In-process navigation retains buffers and source preconditions;
    reload, crash, or application exit still loses unsaved text.
 2. Destructive races: case-only filesystem collisions and external changes during the final
    validation/replacement window. Guarded commits and unseen-child rejection reduce risk; existing
@@ -131,6 +132,11 @@ those guarantees require implementation first. Editor session unit tests and ren
 tests prove memory-only navigation retention, including rejected writes after unmount and pending
 save deduplication across remounts. Existing fixtures, browser callback harness, and synchronous event
 seam are reusable infrastructure, not evidence of native lifecycle guarantees.
+
+File mutation tests assert native IPC is never invoked for affected drafts, including directory
+descendants, rename destinations, and vault-wide project metadata rewrites. Rendered tests verify
+read-only editors during controlled operations and unlock after failure, including newly opened
+editors. These checks do not establish filesystem locking against external applications.
 
 ## Scope-Aware Definition of Done
 

@@ -149,3 +149,34 @@ test("save failure after close restores retryable draft", async ({ page }) => {
   await page.getByRole("button", { name: "Complete save", exact: true }).click();
   await expect(page.getByLabel("Persisted content")).toHaveText("Recoverable draft");
 });
+
+test("file mutation rejects closed drafts before starting native work", async ({ page }) => {
+  await page.locator(".cm-content").fill("Hidden draft");
+  await page.getByRole("button", { name: "Close", exact: true }).click();
+  await page.getByRole("button", { name: "Begin file operation" }).click();
+  await expect(page.getByLabel("File operation result")).toContainText(
+    "Save changes in /fixture/note.md",
+  );
+  await expect(page.getByRole("button", { name: "Fail file operation" })).toBeDisabled();
+  await page.getByRole("button", { name: "Reopen note" }).click();
+  await expect(page.locator(".cm-content")).toHaveText("Hidden draft");
+});
+
+test("native operation locks editors across remounts and failure restores typing", async ({
+  page,
+}) => {
+  const editor = page.locator(".cm-content");
+  await page.getByRole("button", { name: "Begin file operation" }).click();
+  await expect(page.getByLabel("File operation result")).toHaveText("Pending");
+  await expect(editor).toHaveAttribute("contenteditable", "false");
+  await page.getByRole("button", { name: "Switch note" }).click();
+  await expect(editor).toHaveText("# Other note");
+  await expect(editor).toHaveAttribute("contenteditable", "false");
+  await page.getByRole("button", { name: "Fail file operation" }).click();
+  await expect(editor).toHaveAttribute("contenteditable", "true");
+  await editor.fill("Draft after failure");
+  await expect(page.getByTitle("Unsaved changes")).toBeVisible();
+  await page.getByRole("button", { name: "Switch note" }).click();
+  await expect(editor).toHaveText("# Original note");
+  await expect(editor).toHaveAttribute("contenteditable", "true");
+});

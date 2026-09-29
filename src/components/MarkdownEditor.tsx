@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { EditorState } from "@codemirror/state";
+import { Compartment, EditorState } from "@codemirror/state";
 import { EditorView, keymap, highlightActiveLine, lineNumbers, tooltips } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
@@ -263,6 +263,7 @@ export function MarkdownEditor({
     if (!containerRef.current) return;
     const session = editorSessions.open(filePath, initialContentRef.current);
     sessionRef.current = session;
+    const readOnly = new Compartment();
 
     // Custom Keymap including Cmd+S / Ctrl+S to save
     const saveKeymap = keymap.of([
@@ -284,6 +285,10 @@ export function MarkdownEditor({
     });
 
     const extensions = [
+      readOnly.of([
+        EditorState.readOnly.of(session.locked),
+        EditorView.editable.of(!session.locked),
+      ]),
       history(),
       markdown(),
       oneDark,
@@ -309,6 +314,14 @@ export function MarkdownEditor({
 
     viewRef.current = view;
     const syncSession = () => {
+      if (view.state.readOnly !== session.locked) {
+        view.dispatch({
+          effects: readOnly.reconfigure([
+            EditorState.readOnly.of(session.locked),
+            EditorView.editable.of(!session.locked),
+          ]),
+        });
+      }
       if (view.state.doc.toString() !== session.content) {
         view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: session.content } });
       }

@@ -1,4 +1,11 @@
 import { saveEditorFile } from "./features/workspace/save-editor-file";
+import { isEditorPathWithin } from "./features/workspace/editor-sessions";
+import {
+  deleteEditorPath,
+  renameEditorPath,
+  renameEditorProject,
+  mergeEditorProjects,
+} from "./features/workspace/file-mutations";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTaskStore } from "./hooks/use-task-store";
 import { useTauriEvents } from "./hooks/use-tauri-events";
@@ -54,8 +61,6 @@ import {
   moveTaskProject,
   cancelProjectMerge,
   deleteProjectMergeRecovery,
-  executeProjectRename,
-  executeProjectMerge,
   listProjectMergeRecovery,
   openProjectMergeRecovery,
   parseCreateTaskError,
@@ -79,13 +84,11 @@ import { useApplicationUpdates } from "./features/settings/use-application-updat
 import {
   createDirectory,
   createFile,
-  deletePath,
   getJournalConfig,
   getVaultConfig,
   readFileContent,
   readJournalTree,
   readVaultTree,
-  renamePath,
   setVaultConfig,
   writeFileContent,
 } from "./features/workspace/ipc";
@@ -632,11 +635,10 @@ export function App() {
 
   const handleDeletePath = async (path: string) => {
     try {
-      await deletePath(path);
-      if (activeFilePath === path) {
-        setActiveFilePath(null);
-        setActiveFileContent(null);
-      }
+      await deleteEditorPath(path);
+      setActiveFilePath((current) =>
+        current && isEditorPathWithin(current, path) ? null : current,
+      );
       await fetchDirTree();
     } catch (e) {
       console.error("Failed to delete path:", e);
@@ -683,10 +685,11 @@ export function App() {
         await beginProjectRename(sourceProject, destinationProject);
         return;
       }
-      await renamePath(oldPath, newPath);
-      if (activeFilePath === oldPath) {
-        setActiveFilePath(newPath);
-      }
+      await renameEditorPath(oldPath, newPath);
+      // Reopen from the tree to load the destination's current source snapshot.
+      setActiveFilePath((current) =>
+        current && isEditorPathWithin(current, oldPath) ? null : current,
+      );
       await fetchDirTree();
     } catch (e) {
       console.error("Failed to rename path:", e);
@@ -1020,27 +1023,10 @@ export function App() {
     const plan = pendingProjectRename;
     setRenamingProject(true);
     try {
-      const result = await executeProjectRename(plan.planToken);
-      if (activeFilePath) {
-        const relative = activeFilePath.startsWith(`${activeVaultPath}/`)
-          ? activeFilePath.slice(activeVaultPath.length + 1)
-          : null;
-        if (relative) {
-          for (const move of plan.moves) {
-            if (relative === move.sourcePath) {
-              setActiveFilePath(`${activeVaultPath}/${move.destinationPath}`);
-              break;
-            }
-            const prefix = `${move.sourcePath}/`;
-            if (relative.startsWith(prefix)) {
-              setActiveFilePath(
-                `${activeVaultPath}/${move.destinationPath}/${relative.slice(prefix.length)}`,
-              );
-              break;
-            }
-          }
-        }
-      }
+      const result = await renameEditorProject(activeVaultPath, plan.planToken);
+      setActiveFilePath((current) =>
+        current && isEditorPathWithin(current, activeVaultPath) ? null : current,
+      );
       if (selectedSection.startsWith("proj:")) {
         const selectedProject = selectedSection.slice("proj:".length);
         const renamed = renamedProjectValue(
@@ -1271,7 +1257,7 @@ export function App() {
     const plan = pendingProjectMerge;
     setProjectMergeStage("committing");
     try {
-      const result = await executeProjectMerge(plan.planToken);
+      const result = await mergeEditorProjects(activeVaultPath, plan.planToken);
       setProjectMergeResult(result);
       setProjectMergeStage("success");
       setProjectMergeRecovery(null);
@@ -1286,10 +1272,9 @@ export function App() {
           setSelectedSection(`proj:${plan.destinationProject}`);
         }
       }
-      if (activeFilePath?.startsWith(`${activeVaultPath}/${plan.projectFolder}/`)) {
-        setActiveFilePath(null);
-        setActiveFileContent(null);
-      }
+      setActiveFilePath((current) =>
+        current && isEditorPathWithin(current, activeVaultPath) ? null : current,
+      );
       const [, bundles] = await Promise.all([
         Promise.all([fetchTasks(), fetchCustomViews(), fetchDirTree()]),
         listProjectMergeRecovery(),

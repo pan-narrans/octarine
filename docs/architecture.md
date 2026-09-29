@@ -165,7 +165,14 @@ Unsaved buffers and pending writes survive editor close, sidebar navigation, and
 switching in a memory-only session registry keyed by full file path. Reopening restores text and its
 original source precondition; external changes still cause a save conflict. Pending writes remain
 deduplicated across remounts, and failed writes retain their draft even with no editor mounted.
-Clean closed sessions are released. Drafts do not follow file renames or deletes automatically.
+Clean closed sessions are released. App file rename/delete rejects affected dirty or saving sessions,
+including closed drafts and descendants of directories. Rename also checks destination drafts.
+Project rename/merge guards all vault sessions because metadata rewrites can reach outside the moved
+project. Affected editors become read-only during native execution, including editors opened while
+execution is pending; overlapping mutations are rejected and failure releases the lock. Successful
+mutations close affected note editors so reopening loads the current source at its new location.
+These frontend checks conservatively compare case-folded paths; Rust still authorizes canonical
+filesystem paths. External renames/deletes and other application instances do not share this guard.
 
 Persisted drafts, crash/restart recovery, autosave, and native quit protection remain absent; exiting
 or reloading the application discards memory-only drafts. Browser component tests exercise callback
