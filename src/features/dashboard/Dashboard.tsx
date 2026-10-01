@@ -1,4 +1,6 @@
 import { MarkdownEditor } from "../../components/MarkdownEditor";
+import type { AttachmentImportResult } from "../../generated/ipc/AttachmentImportResult";
+import type { MarkdownLinkTarget } from "../../generated/ipc/MarkdownLinkTarget";
 import type { Task } from "../../types";
 import { TaskCard } from "../tasks/TaskCard";
 
@@ -10,6 +12,12 @@ interface DashboardProps {
   journalPath: string;
   journalLoading: boolean;
   onSaveJournal: (content: string, originalContent: string) => Promise<void>;
+  onOpenMarkdownLink?: (documentPath: string, target: string) => Promise<MarkdownLinkTarget>;
+  onImportAttachment?: (
+    documentPath: string,
+    fileName: string,
+    bytes: Uint8Array,
+  ) => Promise<AttachmentImportResult>;
   onOpenTask: (task: Task) => void;
   onStatusChange: (task: Task, status: Task["status"]) => void;
 }
@@ -32,6 +40,8 @@ export function Dashboard({
   journalPath,
   journalLoading,
   onSaveJournal,
+  onOpenMarkdownLink,
+  onImportAttachment,
   onOpenTask,
   onStatusChange,
 }: DashboardProps) {
@@ -142,6 +152,12 @@ export function Dashboard({
               onClose={() => undefined}
               projects={projects}
               contexts={contexts}
+              onOpenMarkdownLink={onOpenMarkdownLink}
+              onImportAttachment={
+                onImportAttachment
+                  ? (fileName, bytes) => onImportAttachment(journalPath, fileName, bytes)
+                  : undefined
+              }
             />
           </div>
         ) : (

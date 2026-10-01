@@ -161,6 +161,16 @@ buffers. Completions from old document sessions cannot reset another editor's st
 existing notifications. A durable write with failed indexing resolves as saved and offers a separate
 native reindex action; retrying the cache does not rewrite Markdown.
 
+The CodeMirror 6 editor supports GitHub-Flavored Markdown, search, syntax-tree heading outline, and
+heading/fenced-code folding. Editor, live, split, and preview views share one mounted editor and
+session. Live view uses incremental CodeMirror syntax-tree decorations, preserving Markdown as the
+editable source and revealing markers on active or selected lines.
+Preview uses `react-markdown` with `remark-gfm`; raw HTML is skipped, embedded image requests are
+disabled, HTTP(S) links use the Tauri opener, and relative Markdown links pass through typed native
+resolution constrained to the configured vault. Attachment imports use a native no-clobber write in
+the document's sibling `attachments/` directory and insert the portable relative Markdown path.
+Formatting changes remain ordinary source edits and use the existing guarded save lifecycle.
+
 Unsaved buffers and pending writes survive editor close, sidebar navigation, and note/journal
 switching in a memory-only session registry keyed by full file path. Reopening restores text and its
 original source precondition; external changes still cause a save conflict. Pending writes remain

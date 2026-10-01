@@ -3,6 +3,7 @@ pub mod config;
 pub mod db;
 pub mod diagnostics;
 pub mod file_ops;
+pub mod markdown;
 pub mod parser;
 pub mod path_security;
 pub mod project;
@@ -40,6 +41,8 @@ mod ipc_bindings {
         config::TaskCreationConfig::export(&config).unwrap();
         config::UnprojectedDestination::export(&config).unwrap();
         config::UpdateChannel::export(&config).unwrap();
+        markdown::AttachmentImportResult::export(&config).unwrap();
+        markdown::MarkdownLinkTarget::export(&config).unwrap();
         updates::AvailableUpdate::export(&config).unwrap();
         updates::DistributionMethod::export(&config).unwrap();
         updates::UpdateInstallStrategy::export(&config).unwrap();

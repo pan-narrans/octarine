@@ -89,6 +89,8 @@ import {
   readFileContent,
   readJournalTree,
   readVaultTree,
+  importAttachment,
+  resolveMarkdownLink,
   setVaultConfig,
   writeFileContent,
 } from "./features/workspace/ipc";
@@ -231,6 +233,7 @@ export function App() {
   const [dirTree, setDirTree] = useState<FileNode | null>(null);
   const [activeFilePath, setActiveFilePath] = useState<string | null>(null);
   const [activeFileContent, setActiveFileContent] = useState<string | null>(null);
+  const [activeFileFragment, setActiveFileFragment] = useState<string | null>(null);
 
   // -----------------------------------------------------------------
   // NEW VIRTUAL JOURNAL WORKSPACE STATE
@@ -606,11 +609,26 @@ export function App() {
       const content = await readFileContent(path);
       setActiveFilePath(path);
       setActiveFileContent(content);
+      setActiveFileFragment(null);
     } catch (e) {
       console.error("Failed to read file:", e);
       alert(`Error loading note: ${e}`);
     }
   };
+
+  const handleOpenMarkdownLink = async (documentPath: string, target: string) => {
+    const resolved = await resolveMarkdownLink(documentPath, target);
+    if (resolved.path !== documentPath) {
+      const content = await readFileContent(resolved.path);
+      setActiveFilePath(resolved.path);
+      setActiveFileContent(content);
+      setActiveFileFragment(resolved.fragment);
+    }
+    return resolved;
+  };
+
+  const handleImportAttachment = (documentPath: string, fileName: string, bytes: Uint8Array) =>
+    importAttachment(documentPath, fileName, bytes);
 
   const handleCreateFile = async (parentPath: string, name: string) => {
     try {
@@ -1883,9 +1901,16 @@ export function App() {
               filePath={activeFilePath}
               initialContent={activeFileContent}
               onSave={handleSaveFileContent}
+              onOpenMarkdownLink={handleOpenMarkdownLink}
+              onImportAttachment={(fileName, bytes) =>
+                handleImportAttachment(activeFilePath, fileName, bytes)
+              }
+              targetFragment={activeFileFragment}
+              onFragmentNavigated={() => setActiveFileFragment(null)}
               onClose={() => {
                 setActiveFilePath(null);
                 setActiveFileContent(null);
+                setActiveFileFragment(null);
               }}
               projects={projects}
               contexts={contexts}
@@ -1957,6 +1982,8 @@ export function App() {
             journalPath={todayJournalPath}
             journalLoading={todayJournalLoading}
             onSaveJournal={handleSaveTodayJournalContent}
+            onOpenMarkdownLink={handleOpenMarkdownLink}
+            onImportAttachment={handleImportAttachment}
             onOpenTask={openTaskModal}
             onStatusChange={handleTaskStatusChange}
           />

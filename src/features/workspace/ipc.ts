@@ -1,4 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { AttachmentImportResult } from "../../generated/ipc/AttachmentImportResult";
+import type { MarkdownLinkTarget } from "../../generated/ipc/MarkdownLinkTarget";
 import type { FileNode } from "../../types";
 
 export const getVaultConfig = (): Promise<string> => invoke("get_vault_config");
@@ -31,3 +33,42 @@ export const renamePath = (oldPath: string, newPath: string): Promise<void> =>
   invoke("rename_path", { oldPath, newPath });
 
 export const reindexFile = (path: string): Promise<void> => invoke("reindex_file", { path });
+
+export async function resolveMarkdownLink(
+  documentPath: string,
+  target: string,
+): Promise<MarkdownLinkTarget> {
+  const result = await invoke<unknown>("resolve_markdown_link", { documentPath, target });
+  if (
+    typeof result !== "object" ||
+    result === null ||
+    typeof (result as MarkdownLinkTarget).path !== "string" ||
+    !("fragment" in result) ||
+    ((result as MarkdownLinkTarget).fragment !== null &&
+      typeof (result as MarkdownLinkTarget).fragment !== "string")
+  ) {
+    throw new Error("Invalid Markdown link response.");
+  }
+  return result as MarkdownLinkTarget;
+}
+
+export async function importAttachment(
+  documentPath: string,
+  fileName: string,
+  bytes: Uint8Array,
+): Promise<AttachmentImportResult> {
+  const result = await invoke<unknown>("import_attachment", {
+    documentPath,
+    fileName,
+    bytes: Array.from(bytes),
+  });
+  if (
+    typeof result !== "object" ||
+    result === null ||
+    typeof (result as AttachmentImportResult).fileName !== "string" ||
+    typeof (result as AttachmentImportResult).relativePath !== "string"
+  ) {
+    throw new Error("Invalid attachment import response.");
+  }
+  return result as AttachmentImportResult;
+}
