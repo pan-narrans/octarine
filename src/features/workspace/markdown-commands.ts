@@ -279,7 +279,7 @@ export function attachmentMarkdown(
     .join("\\]");
   const encodedPath = relativePath
     .split("/")
-    .map((segment) => encodeURIComponent(segment).replaceAll("(", "%28").replaceAll(")", "%29"))
+    .map((segment) => encodeURIComponent(segment).replace(/\(/g, "%28").replace(/\)/g, "%29"))
     .join("/");
   return isImage ? `![${escapedName}](${encodedPath})` : `[${escapedName}](${encodedPath})`;
 }

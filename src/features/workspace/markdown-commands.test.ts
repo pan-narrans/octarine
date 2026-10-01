@@ -125,9 +125,7 @@ describe("attachment Markdown", () => {
   it("percent-encodes parentheses in portable attachment destinations", () => {
     for (const fileName of ["a(b.pdf", "a)b.pdf", "a(b).pdf"]) {
       const markdownSource = attachmentMarkdown(fileName, `attachments/${fileName}`, false);
-      const encodedName = encodeURIComponent(fileName)
-        .replaceAll("(", "%28")
-        .replaceAll(")", "%29");
+      const encodedName = encodeURIComponent(fileName).replace(/\(/g, "%28").replace(/\)/g, "%29");
       expect(markdownSource).toBe(`[${fileName}](attachments/${encodedName})`);
 
       const state = EditorState.create({
