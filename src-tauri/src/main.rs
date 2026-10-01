@@ -17,6 +17,7 @@ use octarine::file_ops::{
     create_directory_on_disk, create_file_on_disk, delete_path_on_disk, read_file_content_on_disk,
     rename_path_on_disk, scan_dir_tree, FileNode,
 };
+use octarine::markdown::{AttachmentImportResult, MarkdownLinkTarget};
 use octarine::parser::{ParsedCustomView, ParsedTask};
 use octarine::path_security::{
     canonicalize_root, resolve_child_within, resolve_descendant_within, resolve_existing_within,
@@ -789,6 +790,27 @@ fn reindex_file(state: State<'_, AppState>, path: String) -> Result<(), WriteErr
     index_single_file(&conn, &path).map_err(|_| WriteError::operation_failed())
 }
 
+#[tauri::command]
+fn resolve_markdown_link(
+    state: State<'_, AppState>,
+    document_path: String,
+    target: String,
+) -> Result<MarkdownLinkTarget, String> {
+    let root = state.vault_dir.lock().unwrap().clone();
+    octarine::markdown::resolve_markdown_link(&root, document_path, &target)
+}
+
+#[tauri::command]
+fn import_attachment(
+    state: State<'_, AppState>,
+    document_path: String,
+    file_name: String,
+    bytes: Vec<u8>,
+) -> Result<AttachmentImportResult, String> {
+    let root = state.vault_dir.lock().unwrap().clone();
+    octarine::markdown::import_attachment(&root, document_path, &file_name, &bytes)
+}
+
 fn initialize_app_state(app: &tauri::App) -> AppState {
     let home_dir = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
     let home_path = std::path::Path::new(&home_dir);
@@ -935,7 +957,9 @@ fn main() {
             rename_path,
             read_file_content,
             reindex_file,
-            write_file_content
+            write_file_content,
+            resolve_markdown_link,
+            import_attachment
         ])
         .setup(|app| {
             let state = initialize_app_state(app);
