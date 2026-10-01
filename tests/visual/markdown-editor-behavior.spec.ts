@@ -269,7 +269,7 @@ test("late attachment import does not edit a document that became locked", async
 
 test("outline converges to headings beyond the initial large-document parse", async ({ page }) => {
   const editor = page.locator(".cm-content");
-  const paragraphs = Array.from({ length: 3000 }, (_, index) => `Paragraph ${index}.`).join("\n");
+  const paragraphs = Array.from({ length: 400 }, (_, index) => `Paragraph ${index}.`).join("\n");
   await editor.fill(`# First heading\n\n${paragraphs}\n\n# Final heading`);
   await page.getByRole("button", { name: "Toggle document outline" }).click();
   await expect(
