@@ -2,8 +2,8 @@
 
 Generated from production dependency lockfiles. Do not edit manually.
 
-- Cargo.lock SHA-256: `332ebcb6448b3f9ca056f6e36c6f4bfc655cbcc62fe0c319caf5a2f0c66382ad`
-- package-lock.json SHA-256: `c667bdfeba5646fb9d4c3e15466acd4599c4722d02f49f72f523160eb9c0aea8`
+- Cargo.lock SHA-256: `bd66aa7cc7cffe0dd012b4424c4942a6fd2cdb6e3c96222f1cc6dce013193d51`
+- package-lock.json SHA-256: `1f71ac2c431e9c05b010a833f65f8710c81f66a57514d5758a3b73f532ad99ce`
 
 ## Rust components
 
@@ -220,7 +220,7 @@ Generated from production dependency lockfiles. Do not edit manually.
 | [objc2-foundation 0.3.2](https://github.com/madsmtm/objc2) | MIT |
 | [objc2-osa-kit 0.3.2](https://github.com/madsmtm/objc2) | Zlib OR Apache-2.0 OR MIT |
 | [objc2-web-kit 0.3.2](https://github.com/madsmtm/objc2) | Zlib OR Apache-2.0 OR MIT |
-| [octarine 0.1.0](https://github.com/pan-narrans/octarine) | MIT |
+| [octarine 0.2.0-beta.1](https://github.com/pan-narrans/octarine) | MIT |
 | [once_cell 1.21.4](https://github.com/matklad/once_cell) | MIT OR Apache-2.0 |
 | [open 3.2.0](https://github.com/Byron/open-rs) | MIT |
 | [open 5.4.4](https://github.com/Byron/open-rs) | MIT |
@@ -5397,7 +5397,7 @@ Used by: is-docker 0.2.0, is-wsl 0.4.0.
 
 ### Rust notice 148: MIT License
 
-Used by: block2 0.6.2, brotli-decompressor 5.0.3, cargo_toml 0.22.3, chrono 0.4.45, dispatch2 0.3.1, dlopen2 0.8.2, dlopen2_derive 0.4.3, dpi 0.1.2, minisign-verify 0.2.5, objc2 0.6.4, objc2-app-kit 0.3.2, objc2-core-foundation 0.3.2, objc2-encode 4.1.0, objc2-exception-helper 0.1.1, objc2-foundation 0.3.2, objc2-osa-kit 0.3.2, objc2-web-kit 0.3.2, octarine 0.1.0, siphasher 1.0.3, tauri 2.11.5, tauri-build 2.6.3, tauri-codegen 2.6.3, tauri-macros 2.6.3, tauri-plugin 2.6.3, tauri-plugin-opener 2.5.5, tauri-plugin-updater 2.11.0, tauri-runtime 2.11.3, tauri-runtime-wry 2.11.4, tauri-utils 2.9.3, ts-rs 12.0.1, ts-rs-macros 12.0.1, unic-char-property 0.9.0, unic-char-range 0.9.0, unic-common 0.9.0, unic-ucd-ident 0.9.0, unic-ucd-version 0.9.0.
+Used by: block2 0.6.2, brotli-decompressor 5.0.3, cargo_toml 0.22.3, chrono 0.4.45, dispatch2 0.3.1, dlopen2 0.8.2, dlopen2_derive 0.4.3, dpi 0.1.2, minisign-verify 0.2.5, objc2 0.6.4, objc2-app-kit 0.3.2, objc2-core-foundation 0.3.2, objc2-encode 4.1.0, objc2-exception-helper 0.1.1, objc2-foundation 0.3.2, objc2-osa-kit 0.3.2, objc2-web-kit 0.3.2, octarine 0.2.0-beta.1, siphasher 1.0.3, tauri 2.11.5, tauri-build 2.6.3, tauri-codegen 2.6.3, tauri-macros 2.6.3, tauri-plugin 2.6.3, tauri-plugin-opener 2.5.5, tauri-plugin-updater 2.11.0, tauri-runtime 2.11.3, tauri-runtime-wry 2.11.4, tauri-utils 2.9.3, ts-rs 12.0.1, ts-rs-macros 12.0.1, unic-char-property 0.9.0, unic-char-range 0.9.0, unic-common 0.9.0, unic-ucd-ident 0.9.0, unic-ucd-version 0.9.0.
 
     MIT License
 

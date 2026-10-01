@@ -70,16 +70,16 @@ Performance numbers, platform support, encryption, and synchronization must not 
 
 ## Current Release Line
 
-`release/0.1.0` is integration branch for current release cycle. Selected work reaches it from
+`release/0.2.0` is integration branch for current release cycle. Selected work reaches it from
 short-lived task branches through pull requests and is squash-merged. Beta tags point to verified
 commits on this release branch and remain immutable after publication.
 
-Stable promotion merges `release/0.1.0` into `master` through a pull request. Stable tag is created
+Stable promotion merges `release/0.2.0` into `master` through a pull request. Stable tag is created
 on resulting `master` commit and remains immutable after publication. Follow
 `docs/development/releasing.md` for Beta iterations and stable promotion.
 
 Legacy remote `develop` branch remains pending removal after all intended work is represented on
-short-lived branches or `release/0.1.0`. It is not a valid target for new work.
+short-lived branches or `release/0.2.0`. It is not a valid target for new work.
 
 After first stable publication, `master` represents production. Hotfixes branch from `master`, return
 through PR with new stable tag, and are forwarded through PR into affected active release branches.
