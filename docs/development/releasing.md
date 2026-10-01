@@ -45,7 +45,9 @@ Before first public release:
 3. Complete public-source readiness review.
 4. Verify DMG and AppImage installation instructions using draft release assets.
 5. Before stable publication, pass signed update smoke matrix on macOS 15 Sequoia Apple Silicon,
-   current Ubuntu LTS, and current stable Fedora.
+   current Ubuntu LTS, and current stable Fedora. Approved one-release exception waives the attached
+   smoke report for `v0.1.0`; no manual smoke assertions are verified or claimed as passed for this
+   release. Every later stable release still requires the validated report.
 
 ## Release Process
 
@@ -119,8 +121,10 @@ After stable `v0.1.0` exists, do not publish another `v0.1.0-beta.N`; SemVer con
 8. Delete release branch after stable publication unless maintained release line still needs fixes.
 
 Publishing prerelease makes Beta channel discover it. Draft creation alone changes no live updater
-manifest. Stable publication requires attached validated smoke report. Pages may return 404 for
-channel with no published release yet.
+manifest. Stable publication requires attached validated smoke report, except for the approved
+`v0.1.0` one-release waiver. That publication records a workflow notice; manual smoke remains
+unverified, with no passed assertions claimed. Every later stable release still requires the report.
+Pages may return 404 for channel with no published release yet.
 
 ## Automation Alignment
 

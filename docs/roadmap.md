@@ -61,6 +61,8 @@ This document contains planned work. Items here are not current capabilities or 
 - [x] Configure public release endpoints and updater signing secrets before first published build.
 - [x] Add GitHub Actions draft release builds and publish-triggered updater manifest deployment.
 - [x] Add stable/beta SemVer routing and explicit signed channel rollback workflow.
+- [x] Approve a one-release smoke-report waiver for `v0.1.0`; manual smoke remains unverified and
+      no assertions are claimed as passed. Later stable releases still require the report.
 - Run signed upgrade, downgrade, rollback, failure, and Gatekeeper smoke matrix before v1 publication.
 - Reconsider Homebrew, APT, DNF, Linux ARM64, macOS Intel, and Windows only after demonstrated demand.
 
