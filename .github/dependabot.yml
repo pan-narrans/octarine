@@ -1,0 +1,36 @@
+version: 2
+# target-branch is literal and version-only; release configuration tests keep it aligned with package version.
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    target-branch: release/0.1.0
+    groups:
+      npm-production:
+        dependency-type: production
+      npm-development:
+        dependency-type: development
+
+  - package-ecosystem: cargo
+    directory: /src-tauri
+    schedule:
+      interval: weekly
+      day: monday
+    target-branch: release/0.1.0
+    groups:
+      rust-dependencies:
+        patterns:
+          - "*"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    target-branch: release/0.1.0
+    groups:
+      workflow-actions:
+        patterns:
+          - "*"

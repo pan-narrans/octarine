@@ -1,0 +1,121 @@
+.controls-reference {
+  min-height: 100vh;
+  padding: 48px;
+  background: var(--bg-space);
+  color: var(--text-primary);
+}
+
+.controls-header {
+  margin-bottom: 48px;
+}
+
+.controls-header p {
+  color: var(--color-violet);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.controls-header h1 {
+  margin: 4px 0 8px;
+  font-size: 36px;
+  letter-spacing: -0.03em;
+}
+
+.controls-header span {
+  color: var(--text-secondary);
+}
+
+.controls-reference section {
+  max-width: 900px;
+  margin-bottom: 40px;
+  padding: 24px;
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-card);
+  background: var(--bg-card);
+}
+
+.controls-reference section h2 {
+  margin-bottom: 20px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.controls-row,
+.controls-statuses {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+}
+
+.controls-editable-metadata.metadata-inputs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.controls-editable-metadata > span {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.controls-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.controls-fields label,
+.controls-statuses label {
+  display: flex;
+}
+
+.controls-fields label {
+  flex-direction: column;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.controls-field-wide {
+  grid-column: 1 / -1;
+}
+
+.controls-statuses label {
+  min-width: 96px;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-transform: capitalize;
+}
+
+.controls-statuses .checkbox {
+  padding: 0;
+  cursor: default;
+}
+
+@media (max-width: 640px) {
+  .controls-reference {
+    padding: 24px;
+  }
+
+  .controls-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .controls-field-wide {
+    grid-column: auto;
+  }
+}

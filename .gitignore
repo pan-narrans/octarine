@@ -2,3 +2,20 @@
 .idea/
 .vscode/
 .DS_Store
+
+# Agent Temporal State
+.agent-session/
+.agents/
+
+# Rust / Cargo
+target/
+src-tauri/target/
+src-tauri/gen/
+
+# Node / Frontend
+node_modules/
+dist/
+storybook-static/
+debug-storybook.log
+playwright-report/
+test-results/

@@ -1,3 +1,0 @@
-[submodule "agent-app-harness"]
-	path = .agents
-	url = git@github.com:pan-narrans/agent-app-harness.git

@@ -1,0 +1,85 @@
+# Roadmap and Implementation Transitions
+
+This document contains planned work. Items here are not current capabilities or enforceable contributor gates until implemented, verified, and moved into the owning current-state document.
+
+## Documentation and Quality Baseline
+
+- [x] Establish portable `AGENTS.md` and project-specific `CONTRIBUTING.md`.
+- [x] Make Rust formatting, Clippy, and tests green.
+- [x] Configure ESLint and Prettier and make their checks green.
+- [x] Pin Node and Rust toolchains.
+- [x] Add pull-request CI after local gates pass.
+
+## Core Correctness
+
+- [x] Return complete task metadata from Rust and remove frontend reparsing.
+- [x] Generate TypeScript IPC contracts from Rust DTOs.
+- [x] Make source edits independent of SQLite cache timing and atomically replace files.
+- [x] Reject ambiguous source-match fallbacks.
+- [x] Return structured write conflicts.
+- [x] Add schema and index-format versions; restore incremental startup indexing.
+- [x] Validate and parameterize query expressions.
+
+## Filesystem and Lifecycle Hardening
+
+- [x] Enforce vault and journal directories as capability roots.
+- [x] Reduce Tauri features and permissions to the minimum required.
+- [x] Use typed, versioned configuration in platform application directories and migrate legacy dotfiles.
+- [x] Replace the leaked startup watcher with a managed, reconfigurable watcher service.
+- [x] Add structured local diagnostics with sensitive-data redaction and no telemetry by default.
+
+## Incremental Organization
+
+- [x] Move the frontend toward feature-owned modules and typed IPC adapters.
+- [x] Move the backend toward command, service, domain, infrastructure, and startup boundaries.
+- Extract code as affected features change; avoid a standalone wholesale rewrite.
+
+## Product Roadmap
+
+- [x] Add project Kanban with Deferred status, primary-context grouping, source-safe drag movement, closed filters, and large-group virtualization.
+- [x] Add global task capture with vault-aware routing, configurable insertion, structured composer,
+      global result feedback, Open file, and bounded Undo.
+- [x] Add confirmed existing-task project moves with whole-subtree preservation and guarded recovery.
+- [x] Add guarded hierarchical project rename with preflight, collision detection, case-only macOS
+      handling, task-token rewrites, filesystem moves, and partial-failure recovery.
+- [x] Add staged project merge for rename collisions with explicit conflict resolution, cancellable
+      dry run, guarded commit, safe stop, and 30-day successful recovery.
+- Measure accepted 20,000-file, 2,000,000-task local-SSD fixture, then add batching or parallelism
+  where profiling supports it.
+- Extend virtualization to other unbounded frontend lists where measured view size requires it.
+- Mobile and browser targets.
+- CRDT-based, end-to-end encrypted peer synchronization and auditable merge review.
+
+## Distribution and Updates
+
+- [x] Migrate desktop shell to Tauri 2 and application identifier to `net.auranimnus.octarine`.
+- [x] Add stable/beta update preference, automatic check, explicit install confirmation, and signed
+      direct/AppImage update path.
+- [x] Simplify v1 distribution to signed self-updating macOS DMG and Linux AppImage.
+- [x] Add launch plus 24-hour checks, explicit restart confirmation, retry/download fallback, and
+      signed downgrade support.
+- [x] Configure public release endpoints and updater signing secrets before first published build.
+- [x] Add GitHub Actions draft release builds and publish-triggered updater manifest deployment.
+- [x] Add stable/beta SemVer routing and explicit signed channel rollback workflow.
+- [x] Approve a one-release smoke-report waiver for `v0.1.0`; manual smoke remains unverified and
+      no assertions are claimed as passed. Later stable releases still require the report.
+- Run signed upgrade, downgrade, rollback, failure, and Gatekeeper smoke matrix before v1 publication.
+- Reconsider Homebrew, APT, DNF, Linux ARM64, macOS Intel, and Windows only after demonstrated demand.
+
+Performance numbers, platform support, encryption, and synchronization must not be advertised as current until verified.
+
+## Current Release Line
+
+`release/0.1.0` is integration branch for current release cycle. Selected work reaches it from
+short-lived task branches through pull requests and is squash-merged. Beta tags point to verified
+commits on this release branch and remain immutable after publication.
+
+Stable promotion merges `release/0.1.0` into `master` through a pull request. Stable tag is created
+on resulting `master` commit and remains immutable after publication. Follow
+`docs/development/releasing.md` for Beta iterations and stable promotion.
+
+Legacy remote `develop` branch remains pending removal after all intended work is represented on
+short-lived branches or `release/0.1.0`. It is not a valid target for new work.
+
+After first stable publication, `master` represents production. Hotfixes branch from `master`, return
+through PR with new stable tag, and are forwarded through PR into affected active release branches.

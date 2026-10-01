@@ -1,0 +1,981 @@
+use crate::project::ProjectPath;
+use crate::CHECKLIST_CHAR_CLASS;
+use regex::Regex;
+use sha2::{Digest, Sha256};
+use std::sync::OnceLock;
+
+static HEADER_RE: OnceLock<Regex> = OnceLock::new();
+static PROJECT_RE: OnceLock<Regex> = OnceLock::new();
+static CONTEXT_RE: OnceLock<Regex> = OnceLock::new();
+static TAG_RE: OnceLock<Regex> = OnceLock::new();
+static LINK_RE: OnceLock<Regex> = OnceLock::new();
+static URL_RE: OnceLock<Regex> = OnceLock::new();
+static CODE_RE: OnceLock<Regex> = OnceLock::new();
+static S_RE: OnceLock<Regex> = OnceLock::new();
+static DUE_RE: OnceLock<Regex> = OnceLock::new();
+static DUR_RE: OnceLock<Regex> = OnceLock::new();
+static REC_RE: OnceLock<Regex> = OnceLock::new();
+static WD_RE: OnceLock<Regex> = OnceLock::new();
+static P_RE: OnceLock<Regex> = OnceLock::new();
+static DONE_RE: OnceLock<Regex> = OnceLock::new();
+static WHITESPACE_RE: OnceLock<Regex> = OnceLock::new();
+static DURATION_RE: OnceLock<Regex> = OnceLock::new();
+
+fn get_header_re() -> &'static Regex {
+    HEADER_RE.get_or_init(|| {
+        let pattern = format!(r"^(\s*)([-*+])\s+\[([{}])\]\s*(.*)$", CHECKLIST_CHAR_CLASS);
+        Regex::new(&pattern).unwrap()
+    })
+}
+
+fn get_project_re() -> &'static Regex {
+    PROJECT_RE.get_or_init(|| Regex::new(r"\+([\w\-/]+)").unwrap())
+}
+
+fn get_context_re() -> &'static Regex {
+    CONTEXT_RE.get_or_init(|| Regex::new(r"@([\w\-/]+)").unwrap())
+}
+
+fn get_tag_re() -> &'static Regex {
+    TAG_RE.get_or_init(|| Regex::new(r"#([\w\-/]+)").unwrap())
+}
+
+fn get_link_re() -> &'static Regex {
+    LINK_RE.get_or_init(|| Regex::new(r"\[[^\]]*\]\([^)]*\)").unwrap())
+}
+
+fn get_url_re() -> &'static Regex {
+    URL_RE.get_or_init(|| Regex::new(r"https?://[^\s]+").unwrap())
+}
+
+fn get_code_re() -> &'static Regex {
+    CODE_RE.get_or_init(|| Regex::new(r"``[^`]+``|`[^`]+`").unwrap())
+}
+
+fn get_s_re() -> &'static Regex {
+    S_RE.get_or_init(|| {
+        Regex::new(
+            r"\bs:(?:\x22([^\x22]+)\x22|'([^']+)'|(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2})|([^\s]+))",
+        )
+        .unwrap()
+    })
+}
+
+fn get_due_re() -> &'static Regex {
+    DUE_RE.get_or_init(|| Regex::new(r"\bdue:(?:\x22([^\x22]+)\x22|'([^']+)'|([^\s]+))").unwrap())
+}
+
+fn get_dur_re() -> &'static Regex {
+    DUR_RE.get_or_init(|| Regex::new(r"\bdur:(?:\x22([^\x22]+)\x22|'([^']+)'|([^\s]+))").unwrap())
+}
+
+fn get_rec_re() -> &'static Regex {
+    REC_RE.get_or_init(|| {
+        Regex::new(r"\brecurring:(?:\x22([^\x22]+)\x22|'([^']+)'|([^\s]+))").unwrap()
+    })
+}
+
+fn get_wd_re() -> &'static Regex {
+    WD_RE.get_or_init(|| {
+        Regex::new(r"\bwhen_done:(?:\x22([^\x22]+)\x22|'([^']+)'|([^\s]+))").unwrap()
+    })
+}
+
+fn get_p_re() -> &'static Regex {
+    P_RE.get_or_init(|| Regex::new(r"\(([A-Da-d])\)").unwrap())
+}
+
+fn get_done_re() -> &'static Regex {
+    DONE_RE.get_or_init(|| Regex::new(r"\bdone:(?:\x22([^\x22]+)\x22|'([^']+)'|([^\s]+))").unwrap())
+}
+
+fn get_whitespace_re() -> &'static Regex {
+    WHITESPACE_RE.get_or_init(|| Regex::new(r"\s+").unwrap())
+}
+
+fn get_duration_re() -> &'static Regex {
+    DURATION_RE.get_or_init(|| Regex::new(r"^(?:(\d+)h)?(?:(\d+)m)?$").unwrap())
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, ts_rs::TS)]
+pub struct ParsedTask {
+    pub line_number: usize, // 1-based index
+    pub raw_markdown: String,
+    pub hash: String,
+    pub status: String,    // "todo", "doing", "deferred", "done", "cancelled"
+    pub task_type: String, // "task" or "event"
+    pub description: String,
+    pub project: Option<String>,
+    pub due_date: Option<String>,
+    pub s_start: Option<String>,
+    pub duration_secs: Option<i32>,
+    pub recurring: Option<String>,
+    pub when_done: Option<String>,
+    pub priority: Option<i32>,
+    pub tags: Vec<String>,
+    pub contexts: Vec<String>,
+    pub primary_context: Option<String>,
+    pub parse_errors: Option<String>, // JSON string array of error messages, or None
+    pub file_path: Option<String>,
+    pub parent_hash: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, ts_rs::TS)]
+pub struct ParsedCustomView {
+    pub line_number: usize, // 1-based index
+    pub title: String,
+    pub query_raw: String,
+}
+
+pub fn calculate_hash(file_path: &str, line_number: usize, raw_markdown: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(file_path.as_bytes());
+    hasher.update(line_number.to_string().as_bytes());
+    hasher.update(raw_markdown.as_bytes());
+    hex::encode(hasher.finalize())
+}
+
+// Check if a date string is valid YYYY-MM-DD
+fn is_valid_date(s: &str) -> bool {
+    chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").is_ok()
+}
+
+// Check if a scheduled start is valid YYYY-MM-DD HH:MM
+fn is_valid_datetime(s: &str) -> bool {
+    chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M").is_ok() || is_valid_date(s)
+}
+
+// Parse duration string like "1h30m", "45m", "2h" into seconds
+fn parse_duration(s: &str) -> Result<i32, String> {
+    let re = get_duration_re();
+    if let Some(caps) = re.captures(s) {
+        let h = caps
+            .get(1)
+            .map(|m| m.as_str().parse::<i32>().unwrap_or(0))
+            .unwrap_or(0);
+        let m = caps
+            .get(2)
+            .map(|m| m.as_str().parse::<i32>().unwrap_or(0))
+            .unwrap_or(0);
+        if h == 0 && m == 0 {
+            return Err(format!("Invalid duration format: {}", s));
+        }
+        Ok(h * 3600 + m * 60)
+    } else {
+        Err(format!("Invalid duration format: {}", s))
+    }
+}
+
+fn strip_inline_comments(text: &str) -> String {
+    let mut result = String::new();
+    let parts = text.split("%%");
+    let mut is_comment = false;
+    for part in parts {
+        if !is_comment {
+            result.push_str(part);
+        }
+        is_comment = !is_comment;
+    }
+    result
+}
+
+pub fn parse_markdown_content(
+    file_path: &str,
+    content: &str,
+) -> (Vec<ParsedTask>, Vec<ParsedCustomView>) {
+    let lines: Vec<&str> = content.lines().collect();
+    let mut tasks = Vec::new();
+    let mut views = Vec::new();
+    let mut indent_stack: Vec<(usize, String)> = Vec::new();
+
+    let header_re = get_header_re();
+    let project_re = get_project_re();
+    let context_re = get_context_re();
+    let tag_re = get_tag_re();
+
+    let mut i = 0;
+    let mut inside_codeblock = false;
+    let mut inside_comment = false;
+
+    while i < lines.len() {
+        let original_line = lines[i];
+        let trimmed = original_line.trim();
+
+        // 1. Check for block comment toggles
+        if !inside_codeblock && trimmed == "%%" {
+            inside_comment = !inside_comment;
+            i += 1;
+            continue;
+        }
+
+        if inside_comment {
+            if trimmed == "%%" {
+                inside_comment = false;
+            }
+            i += 1;
+            continue;
+        }
+
+        // 2. Check for fenced codeblocks
+        if trimmed.starts_with("```") {
+            if trimmed.starts_with("```tasks-query") {
+                let start_line = i + 1;
+                let mut query_lines = Vec::new();
+                i += 1;
+                while i < lines.len() && !lines[i].trim().starts_with("```") {
+                    query_lines.push(lines[i]);
+                    i += 1;
+                }
+                let query_raw = query_lines.join("\n");
+
+                // Extract title from query_raw
+                let mut title = format!("Custom View @ Line {}", start_line);
+                for q_line in &query_lines {
+                    if q_line.trim().starts_with("title:") {
+                        let t_val = q_line.trim()["title:".len()..].trim();
+                        title = t_val.trim_matches(|c| c == '"' || c == '\'').to_string();
+                        break;
+                    }
+                }
+
+                views.push(ParsedCustomView {
+                    line_number: start_line,
+                    title,
+                    query_raw,
+                });
+                i += 1;
+                continue;
+            } else {
+                inside_codeblock = !inside_codeblock;
+                i += 1;
+                continue;
+            }
+        }
+
+        if inside_codeblock {
+            i += 1;
+            continue;
+        }
+
+        // 3. Strip inline comments from description & metadata
+        let line_string = strip_inline_comments(original_line);
+        let line = &line_string;
+
+        // 4. Parse Checklist Tasks/Events
+        if let Some(caps) = header_re.captures(line) {
+            let start_line = i + 1;
+            let indent = caps.get(1).unwrap().as_str();
+            let marker = caps.get(3).unwrap().as_str();
+            let rest = caps.get(4).unwrap().as_str();
+
+            let current_indent = indent.len();
+            while let Some(&(stack_indent, _)) = indent_stack.last() {
+                if stack_indent >= current_indent {
+                    indent_stack.pop();
+                } else {
+                    break;
+                }
+            }
+            let parent_hash = indent_stack
+                .last()
+                .map(|(_, parent_hash)| parent_hash.clone());
+
+            // Status and Type determination
+            let (status, mut task_type) = match marker {
+                " " => ("todo".to_string(), "task".to_string()),
+                "/" => ("doing".to_string(), "task".to_string()),
+                ">" => ("deferred".to_string(), "task".to_string()),
+                "x" | "X" => ("done".to_string(), "task".to_string()),
+                "-" => ("cancelled".to_string(), "task".to_string()),
+                "<" => ("todo".to_string(), "event".to_string()),
+                _ => ("todo".to_string(), "task".to_string()),
+            };
+
+            // Gather indented multiline notes using the original line
+            let mut raw_markdown_lines = vec![original_line.to_string()];
+            let mut next_i = i + 1;
+            while next_i < lines.len() {
+                let next_line = lines[next_i];
+                if next_line.trim().is_empty() {
+                    raw_markdown_lines.push(next_line.to_string());
+                    next_i += 1;
+                    continue;
+                }
+
+                // Check indentation
+                let next_indent_len = next_line.chars().take_while(|c| c.is_whitespace()).count();
+                if next_indent_len > indent.len() {
+                    if header_re.is_match(next_line) {
+                        break; // It's a sub-task, handle separately
+                    }
+                    raw_markdown_lines.push(next_line.to_string());
+                    next_i += 1;
+                } else {
+                    break;
+                }
+            }
+
+            // Clean trailing blank lines from the gathered block
+            while raw_markdown_lines.len() > 1
+                && raw_markdown_lines.last().unwrap().trim().is_empty()
+            {
+                raw_markdown_lines.pop();
+            }
+
+            let raw_markdown = raw_markdown_lines.join("\n");
+            let hash = calculate_hash(file_path, start_line, &raw_markdown);
+            indent_stack.push((current_indent, hash.clone()));
+
+            // Now parse metadata elements in the first line
+            // 1. Strip standard closed markdown links completely
+            let link_re = get_link_re();
+            let mut metadata_text = link_re.replace_all(rest, "").to_string();
+
+            // 2. Strip any raw URLs starting with http/https up to whitespace (handles unclosed links!)
+            let url_re = get_url_re();
+            metadata_text = url_re.replace_all(&metadata_text, "").to_string();
+
+            // 3. Strip inline code backticks to ignore any metadata inside them
+            let code_re = get_code_re();
+            metadata_text = code_re.replace_all(&metadata_text, "").to_string();
+
+            let mut projects = Vec::new();
+            for p_cap in project_re.captures_iter(&metadata_text) {
+                projects.push(p_cap.get(1).unwrap().as_str().to_string());
+            }
+            let project = projects.first().cloned();
+
+            let mut contexts = Vec::new();
+            for c_cap in context_re.captures_iter(&metadata_text) {
+                contexts.push(c_cap.get(1).unwrap().as_str().to_string());
+            }
+            let primary_context = contexts.first().cloned();
+
+            let mut tags = Vec::new();
+            for t_cap in tag_re.captures_iter(&metadata_text) {
+                tags.push(t_cap.get(1).unwrap().as_str().to_string());
+            }
+
+            let mut clean_description = rest.to_string();
+            let mut errors = Vec::new();
+
+            // 1. Extract and strip s (scheduled start)
+            let s_re = get_s_re();
+            let s_start = s_re.captures(&metadata_text).map(|caps| {
+                let val = if let Some(m) = caps.get(1) {
+                    m.as_str().to_string()
+                } else if let Some(m) = caps.get(2) {
+                    m.as_str().to_string()
+                } else if let Some(m) = caps.get(3) {
+                    m.as_str().to_string()
+                } else {
+                    caps.get(4).unwrap().as_str().to_string()
+                };
+                if let Some(m) = caps.get(0) {
+                    clean_description = clean_description.replace(m.as_str(), "");
+                }
+
+                if !is_valid_datetime(&val) {
+                    errors.push(format!(
+                        "Invalid scheduled start format: '{}' (expected YYYY-MM-DD HH:MM)",
+                        val
+                    ));
+                }
+                val
+            });
+
+            if s_start.is_some() {
+                task_type = "event".to_string();
+            }
+
+            // 2. Extract and strip due date
+            let due_re = get_due_re();
+            let due_date = due_re.captures(&metadata_text).map(|caps| {
+                let val = if let Some(m) = caps.get(1) {
+                    m.as_str().to_string()
+                } else if let Some(m) = caps.get(2) {
+                    m.as_str().to_string()
+                } else {
+                    caps.get(3).unwrap().as_str().to_string()
+                };
+                if let Some(m) = caps.get(0) {
+                    clean_description = clean_description.replace(m.as_str(), "");
+                }
+
+                if !is_valid_date(&val) {
+                    errors.push(format!(
+                        "Invalid due date format: '{}' (expected YYYY-MM-DD)",
+                        val
+                    ));
+                }
+                val
+            });
+
+            // 3. Extract and strip duration
+            let dur_re = get_dur_re();
+            let duration_secs = dur_re.captures(&metadata_text).and_then(|caps| {
+                let val = if let Some(m) = caps.get(1) {
+                    m.as_str().to_string()
+                } else if let Some(m) = caps.get(2) {
+                    m.as_str().to_string()
+                } else {
+                    caps.get(3).unwrap().as_str().to_string()
+                };
+                if let Some(m) = caps.get(0) {
+                    clean_description = clean_description.replace(m.as_str(), "");
+                }
+
+                match parse_duration(&val) {
+                    Ok(secs) => Some(secs),
+                    Err(err) => {
+                        errors.push(err);
+                        None
+                    }
+                }
+            });
+
+            // 4. Extract and strip recurring
+            let rec_re = get_rec_re();
+            let recurring = rec_re.captures(&metadata_text).map(|caps| {
+                let val = if let Some(m) = caps.get(1) {
+                    m.as_str().to_string()
+                } else if let Some(m) = caps.get(2) {
+                    m.as_str().to_string()
+                } else {
+                    caps.get(3).unwrap().as_str().to_string()
+                };
+                if let Some(m) = caps.get(0) {
+                    clean_description = clean_description.replace(m.as_str(), "");
+                }
+                val
+            });
+
+            // 5. Extract and strip when_done
+            let wd_re = get_wd_re();
+            let when_done = wd_re.captures(&metadata_text).map(|caps| {
+                let val = if let Some(m) = caps.get(1) {
+                    m.as_str().to_string()
+                } else if let Some(m) = caps.get(2) {
+                    m.as_str().to_string()
+                } else {
+                    caps.get(3).unwrap().as_str().to_string()
+                };
+                if let Some(m) = caps.get(0) {
+                    clean_description = clean_description.replace(m.as_str(), "");
+                }
+
+                if val != "delete" && val != "archive" {
+                    errors.push(format!(
+                        "Invalid when_done action: '{}' (expected 'delete' or 'archive')",
+                        val
+                    ));
+                }
+                val
+            });
+
+            // 6. Extract and strip priority
+            let p_re = get_p_re();
+            let priority = p_re.captures(&metadata_text).and_then(|caps| {
+                let val = caps.get(1).unwrap().as_str().to_uppercase();
+                if let Some(m) = caps.get(0) {
+                    clean_description = clean_description.replace(m.as_str(), "");
+                }
+
+                match val.as_str() {
+                    "A" => Some(1),
+                    "B" => Some(2),
+                    "C" => Some(3),
+                    "D" => Some(4),
+                    _ => {
+                        errors.push(format!(
+                            "Invalid priority format: '{}' (expected A, B, C, or D)",
+                            val
+                        ));
+                        None
+                    }
+                }
+            });
+
+            // 7. Extract and strip done completion date
+            let done_re = get_done_re();
+            let _done_date = done_re.captures(&metadata_text).map(|caps| {
+                let val = if let Some(m) = caps.get(1) {
+                    m.as_str().to_string()
+                } else if let Some(m) = caps.get(2) {
+                    m.as_str().to_string()
+                } else {
+                    caps.get(3).unwrap().as_str().to_string()
+                };
+                if let Some(m) = caps.get(0) {
+                    clean_description = clean_description.replace(m.as_str(), "");
+                }
+                val
+            });
+
+            // Strip project, context, tag markers from the description
+            for p in &projects {
+                let pattern = format!(r"\+{}", regex::escape(p));
+                if let Ok(re) = Regex::new(&pattern) {
+                    clean_description = re.replace_all(&clean_description, "").into_owned();
+                }
+            }
+            for c in &contexts {
+                let pattern = format!(r"@{}", regex::escape(c));
+                if let Ok(re) = Regex::new(&pattern) {
+                    clean_description = re.replace_all(&clean_description, "").into_owned();
+                }
+            }
+            for t in &tags {
+                let pattern = format!(r"#{}", regex::escape(t));
+                if let Ok(re) = Regex::new(&pattern) {
+                    clean_description = re.replace_all(&clean_description, "").into_owned();
+                }
+            }
+
+            // Cleanup whitespace in description
+            let clean_description = clean_description.trim().replace("  ", " ");
+            let clean_description = get_whitespace_re()
+                .replace_all(&clean_description, " ")
+                .to_string();
+
+            let parse_errors = if errors.is_empty() {
+                None
+            } else {
+                Some(serde_json::to_string(&errors).unwrap_or_default())
+            };
+
+            tasks.push(ParsedTask {
+                line_number: start_line,
+                raw_markdown,
+                hash,
+                status,
+                task_type,
+                description: clean_description,
+                project,
+                due_date,
+                s_start,
+                duration_secs,
+                recurring,
+                when_done,
+                priority,
+                tags,
+                contexts,
+                primary_context,
+                parse_errors,
+                file_path: Some(file_path.to_string()),
+                parent_hash,
+            });
+
+            // Advance the cursor to consume processed note lines
+            i = next_i;
+            continue;
+        }
+
+        i += 1;
+    }
+
+    (tasks, views)
+}
+
+/// Rewrites project tokens only where task parser treats them as metadata.
+/// Returns original line endings and all non-project bytes unchanged.
+pub fn rewrite_project_tokens(
+    content: &str,
+    old_project: &ProjectPath,
+    new_project: &ProjectPath,
+) -> (String, usize) {
+    let mut output = String::with_capacity(content.len());
+    let mut replacement_count = 0;
+    let mut inside_codeblock = false;
+    let mut inside_comment = false;
+
+    for raw_line in content.split_inclusive('\n') {
+        let (line, ending) = raw_line
+            .strip_suffix("\r\n")
+            .map(|line| (line, "\r\n"))
+            .or_else(|| raw_line.strip_suffix('\n').map(|line| (line, "\n")))
+            .unwrap_or((raw_line, ""));
+        let trimmed = line.trim();
+
+        if !inside_codeblock && trimmed == "%%" {
+            inside_comment = !inside_comment;
+            output.push_str(line);
+            output.push_str(ending);
+            continue;
+        }
+        if inside_comment {
+            output.push_str(line);
+            output.push_str(ending);
+            continue;
+        }
+        if trimmed.starts_with("```") {
+            inside_codeblock = !inside_codeblock;
+            output.push_str(line);
+            output.push_str(ending);
+            continue;
+        }
+        if inside_codeblock || !get_header_re().is_match(line) {
+            output.push_str(line);
+            output.push_str(ending);
+            continue;
+        }
+
+        let mut masked = line.as_bytes().to_vec();
+        for expression in [get_link_re(), get_url_re(), get_code_re()] {
+            for matched in expression.find_iter(line) {
+                masked[matched.start()..matched.end()].fill(b' ');
+            }
+        }
+        let mut delimiters = line.match_indices("%%").map(|(index, _)| index);
+        while let Some(start) = delimiters.next() {
+            let end = delimiters.next().map_or(line.len(), |index| index + 2);
+            masked[start..end].fill(b' ');
+        }
+
+        let searchable = String::from_utf8(masked).unwrap_or_default();
+        let mut replacements = Vec::new();
+        for captures in get_project_re().captures_iter(&searchable) {
+            let Some(token) = captures.get(1) else {
+                continue;
+            };
+            let Ok(project) = ProjectPath::parse(token.as_str()) else {
+                continue;
+            };
+            if let Some(replacement) = project.renamed_descendant(old_project, new_project) {
+                let whole = captures.get(0).expect("project match includes full token");
+                replacements.push((whole.start()..whole.end(), format!("+{replacement}")));
+            }
+        }
+
+        if replacements.is_empty() {
+            output.push_str(line);
+        } else {
+            let mut rewritten = line.to_string();
+            replacement_count += replacements.len();
+            for (range, replacement) in replacements.into_iter().rev() {
+                rewritten.replace_range(range, &replacement);
+            }
+            output.push_str(&rewritten);
+        }
+        output.push_str(ending);
+    }
+
+    (output, replacement_count)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rewrites_only_project_metadata_on_task_lines() {
+        let old = ProjectPath::parse("work").unwrap();
+        let new = ProjectPath::parse("job").unwrap();
+        let content = concat!(
+            "Prose +work and [link](projects/+work)\n",
+            "- [ ] Exact +work and descendant +Work/Client\n",
+            "- [ ] Lookalike +workshop [linked +work](https://example.com/+work) `+work` %% +work %%\n",
+            "```md\n- [ ] Code +work\n```\n",
+            "%%\n- [ ] Comment +work\n%%\n",
+        );
+
+        let (rewritten, count) = rewrite_project_tokens(content, &old, &new);
+
+        assert_eq!(count, 2);
+        assert!(rewritten.contains("- [ ] Exact +job and descendant +job/Client"));
+        assert!(rewritten.contains("Prose +work and [link](projects/+work)"));
+        assert!(rewritten
+            .contains("+workshop [linked +work](https://example.com/+work) `+work` %% +work %%"));
+        assert!(rewritten.contains("- [ ] Code +work"));
+        assert!(rewritten.contains("- [ ] Comment +work"));
+    }
+
+    #[test]
+    fn preserves_crlf_and_missing_final_newline_during_project_rewrite() {
+        let old = ProjectPath::parse("work").unwrap();
+        let new = ProjectPath::parse("Work").unwrap();
+        let content = "- [ ] First +work\r\n- [ ] Last +work";
+
+        assert_eq!(
+            rewrite_project_tokens(content, &old, &new),
+            ("- [ ] First +Work\r\n- [ ] Last +Work".to_string(), 2)
+        );
+    }
+
+    #[test]
+    fn test_parse_simple_task() {
+        let content = "- [ ] Call client @phone +work/marketing due:2026-07-25 #urgent";
+        let (tasks, _) = parse_markdown_content("test.md", content);
+        assert_eq!(tasks.len(), 1);
+        let task = &tasks[0];
+        assert_eq!(task.status, "todo");
+        assert_eq!(task.task_type, "task");
+        assert_eq!(task.project.as_deref(), Some("work/marketing"));
+        assert_eq!(task.due_date.as_deref(), Some("2026-07-25"));
+        assert!(task.contexts.contains(&"phone".to_string()));
+        assert!(task.tags.contains(&"urgent".to_string()));
+        assert_eq!(task.description, "Call client");
+        assert_eq!(task.parse_errors, None);
+    }
+
+    #[test]
+    fn test_preserves_context_order_and_derives_primary_context() {
+        let content = "- [ ] Coordinate launch @call @ana @call";
+        let (tasks, _) = parse_markdown_content("test.md", content);
+
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].contexts, vec!["call", "ana", "call"]);
+        assert_eq!(tasks[0].primary_context.as_deref(), Some("call"));
+
+        let (without_context, _) = parse_markdown_content("test.md", "- [ ] Work independently");
+        assert_eq!(without_context[0].primary_context, None);
+    }
+
+    #[test]
+    fn test_parse_deferred_task_and_scheduled_deferred_event() {
+        let content = "- [>] Revisit navigation +octarine\n- [>] Scheduled follow-up s:2026-09-12";
+        let (tasks, _) = parse_markdown_content("test.md", content);
+
+        assert_eq!(tasks.len(), 2);
+        assert_eq!(tasks[0].status, "deferred");
+        assert_eq!(tasks[0].task_type, "task");
+        assert_eq!(tasks[0].description, "Revisit navigation");
+        assert_eq!(tasks[1].status, "deferred");
+        assert_eq!(tasks[1].task_type, "event");
+    }
+
+    #[test]
+    fn test_parse_event_and_duration() {
+        let content = "- [<] Strategy meeting s:2026-07-22 14:00 dur:1h30m +work";
+        let (tasks, _) = parse_markdown_content("test.md", content);
+        assert_eq!(tasks.len(), 1);
+        let task = &tasks[0];
+        assert_eq!(task.status, "todo");
+        assert_eq!(task.task_type, "event");
+        assert_eq!(task.project.as_deref(), Some("work"));
+        assert_eq!(task.s_start.as_deref(), Some("2026-07-22 14:00"));
+        assert_eq!(task.duration_secs, Some(5400));
+        assert_eq!(task.description, "Strategy meeting");
+    }
+
+    #[test]
+    fn test_parse_multiline_note() {
+        let content = r#"- [/] Write parser +work
+    This is an indented note paragraph.
+    It has multiple lines.
+    - And a sub-bullet that isn't a task.
+- [ ] Another task"#;
+        let (tasks, _) = parse_markdown_content("test.md", content);
+        assert_eq!(tasks.len(), 2);
+
+        let task1 = &tasks[0];
+        assert_eq!(task1.status, "doing");
+        assert_eq!(task1.description, "Write parser");
+        assert!(task1
+            .raw_markdown
+            .contains("This is an indented note paragraph."));
+        assert!(task1.raw_markdown.contains("- And a sub-bullet"));
+
+        let task2 = &tasks[1];
+        assert_eq!(task2.status, "todo");
+        assert_eq!(task2.description, "Another task");
+    }
+
+    #[test]
+    fn test_parse_errors() {
+        let content = "- [ ] Broken metadata due:invalid-date dur:10x when_done:unsupported";
+        let (tasks, _) = parse_markdown_content("test.md", content);
+        assert_eq!(tasks.len(), 1);
+        let task = &tasks[0];
+        assert!(task.parse_errors.is_some());
+        let errors: Vec<String> =
+            serde_json::from_str(task.parse_errors.as_ref().unwrap()).unwrap();
+        assert_eq!(errors.len(), 3);
+        assert!(errors[0].contains("Invalid due date"));
+        assert!(errors[1].contains("Invalid duration format"));
+        assert!(errors[2].contains("Invalid when_done action"));
+    }
+
+    #[test]
+    fn test_parse_custom_view() {
+        let content = r#"# Notes
+Some notes here.
+
+```tasks-query
+title: "Today's Errands"
+filter: "due = today AND @errands"
+group_by: "none"
+```
+"#;
+        let (_, views) = parse_markdown_content("test.md", content);
+        assert_eq!(views.len(), 1);
+        assert_eq!(views[0].title, "Today's Errands");
+        assert!(views[0]
+            .query_raw
+            .contains("filter: \"due = today AND @errands\""));
+    }
+
+    #[test]
+    fn test_ignore_metadata_in_links() {
+        let content = "- [ ] Visit [our +work page with @phone details and #urgent tag](https://example.com/#tag) s:2026-07-23 due:2026-07-23";
+        let (tasks, _) = parse_markdown_content("test.md", content);
+        assert_eq!(tasks.len(), 1);
+        let task = &tasks[0];
+
+        // Projects, contexts, and tags inside links must be completely ignored
+        assert_eq!(task.project, None);
+        assert_eq!(task.contexts.len(), 0);
+        assert_eq!(task.tags.len(), 0);
+
+        // Metadata outside links must be parsed correctly
+        assert_eq!(task.s_start.as_deref(), Some("2026-07-23"));
+        assert_eq!(task.due_date.as_deref(), Some("2026-07-23"));
+
+        // The markdown link itself should remain fully preserved in the final description!
+        assert_eq!(
+            task.description,
+            "Visit [our +work page with @phone details and #urgent tag](https://example.com/#tag)"
+        );
+    }
+
+    #[test]
+    fn test_ignore_metadata_in_unclosed_links() {
+        let content = "- [x] Actualizar la página de confluence de [Jerarquía de Productos y Categorías](https://example.atlassian.net/wiki/spaces/TEST/pages/12345/WIP+-+Jerarqu+a+de+Productos+y+Categor+as)";
+        let (tasks, _) = parse_markdown_content("test.md", content);
+        assert_eq!(tasks.len(), 1);
+        let task = &tasks[0];
+
+        // The malformed/closed link must not leak any projects (like "+-")
+        assert_eq!(task.project, None);
+        assert_eq!(task.contexts.len(), 0);
+        assert_eq!(task.tags.len(), 0);
+
+        // The raw string remains fully preserved in the description
+        assert_eq!(task.description, "Actualizar la página de confluence de [Jerarquía de Productos y Categorías](https://example.atlassian.net/wiki/spaces/TEST/pages/12345/WIP+-+Jerarqu+a+de+Productos+y+Categor+as)");
+    }
+
+    #[test]
+    fn test_parse_accented_unicode_metadata() {
+        let content =
+            "- [ ] Análisis Portugal +work/eglc/estimación @eglc/gestión #urgente/producción";
+        let (tasks, _) = parse_markdown_content("test.md", content);
+        assert_eq!(tasks.len(), 1);
+        let task = &tasks[0];
+
+        // Ensure full accented unicode values are extracted cleanly without cutoffs
+        assert_eq!(task.project.as_deref(), Some("work/eglc/estimación"));
+        assert!(task.contexts.contains(&"eglc/gestión".to_string()));
+        assert!(task.tags.contains(&"urgente/producción".to_string()));
+    }
+
+    #[test]
+    fn test_scheduled_is_always_an_event() {
+        // A standard task with s_start should be classified as an event
+        let content = "- [ ] Call client s:2026-07-28";
+        let (tasks, _) = parse_markdown_content("test.md", content);
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].task_type, "event");
+
+        // A completed task with s_start should be classified as an event
+        let content_completed = "- [x] Call client s:2026-07-28";
+        let (tasks_completed, _) = parse_markdown_content("test.md", content_completed);
+        assert_eq!(tasks_completed.len(), 1);
+        assert_eq!(tasks_completed[0].task_type, "event");
+    }
+
+    #[test]
+    fn test_parse_priority() {
+        let content = r#"- [ ] (A) Call client due:2026-07-25 @phone +work
+- [/] (b) Write design document
+- [ ] (C) Sub task with priority
+- [ ] Regular task with no priority"#;
+        let (tasks, _) = parse_markdown_content("test.md", content);
+        assert_eq!(tasks.len(), 4);
+
+        assert_eq!(tasks[0].priority, Some(1));
+        assert_eq!(tasks[0].description, "Call client");
+
+        assert_eq!(tasks[1].priority, Some(2));
+        assert_eq!(tasks[1].description, "Write design document");
+
+        assert_eq!(tasks[2].priority, Some(3));
+        assert_eq!(tasks[2].description, "Sub task with priority");
+
+        assert_eq!(tasks[3].priority, None);
+        assert_eq!(tasks[3].description, "Regular task with no priority");
+    }
+
+    #[test]
+    fn test_parse_subtasks() {
+        let content = r#"- [ ] Parent task
+    - [ ] Nested subtask 1
+    - [/] Nested subtask 2 in progress
+    - [x] Nested subtask 3 completed"#;
+        let (tasks, _) = parse_markdown_content("test.md", content);
+        assert_eq!(tasks.len(), 4);
+
+        let parent = &tasks[0];
+        assert_eq!(parent.description, "Parent task");
+        assert_eq!(parent.parent_hash, None);
+
+        assert_eq!(tasks[1].description, "Nested subtask 1");
+        assert_eq!(tasks[1].parent_hash.as_ref(), Some(&parent.hash));
+
+        assert_eq!(tasks[2].description, "Nested subtask 2 in progress");
+        assert_eq!(tasks[2].parent_hash.as_ref(), Some(&parent.hash));
+
+        assert_eq!(tasks[3].description, "Nested subtask 3 completed");
+        assert_eq!(tasks[3].parent_hash.as_ref(), Some(&parent.hash));
+    }
+
+    #[test]
+    fn test_ignore_tasks_in_codeblocks_and_comments() {
+        let content = r#"- [ ] Valid task outside
+```rust
+- [ ] Task inside rust codeblock
+- [ ] Another task inside codeblock
+```
+- [ ] Another valid task
+%%
+- [ ] Task inside block comment
+- [ ] Another task inside block comment
+%%
+- [ ] Buy milk %% inline comment here %% +work @phone
+- [ ] Valid task s:2026-07-28 %% unclosed inline comment"#;
+
+        let (tasks, _) = parse_markdown_content("test.md", content);
+        assert_eq!(tasks.len(), 4);
+
+        assert_eq!(tasks[0].description, "Valid task outside");
+        assert_eq!(tasks[1].description, "Another valid task");
+
+        // Check inline comment stripping
+        assert_eq!(tasks[2].description, "Buy milk");
+        assert_eq!(tasks[2].project.as_deref(), Some("work"));
+        assert!(tasks[2].contexts.contains(&"phone".to_string()));
+
+        // Check unclosed inline comment stripping
+        assert_eq!(tasks[3].description, "Valid task");
+        assert_eq!(tasks[3].s_start.as_deref(), Some("2026-07-28"));
+    }
+
+    #[test]
+    fn test_ignore_tags_inside_inline_code() {
+        let content = "- [ ] Call `Controller#getOrderConfigurator` and fix `+bug-spec` with `@client` #urgent";
+        let (tasks, _) = parse_markdown_content("test.md", content);
+        assert_eq!(tasks.len(), 1);
+        let task = &tasks[0];
+
+        // Metadata inside inline code backticks must be completely ignored
+        assert_eq!(task.project, None);
+        assert_eq!(task.contexts.len(), 0);
+        assert_eq!(task.tags.len(), 1);
+        assert!(task.tags.contains(&"urgent".to_string()));
+
+        // The backticks and their content must remain fully preserved in the final task description!
+        assert_eq!(
+            task.description,
+            "Call `Controller#getOrderConfigurator` and fix `+bug-spec` with `@client`"
+        );
+    }
+}
