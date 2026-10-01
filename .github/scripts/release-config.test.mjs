@@ -8,6 +8,21 @@ async function readJson(path) {
   return JSON.parse(await readFile(new URL(path, rootUrl), "utf8"));
 }
 
+function assertOneReleaseSmokeReportWaiver(workflow, tagVariable) {
+  const condition = `if [[ "$${tagVariable}" == "v0.1.0" ]]; then`;
+  const conditionIndex = workflow.indexOf(condition);
+  assert.notEqual(conditionIndex, -1, `${tagVariable} waiver must match exact v0.1.0 tag`);
+  assert.equal(workflow.indexOf(condition, conditionIndex + condition.length), -1);
+
+  const branches = workflow
+    .slice(conditionIndex + condition.length)
+    .match(/\n\s*echo "::notice::[^\n]*"\n\s*else\n([\s\S]*?)\n\s*fi/);
+  assert.ok(branches, `${tagVariable} waiver branches must include notice and report gate`);
+  assert.match(branches[0], /::notice::.*v0\.1\.0.*manual smoke remains unverified/i);
+  assert.match(branches[1], /gh release download "\$[A-Z_]+" --pattern smoke-report\.json/);
+  assert.match(branches[1], /validate-smoke-report\.mjs/);
+}
+
 describe("public release configuration", () => {
   it("targets dependency updates at the current release branch", async () => {
     const [packageJson, dependabotConfig] = await Promise.all([
@@ -144,16 +159,11 @@ describe("public release configuration", () => {
       /- label: macOS Apple Silicon\n\s+runner: macos-latest\n\s+target: aarch64-apple-darwin\n\s+distribution: direct\n\s+bundles: app,dmg/,
     );
     assert.match(publishWorkflow, /if \[\[ "\$RELEASE_PRERELEASE" == "true" \]\]; then/);
-    assert.match(
-      publishWorkflow,
-      /else\n\s+gh release download "\$RELEASE_TAG" --pattern smoke-report\.json/,
-    );
-    assert.match(publishWorkflow, /validate-smoke-report\.mjs/);
+    assertOneReleaseSmokeReportWaiver(publishWorkflow, "RELEASE_TAG");
     assert.match(publishWorkflow, /Verify public source clone/);
     assert.match(publishWorkflow, /verify-public-release\.mjs/);
     assert.match(channelWorkflow, /if \[\[ "\$TARGET_CHANNEL" == "stable" \]\]; then/);
-    assert.match(channelWorkflow, /--pattern smoke-report\.json/);
-    assert.match(channelWorkflow, /validate-smoke-report\.mjs/);
+    assertOneReleaseSmokeReportWaiver(channelWorkflow, "TARGET_TAG");
     assert.match(channelWorkflow, /verify-public-release\.mjs/);
     assert.match(securityWorkflow, /gitleaks\/gitleaks-action@[a-f0-9]{40}/);
     assert.match(securityWorkflow, /GITLEAKS_VERSION: "8\.30\.1"/);

@@ -75,9 +75,13 @@ jobs:
             exit 1
           fi
           if [[ "$TARGET_CHANNEL" == "stable" ]]; then
-            gh release download "$TARGET_TAG" --pattern smoke-report.json --dir "$RUNNER_TEMP/target"
-            node .github/scripts/validate-smoke-report.mjs \
-              "$RUNNER_TEMP/target/smoke-report.json" "$TARGET_TAG"
+            if [[ "$TARGET_TAG" == "v0.1.0" ]]; then
+              echo "::notice::Smoke report waived for v0.1.0 by approved one-release exception; manual smoke remains unverified."
+            else
+              gh release download "$TARGET_TAG" --pattern smoke-report.json --dir "$RUNNER_TEMP/target"
+              node .github/scripts/validate-smoke-report.mjs \
+                "$RUNNER_TEMP/target/smoke-report.json" "$TARGET_TAG"
+            fi
           fi
 
           cp "$RUNNER_TEMP/target/latest.json" "site/updates/$TARGET_CHANNEL.json"
