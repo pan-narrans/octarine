@@ -26,7 +26,7 @@
   },
   "productName": "octarine",
   "mainBinaryName": "octarine",
-  "version": "0.1.0",
+  "version": "0.2.0-beta.1",
   "identifier": "net.auranimnus.octarine",
   "plugins": {
     "updater": {

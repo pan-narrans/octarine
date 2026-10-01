@@ -6,7 +6,7 @@ updates:
     schedule:
       interval: weekly
       day: monday
-    target-branch: release/0.1.0
+    target-branch: release/0.2.0
     groups:
       npm-production:
         dependency-type: production
@@ -18,7 +18,7 @@ updates:
     schedule:
       interval: weekly
       day: monday
-    target-branch: release/0.1.0
+    target-branch: release/0.2.0
     groups:
       rust-dependencies:
         patterns:
@@ -29,7 +29,7 @@ updates:
     schedule:
       interval: weekly
       day: monday
-    target-branch: release/0.1.0
+    target-branch: release/0.2.0
     groups:
       workflow-actions:
         patterns:

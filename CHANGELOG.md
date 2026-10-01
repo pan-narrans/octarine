@@ -13,4 +13,4 @@ Notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   secure internal-link navigation, and attachment import.
 - Obsidian-style Live Preview that renders supported Markdown while preserving editable source.
 
-[Unreleased]: https://github.com/pan-narrans/octarine/compare/master...release/0.1.0
+[Unreleased]: https://github.com/pan-narrans/octarine/compare/master...release/0.2.0
