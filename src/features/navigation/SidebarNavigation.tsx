@@ -208,7 +208,10 @@ export function SidebarNavigation({
             onClick={() =>
               editingProject !== node.fullPath && selectSection(`proj:${node.fullPath}`)
             }
-            style={{ paddingLeft: `${Math.min(level * 10 + 8, 48)}px`, fontSize: "0.82rem" }}
+            style={{
+              paddingLeft: `calc(min(${level} * var(--workspace-project-indent) + var(--workspace-project-indent-start), 48px))`,
+              fontSize: "var(--workspace-project-font-size)",
+            }}
           >
             <span
               style={{

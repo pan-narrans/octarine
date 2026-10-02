@@ -16,11 +16,12 @@ Octarine uses a dark, interstellar workspace aesthetic: deep navy surfaces, rest
 
 ## Layout and spacing
 
-- The desktop shell is a fixed-height, two-column layout with a 280px sidebar and scrollable main content.
-- Sidebar content uses generous vertical sections; the main area uses a 48px outer inset. Lists and compact metadata use smaller repeated gaps.
+- The desktop shell is a fixed-height, two-column layout with a 232px sidebar and scrollable main content. The main area uses a 24px outer inset.
+- Sidebar sections use 16px gaps and navigation rows have a 32px minimum height. Project and file-tree indentation use 12px and 16px steps.
+- Compact task cards use 8px vertical and 12px horizontal padding. Editor headers use 8px vertical and 12px horizontal padding; formatting toolbars use 4px vertical and 8px horizontal padding.
 - The shared spacing scale is 4, 8, 12, 16, 24, 32, and 48px. Use the corresponding `--space-*` custom property before introducing a new value.
-- At the 1280×1024 visual-reference viewport, dashboard columns and cards are 420px wide with a 32px column gap. The journal editor is 904×220px.
-- The month calendar uses seven 116×98px cells with 8px gutters. Its 860px grid intentionally leaves breathing room inside the 904px main content width.
+- At the 1280×1024 visual-reference viewport, the workspace content width is 1000px. Dashboard columns are 484px wide with a 32px column gap; the journal editor is 1000×220px.
+- The month calendar uses a responsive seven-column grid with 8px gutters, sized to the available workspace content.
 - The desktop task modal is 860×820px, starts 90px from the top of the reference viewport, and keeps the complete structured form and footer visible.
 - At 850px and below, the application sidebar collapses into an off-canvas drawer so the workspace owns the full width. A fixed menu control opens it; backdrop, Escape, or navigation closes it.
 

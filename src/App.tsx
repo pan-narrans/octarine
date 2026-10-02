@@ -20,8 +20,9 @@ import {
   type ProjectRenamePlan,
   type ProjectRenameRecoveryReport,
 } from "./types";
-import { FileTree } from "./components/FileTree";
 import { MarkdownEditor } from "./components/MarkdownEditor";
+import { WorkspaceSidebarCollections } from "./components/WorkspaceSidebarCollections";
+import { WorkspaceSidebarFooter } from "./components/WorkspaceSidebarFooter";
 import { WorkspaceState } from "./components/WorkspaceState";
 import { EditTaskModal } from "./components/EditTaskModal";
 import { CreateTaskModal } from "./components/CreateTaskModal";
@@ -33,6 +34,7 @@ import {
   type ProjectMergeWorkflowStage,
 } from "./components/ProjectMergeWorkflow";
 import { NotificationViewport } from "./components/NotificationViewport";
+import { WorkspaceHeader, WorkspaceToolbar } from "./components/WorkspaceHeader";
 import { TaskCreationSettings } from "./components/TaskCreationSettings";
 import { ApplicationUpdateSettings } from "./components/ApplicationUpdateSettings";
 import { TaskCard } from "./features/tasks/TaskCard";
@@ -53,7 +55,6 @@ import {
 import { CalendarSurface } from "./features/calendar/CalendarSurface";
 import { DayDrawer, type ScheduleDraft } from "./features/calendar/DayDrawer";
 import { calendarDateKey, getCalendarEvents } from "./features/calendar/calendar-utils";
-import { Loader2, Search, Edit2, Check, X, BookOpen, Plus, Settings } from "lucide-react";
 import { listen } from "@tauri-apps/api/event";
 import {
   isWriteConflict,
@@ -1401,285 +1402,41 @@ export function App() {
         appVersion={applicationUpdates.runtime?.currentVersion}
         updateChannel={applicationUpdates.runtime?.channel}
         beforeCollections={
-          <>
-            {/* Collapsible Journals Virtual Explorer Tree (Swapped to First!) */}
-            <div className="sidebar-section">
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  marginBottom: "0.25rem",
-                }}
-              >
-                <h4
-                  onClick={() =>
-                    journalSetupRequired
-                      ? handleSidebarItemClick("settings")
-                      : setJournalsExpanded(!journalsExpanded)
-                  }
-                  style={{ margin: 0, cursor: "pointer", flexGrow: 1 }}
-                >
-                  Journals
-                </h4>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleOpenTodayJournal();
-                    }}
-                    title={
-                      journalSetupRequired
-                        ? "Configure journal in Task settings"
-                        : "Write Today's Entry"
-                    }
-                    disabled={journalSetupRequired}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      color: "var(--color-violet)",
-                      cursor: journalSetupRequired ? "not-allowed" : "pointer",
-                      opacity: journalSetupRequired ? 0.45 : 1,
-                      display: "flex",
-                      alignItems: "center",
-                      padding: 0,
-                    }}
-                  >
-                    <BookOpen size={14} />
-                  </button>
-                  <span
-                    onClick={() =>
-                      journalSetupRequired
-                        ? handleSidebarItemClick("settings")
-                        : setJournalsExpanded(!journalsExpanded)
-                    }
-                    style={{ fontSize: "0.7rem", color: "var(--text-muted)", cursor: "pointer" }}
-                  >
-                    {journalSetupRequired
-                      ? "Setup required"
-                      : journalsExpanded
-                        ? "Collapse"
-                        : "Expand"}
-                  </span>
-                </div>
-              </div>
-              {journalsExpanded && (
-                <div
-                  style={{
-                    marginTop: "0.5rem",
-                    maxHeight: "250px",
-                    overflowY: "auto",
-                    paddingLeft: "0.15rem",
-                  }}
-                >
-                  {journalTree && journalTree.children ? (
-                    journalTree.children.map((child, index) => (
-                      <FileTree
-                        key={`${child.path}-${index}`}
-                        node={child}
-                        selectedPath={activeFilePath}
-                        onSelectFile={handleSelectFile}
-                        readOnly={true}
-                      />
-                    ))
-                  ) : (
-                    <div style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>
-                      Loading journals...
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Collapsible Vault Notes Explorer Tree (Swapped to Second!) */}
-            <div className="sidebar-section">
-              <div
-                onClick={() => setNotesExpanded(!notesExpanded)}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  cursor: "pointer",
-                  marginBottom: "0.25rem",
-                }}
-              >
-                <h4 style={{ margin: 0 }}>Notes</h4>
-                <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>
-                  {notesExpanded ? "Collapse" : "Expand"}
-                </span>
-              </div>
-              {notesExpanded && (
-                <div
-                  style={{
-                    marginTop: "0.5rem",
-                    maxHeight: "250px",
-                    overflowY: "auto",
-                    paddingLeft: "0.15rem",
-                  }}
-                >
-                  {dirTree && dirTree.children ? (
-                    dirTree.children.map((child, index) => (
-                      <FileTree
-                        key={`${child.path}-${index}`}
-                        node={child}
-                        selectedPath={activeFilePath}
-                        onSelectFile={handleSelectFile}
-                        onCreateFile={handleCreateFile}
-                        onCreateFolder={handleCreateFolder}
-                        onRename={handleRenamePath}
-                        onDelete={handleDeletePath}
-                      />
-                    ))
-                  ) : (
-                    <div style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>
-                      Loading notes...
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </>
+          <WorkspaceSidebarCollections
+            journalTree={journalTree}
+            notesTree={dirTree}
+            activeFilePath={activeFilePath}
+            journalsExpanded={journalsExpanded}
+            notesExpanded={notesExpanded}
+            setupRequired={journalSetupRequired}
+            onToggleJournals={() =>
+              journalSetupRequired
+                ? handleSidebarItemClick("settings")
+                : setJournalsExpanded(!journalsExpanded)
+            }
+            onOpenTodayJournal={() => void handleOpenTodayJournal()}
+            onToggleNotes={() => setNotesExpanded(!notesExpanded)}
+            onSelectFile={handleSelectFile}
+            onCreateFile={handleCreateFile}
+            onCreateFolder={handleCreateFolder}
+            onRename={handleRenamePath}
+            onDelete={handleDeletePath}
+          />
         }
         footer={
-          <div className="sidebar-footer">
-            <ul className="sidebar-list sidebar-settings-link">
-              <li>
-                <button
-                  type="button"
-                  className={`sidebar-item ${
-                    activeFilePath === null && selectedSection === "settings" ? "active" : ""
-                  }`}
-                  onClick={() => handleSidebarItemClick("settings")}
-                >
-                  <Settings size={16} /> Task settings
-                </button>
-              </li>
-            </ul>
-
-            {/* Active Vault Location indicator with Inline Editor */}
-            <div
-              style={{
-                borderTop: "1px solid var(--border-card)",
-                paddingTop: "1.5rem",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  marginBottom: "0.5rem",
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: "0.75rem",
-                    textTransform: "uppercase",
-                    color: "var(--text-muted)",
-                    fontWeight: 600,
-                    letterSpacing: "0.05em",
-                  }}
-                >
-                  Active Vault Path
-                </span>
-                {!isEditingVault && (
-                  <button
-                    onClick={() => setIsEditingVault(true)}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      color: "var(--color-violet)",
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      padding: 0,
-                    }}
-                  >
-                    <Edit2 size={12} />
-                  </button>
-                )}
-              </div>
-
-              {isEditingVault ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                  <input
-                    className="sidebar-vault-input"
-                    type="text"
-                    value={vaultInput}
-                    onChange={(e) => setVaultInput(e.target.value)}
-                    style={{
-                      width: "100%",
-                      background: "rgba(255, 255, 255, 0.05)",
-                      border: "1px solid var(--border-card)",
-                      borderRadius: "6px",
-                      color: "var(--text-primary)",
-                      padding: "0.4rem 0.6rem",
-                      fontSize: "0.8rem",
-                      fontFamily: "monospace",
-                    }}
-                    placeholder="~/octarine_vault"
-                    disabled={savingVault}
-                  />
-                  <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
-                    <button
-                      className="sidebar-vault-button"
-                      onClick={() => setIsEditingVault(false)}
-                      style={{
-                        background: "rgba(255, 255, 255, 0.05)",
-                        border: "1px solid var(--border-card)",
-                        color: "var(--text-muted)",
-                        padding: "0.25rem 0.5rem",
-                        borderRadius: "4px",
-                        fontSize: "0.75rem",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "0.25rem",
-                      }}
-                      disabled={savingVault}
-                    >
-                      <X size={10} /> Cancel
-                    </button>
-                    <button
-                      className="sidebar-vault-button"
-                      onClick={handleSaveVault}
-                      style={{
-                        background: "var(--color-violet)",
-                        border: "none",
-                        color: "white",
-                        padding: "0.25rem 0.5rem",
-                        borderRadius: "4px",
-                        fontSize: "0.75rem",
-                        fontWeight: 600,
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "0.25rem",
-                      }}
-                      disabled={savingVault}
-                    >
-                      {savingVault ? (
-                        <Loader2 size={10} className="animate-spin" />
-                      ) : (
-                        <Check size={10} />
-                      )}{" "}
-                      Save
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div
-                  style={{
-                    fontSize: "0.8rem",
-                    color: "var(--text-secondary)",
-                    wordBreak: "break-all",
-                    fontStyle: "italic",
-                    lineHeight: 1.4,
-                  }}
-                >
-                  {activeVaultPath}
-                </div>
-              )}
-            </div>
-          </div>
+          <WorkspaceSidebarFooter
+            activeFilePath={activeFilePath}
+            selectedSection={selectedSection}
+            activeVaultPath={activeVaultPath}
+            isEditingVault={isEditingVault}
+            vaultInput={vaultInput}
+            savingVault={savingVault}
+            onOpenSettings={() => handleSidebarItemClick("settings")}
+            onEditVault={() => setIsEditingVault(true)}
+            onVaultInputChange={setVaultInput}
+            onCancelVaultEdit={() => setIsEditingVault(false)}
+            onSaveVault={() => void handleSaveVault()}
+          />
         }
       />
 
@@ -1800,9 +1557,9 @@ export function App() {
         )}
 
         {!(activeFilePath === null && selectedSection === "settings") && (
-          <div className="main-header">
-            <div className="main-title">
-              <h1>
+          <WorkspaceHeader
+            title={
+              <>
                 {activeFilePath !== null && "Plaintext Note Editor"}
                 {activeFilePath === null && selectedSection === "all" && "Inbox Dashboard"}
                 {activeFilePath === null && selectedSection === "todo" && "Inbox: Todo"}
@@ -1820,36 +1577,21 @@ export function App() {
                 {activeFilePath === null &&
                   selectedSection.startsWith("view:") &&
                   `Query: ${selectedSection.slice(5)}`}
-              </h1>
-              <p>
-                {activeFilePath !== null
-                  ? "Direct Markdown Editor Workspace"
-                  : "Sub-millisecond plaintext organization"}
-              </p>
-            </div>
-            <button
-              ref={taskCreation.triggerRef}
-              type="button"
-              className="new-task-button"
-              onClick={taskCreation.open}
-            >
-              <Plus size={16} /> New task
-            </button>
-          </div>
+              </>
+            }
+            subtitle={
+              activeFilePath !== null
+                ? "Direct Markdown Editor Workspace"
+                : "Sub-millisecond plaintext organization"
+            }
+            triggerRef={taskCreation.triggerRef}
+            onCreateTask={taskCreation.open}
+          />
         )}
 
         {/* Search Inputs (only displayed in dashboard mode) */}
         {activeFilePath === null && selectedSection !== "settings" && (
-          <div className="workspace-toolbar">
-            <div className="search-container">
-              <Search size={18} color="#6b7280" />
-              <input
-                type="text"
-                placeholder="Search tasks, descriptions or projects..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
+          <WorkspaceToolbar searchValue={searchQuery} onSearchChange={setSearchQuery}>
             {selectedSection.startsWith("proj:") && (
               <div className="project-view-controls" aria-label="Project view controls">
                 <div className="project-view-switch" aria-label="Project presentation">
@@ -1882,7 +1624,7 @@ export function App() {
                 )}
               </div>
             )}
-          </div>
+          </WorkspaceToolbar>
         )}
 
         {/* Active Loader */}
