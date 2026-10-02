@@ -9,6 +9,16 @@ const preview: Preview = {
     viewport: {
       options: {
         ...MINIMAL_VIEWPORTS,
+        octarineDesktop: {
+          name: "Octarine desktop (1280 × 1024)",
+          styles: { width: "1280px", height: "1024px" },
+          type: "desktop",
+        },
+        octarineCompactDesktop: {
+          name: "Octarine compact desktop (1000 × 900)",
+          styles: { width: "1000px", height: "900px" },
+          type: "desktop",
+        },
         octarineTablet: {
           name: "Octarine tablet (850 × 1024)",
           styles: { width: "850px", height: "1024px" },

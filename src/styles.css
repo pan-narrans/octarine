@@ -35,6 +35,45 @@
   --radius-md: 8px;
   --radius-card: 12px;
   --radius-modal: 12px;
+
+  --workspace-sidebar-width: 232px;
+  --workspace-sidebar-padding-block: var(--space-4);
+  --workspace-sidebar-padding-inline: var(--space-3);
+  --workspace-sidebar-section-gap: var(--space-4);
+  --workspace-sidebar-heading-gap: var(--space-2);
+  --workspace-sidebar-brand-gap: var(--space-4);
+  --workspace-main-inset: var(--space-6);
+  --workspace-header-gap: var(--space-4);
+  --workspace-header-title-size: 28px;
+  --workspace-header-title-line-height: 34px;
+  --workspace-toolbar-gap: var(--space-2);
+  --workspace-toolbar-bottom-gap: var(--space-4);
+  --workspace-search-height: 36px;
+  --workspace-search-padding-block: 6px;
+  --workspace-search-padding-inline: var(--space-3);
+  --workspace-search-gap: var(--space-2);
+  --workspace-action-height: 36px;
+  --workspace-nav-row-height: var(--space-8);
+  --workspace-nav-row-padding-block: var(--space-1);
+  --workspace-project-indent: var(--space-3);
+  --workspace-project-indent-start: var(--space-2);
+  --workspace-project-font-size: 0.82rem;
+  --workspace-file-tree-indent: var(--space-4);
+  --workspace-file-tree-row-height: var(--space-8);
+  --workspace-file-tree-row-padding: 3px 6px;
+  --workspace-editor-header-padding: var(--space-2) var(--space-3);
+  --workspace-editor-toolbar-padding: var(--space-1) var(--space-2);
+  --workspace-card-padding: var(--space-2) var(--space-3);
+  --workspace-card-gap: var(--space-3);
+  --workspace-card-details-gap: var(--space-1);
+  --workspace-card-radius: var(--radius-card);
+  --workspace-compact-list-gap: var(--space-2);
+  --workspace-compact-card-padding: var(--space-2) var(--space-3);
+  --workspace-compact-card-gap: var(--space-2);
+  --workspace-compact-card-radius: var(--radius-card);
+  --workspace-sidebar-control-size: var(--space-6);
+  --workspace-sidebar-aux-font-size: 0.75rem;
+  --workspace-sidebar-footer-gap: var(--space-2);
 }
 
 * {
@@ -54,7 +93,7 @@ body {
 
 #root {
   display: grid;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: var(--workspace-sidebar-width) minmax(0, 1fr);
   height: 100vh;
   width: 100vw;
 }
@@ -65,7 +104,7 @@ body {
   border-right: 1px solid var(--border-card);
   display: flex;
   flex-direction: column;
-  padding: 2rem 1.5rem;
+  padding: var(--workspace-sidebar-padding-block) var(--workspace-sidebar-padding-inline);
   overflow: hidden;
 }
 
@@ -85,7 +124,7 @@ body {
 .sidebar h2 {
   font-size: 1.8rem;
   letter-spacing: -0.05em;
-  margin-bottom: 2rem;
+  margin-bottom: var(--workspace-sidebar-brand-gap);
   font-weight: 700;
   display: flex;
   align-items: center;
@@ -120,7 +159,7 @@ body {
 }
 
 .sidebar-section {
-  margin-bottom: 2rem;
+  margin-bottom: var(--workspace-sidebar-section-gap);
 }
 
 .sidebar-section h4 {
@@ -128,7 +167,7 @@ body {
   text-transform: uppercase;
   font-size: 0.75rem;
   letter-spacing: 0.1em;
-  margin-bottom: 0.75rem;
+  margin-bottom: var(--workspace-sidebar-heading-gap);
   font-weight: 600;
 }
 
@@ -137,7 +176,7 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
-  margin-bottom: 0.75rem;
+  margin-bottom: var(--workspace-sidebar-heading-gap);
 }
 
 .sidebar-section-heading h4 {
@@ -152,7 +191,7 @@ body {
   background: transparent;
   color: var(--text-muted);
   font: inherit;
-  font-size: 0.68rem;
+  font-size: var(--workspace-sidebar-aux-font-size);
   line-height: 1;
   cursor: pointer;
   display: inline-flex;
@@ -230,7 +269,8 @@ body {
 .sidebar-item {
   color: var(--text-secondary);
   font-size: 0.95rem;
-  padding: 0.6rem 0.75rem;
+  min-height: var(--workspace-nav-row-height);
+  padding: var(--workspace-nav-row-padding-block) 0.75rem;
   border-radius: 8px;
   cursor: pointer;
   display: flex;
@@ -361,7 +401,7 @@ body {
 }
 
 .sidebar-settings-link {
-  margin-bottom: var(--space-6);
+  margin-bottom: var(--workspace-sidebar-footer-gap);
 }
 
 .sidebar-settings-link .sidebar-item {
@@ -443,9 +483,11 @@ body {
 
 /* 2. Main Content Styles */
 .main-content {
+  min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 3rem;
+  padding: var(--workspace-main-inset);
   overflow-y: auto;
   position: relative;
 }
@@ -460,11 +502,12 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 2rem;
+  margin-bottom: var(--workspace-header-gap, 2rem);
 }
 
 .main-title h1 {
-  font-size: 2.25rem;
+  font-size: var(--workspace-header-title-size);
+  line-height: var(--workspace-header-title-line-height);
   font-weight: 700;
   letter-spacing: -0.03em;
   margin-bottom: 0.25rem;
@@ -472,13 +515,14 @@ body {
 
 .main-title p {
   color: var(--text-secondary);
-  font-size: 1rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
   font-weight: 300;
 }
 
 .new-task-button {
   display: inline-flex;
-  min-height: 40px;
+  min-height: var(--workspace-action-height);
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
@@ -505,12 +549,13 @@ body {
 .search-container {
   display: flex;
   align-items: center;
+  min-height: var(--workspace-search-height);
   background-color: rgba(255, 255, 255, 0.02);
   border: 1px solid var(--border-card);
-  border-radius: 12px;
-  padding: 0.75rem 1rem;
+  border-radius: var(--radius-card);
+  padding: var(--workspace-search-padding-block) var(--workspace-search-padding-inline);
   margin-bottom: 2rem;
-  gap: 0.75rem;
+  gap: var(--workspace-search-gap);
   transition: all 0.2s;
 }
 
@@ -531,8 +576,8 @@ body {
 .workspace-toolbar {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  margin-bottom: 2rem;
+  gap: var(--workspace-toolbar-gap);
+  margin-bottom: var(--workspace-toolbar-bottom-gap);
 }
 
 .workspace-toolbar .search-container {
@@ -1800,11 +1845,11 @@ body {
 .task-card {
   background: var(--bg-card);
   border: 1px solid var(--border-card);
-  border-radius: 12px;
-  padding: 1.25rem 1.5rem;
+  border-radius: var(--workspace-card-radius);
+  padding: var(--workspace-card-padding);
   display: flex;
   align-items: flex-start;
-  gap: 1.25rem;
+  gap: var(--workspace-card-gap);
   transition:
     transform 0.2s,
     border-color 0.2s;
@@ -1889,7 +1934,7 @@ body {
 .task-details {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--workspace-card-details-gap);
   flex-grow: 1;
   min-width: 0;
 }
@@ -2623,19 +2668,19 @@ body {
 /* Editor Split Workspace Layout */
 .editor-workspace-container {
   display: flex;
-  gap: 1.5rem;
+  gap: var(--workspace-editor-column-gap, 1.5rem);
   height: calc(100vh - 200px);
   margin-top: 1rem;
 }
 
 .editor-filetree-column {
-  width: 260px;
+  width: var(--workspace-editor-tree-width, 260px);
   background: rgba(255, 255, 255, 0.015);
   border: 1px solid var(--border-card);
   border-radius: 12px;
   display: flex;
   flex-direction: column;
-  padding: 1rem;
+  padding: var(--workspace-editor-tree-padding, 1rem);
   overflow-y: auto;
 }
 
@@ -2659,14 +2704,15 @@ body {
 
 /* Recursive File Tree Styles */
 .file-tree-node {
-  margin-left: 0.5rem;
+  margin-left: var(--workspace-file-tree-indent);
   font-size: 0.85rem;
 }
 
 .file-tree-row {
   display: flex;
   align-items: center;
-  padding: 0.35rem 0.5rem;
+  min-height: var(--workspace-file-tree-row-height);
+  padding: var(--workspace-file-tree-row-padding);
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.2s;
@@ -2802,7 +2848,7 @@ body {
   align-items: center;
   background: rgba(255, 255, 255, 0.015);
   border-bottom: 1px solid var(--border-card);
-  padding: 0.75rem 1.5rem;
+  padding: var(--workspace-editor-header-padding);
 }
 
 .editor-meta h3 {
@@ -2882,7 +2928,7 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
+  padding: var(--workspace-editor-toolbar-padding);
   border-bottom: 1px solid var(--border-card);
   background: rgba(255, 255, 255, 0.01);
 }
@@ -3392,42 +3438,6 @@ body {
 .task-inline-link:hover {
   color: #c084fc;
   text-decoration: underline;
-}
-
-/* Condensed Task Cards on Dashboard */
-.task-list.condensed {
-  gap: 0.4rem;
-}
-
-.task-list.condensed .task-card {
-  padding: 0.4rem 0.6rem;
-  border-radius: 6px;
-}
-
-.task-list.condensed .task-desc {
-  font-size: 0.82rem;
-  line-height: 1.3;
-}
-
-.task-list.condensed .task-notes {
-  font-size: 0.76rem;
-  margin-top: 0.15rem;
-}
-
-.task-list.condensed .metadata-container {
-  margin-top: 0.15rem;
-  gap: 0.3rem;
-}
-
-.task-list.condensed .pill {
-  font-size: 0.68rem;
-  padding: 0.08rem 0.25rem;
-}
-
-.task-list.condensed .checkbox {
-  width: 14px;
-  height: 14px;
-  font-size: 0.68rem;
 }
 
 /* --- CodeMirror Autocomplete Body Portal Styles --- */
@@ -4177,25 +4187,7 @@ body {
   }
 }
 
-/* Figma-synchronized desktop fixtures. The values map directly to the local
-   spacing, radius, and component variables documented on the Octarine board. */
-.main-title h1 {
-  font-size: 2.125rem;
-  line-height: 2.625rem;
-}
-
-.main-title p {
-  font-size: 0.875rem;
-  line-height: 1.25rem;
-}
-
-.search-container {
-  min-height: 44px;
-  padding: var(--space-3) var(--space-4);
-  gap: var(--space-3);
-  border-radius: var(--radius-card);
-}
-
+/* Shared desktop layout fixtures. */
 .unified-dashboard {
   container-name: dashboard;
   container-type: inline-size;
@@ -4247,14 +4239,14 @@ body {
 }
 
 .task-list.condensed {
-  gap: var(--space-2);
+  gap: var(--workspace-compact-list-gap);
 }
 
 .task-list.condensed .task-card {
   width: 100%;
-  padding: var(--space-4);
-  gap: var(--space-3);
-  border-radius: var(--radius-card);
+  padding: var(--workspace-compact-card-padding);
+  gap: var(--workspace-compact-card-gap);
+  border-radius: var(--workspace-compact-card-radius);
 }
 
 .task-list.condensed .task-details {
@@ -4272,15 +4264,26 @@ body {
   line-height: 1.125rem;
 }
 
-.task-list.condensed .checkbox {
-  width: 20px;
-  height: 20px;
+.task-list.condensed .task-notes {
+  margin-top: 0.15rem;
 }
 
 .task-list.condensed .metadata-container {
   min-height: 24px;
   margin-top: 0;
   align-items: center;
+  gap: 0.3rem;
+}
+
+.task-list.condensed .pill {
+  font-size: 0.68rem;
+  padding: 0.08rem 0.25rem;
+}
+
+.task-list.condensed .checkbox {
+  width: 20px;
+  height: 20px;
+  font-size: 0.68rem;
 }
 
 .dashboard-daily-note-section {
@@ -4327,6 +4330,140 @@ body {
     padding: 0;
     gap: 0;
     font-size: 0;
+  }
+}
+
+.workspace-layout-story-shell {
+  display: grid;
+  grid-template-columns: var(--workspace-sidebar-width) minmax(0, 1fr);
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--bg-space);
+}
+
+.workspace-layout-story-shell > .main-content {
+  min-width: 0;
+  min-height: 0;
+}
+
+.workspace-layout-story-shell .sidebar {
+  min-width: 0;
+}
+
+.workspace-layout-task-list {
+  padding-bottom: var(--space-8);
+}
+
+.sidebar .sidebar-collection-heading,
+.sidebar .sidebar-collection-toggle {
+  min-height: var(--workspace-sidebar-control-size);
+}
+
+.sidebar .sidebar-collection-toggle {
+  display: inline-flex;
+  align-items: center;
+}
+
+.sidebar button:not(.sidebar-item) {
+  min-width: var(--workspace-sidebar-control-size);
+  min-height: var(--workspace-sidebar-control-size);
+}
+
+.sidebar .sidebar-project-visibility-toggle {
+  padding: var(--space-1) var(--space-2);
+}
+
+.sidebar .file-tree-actions {
+  position: static;
+  flex: 0 0 100%;
+  justify-content: flex-end;
+  padding: var(--space-1) 0 0;
+  gap: var(--space-1);
+  border: 0;
+  background: transparent;
+}
+
+.sidebar .file-tree-row {
+  flex-wrap: wrap;
+}
+
+.sidebar .file-tree-name {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.sidebar .file-tree-arrow,
+.sidebar .file-tree-icon {
+  flex-shrink: 0;
+}
+
+.sidebar .file-tree-row .file-action-btn {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.main-content .editor-canvas-column {
+  min-height: 0;
+}
+
+@media (max-width: 850px) {
+  .workspace-layout-story-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .main-content .editor-canvas-column {
+    flex: 1 1 360px;
+    min-height: 360px;
+  }
+}
+
+@media (max-width: 560px) {
+  .main-content .main-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .main-content .main-title h1 {
+    font-size: 24px;
+    line-height: 30px;
+  }
+
+  .main-content .new-task-button {
+    align-self: flex-end;
+  }
+
+  .main-content .editor-header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .main-content .editor-meta {
+    min-width: 0;
+  }
+
+  .main-content .editor-meta h3 {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .main-content .editor-path {
+    overflow-wrap: anywhere;
+  }
+
+  .main-content .editor-actions {
+    justify-content: flex-end;
+    gap: var(--space-2);
+  }
+
+  .main-content .task-list .task-card {
+    min-width: 0;
   }
 }
 

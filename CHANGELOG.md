@@ -13,4 +13,9 @@ Notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   secure internal-link navigation, and attachment import.
 - Obsidian-style Live Preview that renders supported Markdown while preserving editable source.
 
+### Changed
+
+- Compact shared workspace layout with narrower navigation, denser task cards, and more editor space.
+- Responsive header and editor actions avoid overlap at narrow widths; nested file actions stay below names.
+
 [Unreleased]: https://github.com/pan-narrans/octarine/compare/master...release/0.2.0
