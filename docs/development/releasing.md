@@ -1,7 +1,7 @@
 # Release Build Setup
 
 GitHub Actions builds signed draft releases from annotated version tags and publishes updater
-manifests through GitHub Pages after manual release publication.
+manifests through GitHub Pages after release publication.
 
 ## Required Values
 
@@ -71,8 +71,12 @@ Before first public release:
    ```
 
 3. Let `Draft release` workflow validate and build artifacts.
-4. Inspect signed draft artifacts, then publish GitHub prerelease manually. First deployed Beta
-   manifest establishes updater bootstrap; Stable manifest stays unchanged.
+4. Inspect signed draft artifacts, then publish GitHub prerelease manually. Publishing deploys the
+   Beta manifest and leaves Stable manifest unchanged. First deployed Beta manifest establishes
+   updater bootstrap. For the explicitly authorized one-off `v0.2.0-beta.3` recovery, the release
+   workflow publishes the draft after both platform builds and manifest canonicalization succeed,
+   then calls the updater Pages workflow directly because `GITHUB_TOKEN` publication does not start
+   a second release-triggered workflow.
 5. Complete signed update, rollback, failure-path, Linux, and Gatekeeper smoke matrix before stable
    promotion. Beta iterations may publish before this matrix because public Beta channel is required
    to exercise self-updates.

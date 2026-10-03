@@ -277,3 +277,23 @@ jobs:
             "$RUNNER_TEMP/release/latest.json" "$RELEASE_TAG" \
             "$RUNNER_TEMP/release/latest.json" "$RUNNER_TEMP/release-assets.json"
           gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/release/latest.json" --clobber
+
+      - name: Publish authorized beta3 release
+        if: github.ref_name == 'v0.2.0-beta.3'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: gh release edit "$RELEASE_TAG" --draft=false --prerelease
+
+  publish-beta3-updater-pages:
+    name: Publish beta3 updater manifests
+    needs: [validate, finalize-updater-manifest]
+    if: github.ref_name == 'v0.2.0-beta.3'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/publish-updater-pages.yml
+    with:
+      release_tag: ${{ github.ref_name }}
+      release_prerelease: ${{ needs.validate.outputs.channel == 'beta' }}
