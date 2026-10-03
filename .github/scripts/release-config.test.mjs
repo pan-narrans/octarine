@@ -149,6 +149,26 @@ describe("public release configuration", () => {
       releaseWorkflow,
       /gh release upload "\$RELEASE_TAG" "\$RUNNER_TEMP\/release\/latest\.json" --clobber/,
     );
+    const manifestUploadIndex = releaseWorkflow.indexOf(
+      'gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/release/latest.json" --clobber',
+    );
+    const beta3Guard = "if: github.ref_name == 'v0.2.0-beta.3'";
+    const beta3PublishStepIndex = releaseWorkflow.indexOf(beta3Guard);
+    const pagesCallIndex = releaseWorkflow.indexOf("\n  publish-beta3-updater-pages:");
+    assert.equal(
+      [...releaseWorkflow.matchAll(/if: github\.ref_name == 'v0\.2\.0-beta\.3'/g)].length,
+      2,
+    );
+    assert.ok(manifestUploadIndex >= 0 && beta3PublishStepIndex > manifestUploadIndex);
+    assert.ok(pagesCallIndex > beta3PublishStepIndex);
+    assert.match(
+      releaseWorkflow.slice(beta3PublishStepIndex, pagesCallIndex),
+      /GH_TOKEN: \$\{\{ github\.token \}\}[\s\S]*?gh release edit "\$RELEASE_TAG" --draft=false --prerelease/,
+    );
+    assert.match(
+      releaseWorkflow.slice(pagesCallIndex),
+      /needs: \[validate, finalize-updater-manifest\][\s\S]*?if: github\.ref_name == 'v0\.2\.0-beta\.3'[\s\S]*?permissions:\n\s+contents: read\n\s+pages: write\n\s+id-token: write[\s\S]*?uses: \.\/\.github\/workflows\/publish-updater-pages\.yml[\s\S]*?release_tag: \$\{\{ github\.ref_name \}\}[\s\S]*?release_prerelease: \$\{\{ needs\.validate\.outputs\.channel == 'beta' \}\}/,
+    );
     assert.doesNotMatch(releaseWorkflow, /canonical-latest\.json|#latest\.json/);
     assert.match(releaseWorkflow, /release_version="\$\{tag_version%%-\*\}"/);
     assert.match(releaseWorkflow, /release_branch="release\/\$release_version"/);
@@ -159,6 +179,25 @@ describe("public release configuration", () => {
       /- label: macOS Apple Silicon\n\s+runner: macos-latest\n\s+target: aarch64-apple-darwin\n\s+distribution: direct\n\s+bundles: app,dmg/,
     );
     assert.match(publishWorkflow, /if \[\[ "\$RELEASE_PRERELEASE" == "true" \]\]; then/);
+    assert.match(publishWorkflow, /workflow_call:\n\s+inputs:/);
+    assert.match(publishWorkflow, /release:\n\s+types: \[published\]/);
+    assert.match(
+      publishWorkflow,
+      /release_tag:\n\s+description:[^\n]+\n\s+required: true\n\s+type: string/,
+    );
+    assert.match(
+      publishWorkflow,
+      /release_prerelease:\n\s+description:[^\n]+\n\s+required: true\n\s+type: boolean/,
+    );
+    assert.match(publishWorkflow, /inputs\.release_tag \|\| github\.event\.release\.tag_name/);
+    assert.match(
+      publishWorkflow,
+      /inputs\.release_prerelease \|\| github\.event\.release\.prerelease/,
+    );
+    assert.match(
+      publishWorkflow,
+      /inputs\.release_prerelease \|\| github\.event\.release\.prerelease\) && 'beta' \|\| 'stable'/,
+    );
     assertOneReleaseSmokeReportWaiver(publishWorkflow, "RELEASE_TAG");
     assert.match(publishWorkflow, /Verify public source clone/);
     assert.match(publishWorkflow, /verify-public-release\.mjs/);

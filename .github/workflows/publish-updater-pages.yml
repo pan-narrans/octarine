@@ -3,6 +3,16 @@ name: Publish updater manifests
 on:
   release:
     types: [published]
+  workflow_call:
+    inputs:
+      release_tag:
+        description: Published release tag to route into updater manifests.
+        required: true
+        type: string
+      release_prerelease:
+        description: Whether release tag is a prerelease.
+        required: true
+        type: boolean
 
 permissions:
   contents: read
@@ -16,7 +26,7 @@ concurrency:
 jobs:
   publish:
     name: Publish stable and beta manifests
-    if: startsWith(github.event.release.tag_name, 'v')
+    if: startsWith(inputs.release_tag || github.event.release.tag_name, 'v')
     runs-on: ubuntu-22.04
     timeout-minutes: 10
     environment:
@@ -34,8 +44,8 @@ jobs:
       - name: Build channel manifests
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-          RELEASE_PRERELEASE: ${{ github.event.release.prerelease }}
+          RELEASE_TAG: ${{ inputs.release_tag || github.event.release.tag_name }}
+          RELEASE_PRERELEASE: ${{ inputs.release_prerelease || github.event.release.prerelease }}
         shell: bash
         run: |
           set -euo pipefail
@@ -119,5 +129,5 @@ jobs:
 
       - name: Verify public updater channel
         env:
-          CHANNEL: ${{ github.event.release.prerelease && 'beta' || 'stable' }}
+          CHANNEL: ${{ (inputs.release_prerelease || github.event.release.prerelease) && 'beta' || 'stable' }}
         run: node .github/scripts/verify-public-release.mjs --channel "$CHANNEL"
