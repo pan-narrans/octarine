@@ -449,14 +449,12 @@ function WorkspaceLayoutStory({
         }
         footer={
           <WorkspaceSidebarFooter
-            activeFilePath={surface === "editor" ? activeDocumentPath : null}
             selectedSection={selectedSection}
             activeVaultPath="~/OctarineVault"
             isEditingVault={isEditingVault}
             vaultInput={vaultInput}
             savingVault={false}
             onOpenSettings={() => setSelectedSection("settings")}
-            onOpenPerspectives={() => setSelectedSection("perspectives-settings")}
             onEditVault={() => setIsEditingVault(true)}
             onVaultInputChange={setVaultInput}
             onCancelVaultEdit={() => setIsEditingVault(false)}

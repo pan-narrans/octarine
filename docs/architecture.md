@@ -47,11 +47,11 @@ the logical workspace roots described in [`specifications/perspectives.md`](spec
 The model, registry, runtime hooks, and existing sidebar renderer are integrated in `App.tsx` through
 the registry-backed Perspective renderer inside the existing navigation shell. App-level switching
 and sidebar composition render `perspectives.json` and remain **CURRENT**, based on prior Storybook
-approval and rendered app review. The shared settings editor is **CURRENT**; App now
-mounts it behind a permanent sidebar-footer route, verified in desktop and 390px App fixtures on
-2026-10-06. Vite
-fixtures verify React behavior with in-memory Tauri IPC, while Rust tests cover native file writes
-and filesystem authority.
+approval and rendered app review. The shared settings editor is **CURRENT** inside one Settings
+page with Task settings and Perspectives tabs. Sidebar Settings and the system shortcut open that
+page: `Meta+,` on macOS and `Ctrl+,` elsewhere. Both tab panels stay mounted while Settings is open
+so editing drafts survive tab changes. Vite fixtures verify React behavior with in-memory Tauri IPC,
+while Rust tests cover native file writes and filesystem authority.
 
 Feature-owned adapters under `src/features/*/ipc.ts` are the only frontend modules that call Tauri commands. Rust returns normalized task metadata, including tags, contexts, and source file paths, so the frontend does not reinterpret raw Markdown. Shared response and error DTOs are generated from Rust into `src/generated/ipc`; frontend aliases and runtime guards live in `src/types`.
 

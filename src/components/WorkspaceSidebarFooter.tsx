@@ -1,14 +1,12 @@
-import { Check, Edit2, Layers, Loader2, Settings, X } from "lucide-react";
+import { Check, Edit2, Loader2, Settings, X } from "lucide-react";
 
 interface WorkspaceSidebarFooterProps {
-  activeFilePath: string | null;
   selectedSection: string;
   activeVaultPath: string;
   isEditingVault: boolean;
   vaultInput: string;
   savingVault: boolean;
   onOpenSettings: () => void;
-  onOpenPerspectives?: () => void;
   onEditVault: () => void;
   onVaultInputChange: (value: string) => void;
   onCancelVaultEdit: () => void;
@@ -16,14 +14,12 @@ interface WorkspaceSidebarFooterProps {
 }
 
 export function WorkspaceSidebarFooter({
-  activeFilePath,
   selectedSection,
   activeVaultPath,
   isEditingVault,
   vaultInput,
   savingVault,
   onOpenSettings,
-  onOpenPerspectives,
   onEditVault,
   onVaultInputChange,
   onCancelVaultEdit,
@@ -35,29 +31,12 @@ export function WorkspaceSidebarFooter({
         <li>
           <button
             type="button"
-            className={`sidebar-item ${
-              activeFilePath === null && selectedSection === "settings" ? "active" : ""
-            }`}
+            className={`sidebar-item ${selectedSection === "settings" ? "active" : ""}`}
             onClick={onOpenSettings}
           >
-            <Settings size={16} /> Task settings
+            <Settings size={16} /> Settings
           </button>
         </li>
-        {onOpenPerspectives && (
-          <li>
-            <button
-              type="button"
-              className={`sidebar-item ${
-                activeFilePath === null && selectedSection === "perspectives-settings"
-                  ? "active"
-                  : ""
-              }`}
-              onClick={onOpenPerspectives}
-            >
-              <Layers size={16} /> Perspectives
-            </button>
-          </li>
-        )}
       </ul>
 
       <div

@@ -51,9 +51,10 @@ its own schema version, currently version 1; it does not change or extend applic
 The native command returns raw Perspective text without rewriting it. Missing file selects the
 built-in Perspective. Malformed JSON, unsupported schema versions, and invalid modules produce
 visible configuration errors and recover to the validated built-in definition. Recovery preserves
-the file contents. Shared Perspective settings editor is **CURRENT** and mounted in App
-through a permanent sidebar-footer route; desktop and 390px App fixture flows were verified on
-2026-10-06. Guarded native saves
+the file contents. Shared Perspective settings editor is **CURRENT** and mounted in App inside the
+unified Settings page's Perspectives tab. Open Settings from the sidebar or with `Meta+,` on macOS
+and `Ctrl+,` elsewhere. Desktop and 390px App fixture flows were verified on 2026-10-06. Guarded
+native saves
 compare original text, reject stale writes, and atomically replace valid version 1 configuration.
 Malformed-file replacement requires explicit recovery draft and Save; read failures keep saving
 disabled.

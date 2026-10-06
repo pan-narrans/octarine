@@ -36,6 +36,7 @@ import { NotificationViewport } from "./components/NotificationViewport";
 import { WorkspaceHeader, WorkspaceToolbar } from "./components/WorkspaceHeader";
 import { TaskCreationSettings } from "./components/TaskCreationSettings";
 import { ApplicationUpdateSettings } from "./components/ApplicationUpdateSettings";
+import { UnifiedSettings, type UnifiedSettingsSection } from "./components/UnifiedSettings";
 import { TaskCard } from "./features/tasks/TaskCard";
 import { SidebarNavigation } from "./features/navigation/SidebarNavigation";
 import { PerspectiveSidebar } from "./features/perspectives/PerspectiveSidebar";
@@ -223,6 +224,7 @@ export function App() {
             ? "settings"
             : "all",
   );
+  const [settingsSection, setSettingsSection] = useState<UnifiedSettingsSection>("task-settings");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [projectViewMode, setProjectViewMode] = useState<ProjectViewMode>(() =>
     readProjectViewMode(window.localStorage),
@@ -317,13 +319,13 @@ export function App() {
     if (filter !== activeFilter) setFilter(filter);
   }, [activeFilter, perspectiveRuntime.perspectives, selectedSection, setFilter]);
 
-  const clearActiveFile = () => {
+  const clearActiveFile = useCallback(() => {
     fileOpenRequestRef.current += 1;
     setActiveFilePath(null);
     setActiveFileContent(null);
     setActiveFileFragment(null);
     setActiveFileSource(null);
-  };
+  }, []);
 
   useEffect(() => {
     writeProjectViewMode(window.localStorage, projectViewMode);
@@ -542,13 +544,38 @@ export function App() {
     return true;
   });
 
-  const handleSidebarItemClick = (section: string, filterStr?: string) => {
-    clearActiveFile();
-    setSelectedSection(section);
-    setFilter(
-      section.startsWith("view:") || isPerspectiveQuerySection(section) ? (filterStr ?? "") : "",
-    );
-  };
+  const handleSidebarItemClick = useCallback(
+    (section: string, filterStr?: string) => {
+      clearActiveFile();
+      setSelectedSection(section);
+      setFilter(
+        section.startsWith("view:") || isPerspectiveQuerySection(section) ? (filterStr ?? "") : "",
+      );
+    },
+    [clearActiveFile, setFilter],
+  );
+
+  useEffect(() => {
+    const isMac = /Mac|iPhone|iPad/.test(window.navigator.platform);
+    const handleSettingsShortcut = (event: KeyboardEvent) => {
+      const hasPlatformModifier = isMac
+        ? event.metaKey && !event.ctrlKey
+        : event.ctrlKey && !event.metaKey;
+      if (
+        (event.key !== "," && event.code !== "Comma") ||
+        !hasPlatformModifier ||
+        event.altKey ||
+        event.shiftKey
+      ) {
+        return;
+      }
+      event.preventDefault();
+      handleSidebarItemClick("settings");
+    };
+
+    window.addEventListener("keydown", handleSettingsShortcut, true);
+    return () => window.removeEventListener("keydown", handleSettingsShortcut, true);
+  }, [handleSidebarItemClick]);
 
   const handleShowInactiveProjectsChange = (showInactive: boolean) => {
     setShowInactiveProjects(showInactive);
@@ -610,6 +637,7 @@ export function App() {
           ? { filePath, perspectiveId: sourcePerspectiveId, instanceId: sourceInstanceId }
           : null,
       );
+      setSelectedSection((current) => (current === "settings" ? "all" : current));
     } catch (e) {
       if (
         requestId !== fileOpenRequestRef.current ||
@@ -684,6 +712,7 @@ export function App() {
           ? { filePath: path, perspectiveId: sourcePerspectiveId, instanceId: sourceInstanceId }
           : null,
       );
+      setSelectedSection((current) => (current === "settings" ? "all" : current));
     } catch (e) {
       if (
         requestId !== fileOpenRequestRef.current ||
@@ -706,6 +735,7 @@ export function App() {
       setActiveFileContent(content);
       setActiveFileFragment(resolved.fragment);
       setActiveFileSource(null);
+      setSelectedSection((current) => (current === "settings" ? "all" : current));
     }
     return resolved;
   };
@@ -973,7 +1003,7 @@ export function App() {
     openFile: handleSelectFile,
   });
   const taskSettings = useTaskCreationSettings({
-    enabled: selectedSection === "settings" && activeFilePath === null,
+    enabled: selectedSection === "settings" && settingsSection === "task-settings",
     onSaved: async () => {
       const journalPath = await getJournalConfig();
       setJournalSetupRequired(false);
@@ -983,7 +1013,7 @@ export function App() {
   });
 
   useEffect(() => {
-    if (selectedSection !== "settings" || activeFilePath !== null) return;
+    if (selectedSection !== "settings" || settingsSection !== "task-settings") return;
     let active = true;
     void listProjectMergeRecovery()
       .then((bundles) => {
@@ -1001,7 +1031,7 @@ export function App() {
     return () => {
       active = false;
     };
-  }, [activeFilePath, pushNotification, selectedSection]);
+  }, [pushNotification, selectedSection, settingsSection]);
 
   const saveEditedTask = async (newRawMarkdown: string): Promise<boolean> => {
     if (!modalTask) return false;
@@ -1521,16 +1551,66 @@ export function App() {
       : isPerspectiveQuerySection(selectedSection)
         ? "Custom query"
         : selectedSection.slice("view:".length);
+  const settingsPanels = {
+    "task-settings": taskSettings.value ? (
+      <div className="task-settings-app-surface">
+        {applicationUpdates.runtime && (
+          <ApplicationUpdateSettings
+            runtime={applicationUpdates.runtime}
+            available={applicationUpdates.available}
+            checking={applicationUpdates.checking}
+            installing={applicationUpdates.installing}
+            savingChannel={applicationUpdates.savingChannel}
+            error={applicationUpdates.error}
+            onChannelChange={(channel) => void applicationUpdates.changeChannel(channel)}
+            onCheck={() => void applicationUpdates.check()}
+            onInstall={(update) => void applicationUpdates.install(update)}
+          />
+        )}
+        <TaskCreationSettings
+          value={taskSettings.value}
+          errors={taskSettings.errors}
+          migrationSource={taskSettings.migrationSource}
+          saving={taskSettings.saving}
+          saved={taskSettings.saved}
+          onChange={taskSettings.setValue}
+          onSave={() => void taskSettings.save()}
+        />
+        <div className="task-settings-recovery-section">
+          <ProjectMergeRecoveryList
+            bundles={projectMergeRecoveryBundles}
+            onOpen={(operationId) => void openMergeRecovery(operationId)}
+            onDelete={(operationId) => void deleteMergeRecovery(operationId)}
+          />
+        </div>
+      </div>
+    ) : taskSettings.loading || taskSettings.loadError === null ? (
+      <WorkspaceState kind="loading" />
+    ) : (
+      <div className="empty-state">
+        <h3>Task settings unavailable</h3>
+        <p>{taskSettings.loadError}</p>
+        <button className="new-task-button" onClick={() => void taskSettings.load()}>
+          Retry
+        </button>
+      </div>
+    ),
+    perspectives: (
+      <PerspectiveSettings
+        activePerspectiveId={perspectiveRuntime.activePerspectiveId}
+        onActivate={handleSwitchPerspective}
+        onSaved={handlePerspectiveSaved}
+      />
+    ),
+  };
   const workspaceSidebarFooter = (
     <WorkspaceSidebarFooter
-      activeFilePath={activeFilePath}
       selectedSection={selectedSection}
       activeVaultPath={activeVaultPath}
       isEditingVault={isEditingVault}
       vaultInput={vaultInput}
       savingVault={savingVault}
       onOpenSettings={() => handleSidebarItemClick("settings")}
-      onOpenPerspectives={() => handleSidebarItemClick("perspectives-settings")}
       onEditVault={() => setIsEditingVault(true)}
       onVaultInputChange={setVaultInput}
       onCancelVaultEdit={() => setIsEditingVault(false)}
@@ -1732,10 +1812,7 @@ export function App() {
           />
         )}
 
-        {!(
-          activeFilePath === null &&
-          (selectedSection === "settings" || selectedSection === "perspectives-settings")
-        ) && (
+        {selectedSection !== "settings" && (
           <WorkspaceHeader
             title={
               <>
@@ -1770,53 +1847,56 @@ export function App() {
         )}
 
         {/* Search Inputs (only displayed in dashboard mode) */}
-        {activeFilePath === null &&
-          selectedSection !== "settings" &&
-          selectedSection !== "perspectives-settings" && (
-            <WorkspaceToolbar searchValue={searchQuery} onSearchChange={setSearchQuery}>
-              {selectedSection.startsWith("proj:") && (
-                <div className="project-view-controls" aria-label="Project view controls">
-                  <div className="project-view-switch" aria-label="Project presentation">
-                    {(["board", "list"] as const).map((mode) => (
+        {activeFilePath === null && selectedSection !== "settings" && (
+          <WorkspaceToolbar searchValue={searchQuery} onSearchChange={setSearchQuery}>
+            {selectedSection.startsWith("proj:") && (
+              <div className="project-view-controls" aria-label="Project view controls">
+                <div className="project-view-switch" aria-label="Project presentation">
+                  {(["board", "list"] as const).map((mode) => (
+                    <button
+                      type="button"
+                      key={mode}
+                      className={projectViewMode === mode ? "active" : ""}
+                      aria-pressed={projectViewMode === mode}
+                      onClick={() => setProjectViewMode(mode)}
+                    >
+                      {mode === "board" ? "Board" : "List"}
+                    </button>
+                  ))}
+                </div>
+                {projectViewMode === "board" && (
+                  <div className="project-status-filters" aria-label="Closed status columns">
+                    {(["done", "cancelled"] as const).map((status) => (
                       <button
                         type="button"
-                        key={mode}
-                        className={projectViewMode === mode ? "active" : ""}
-                        aria-pressed={projectViewMode === mode}
-                        onClick={() => setProjectViewMode(mode)}
+                        key={status}
+                        className={visibleClosedStatuses.includes(status) ? "active" : ""}
+                        aria-pressed={visibleClosedStatuses.includes(status)}
+                        onClick={() => toggleClosedStatus(status)}
                       >
-                        {mode === "board" ? "Board" : "List"}
+                        {status === "done" ? "Done" : "Cancelled"}
                       </button>
                     ))}
                   </div>
-                  {projectViewMode === "board" && (
-                    <div className="project-status-filters" aria-label="Closed status columns">
-                      {(["done", "cancelled"] as const).map((status) => (
-                        <button
-                          type="button"
-                          key={status}
-                          className={visibleClosedStatuses.includes(status) ? "active" : ""}
-                          aria-pressed={visibleClosedStatuses.includes(status)}
-                          onClick={() => toggleClosedStatus(status)}
-                        >
-                          {status === "done" ? "Done" : "Cancelled"}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </WorkspaceToolbar>
-          )}
+                )}
+              </div>
+            )}
+          </WorkspaceToolbar>
+        )}
 
         {/* Active Loader */}
-        {loading &&
-          tasks.length === 0 &&
-          selectedSection !== "settings" &&
-          selectedSection !== "perspectives-settings" && <WorkspaceState kind="loading" />}
+        {loading && tasks.length === 0 && selectedSection !== "settings" && (
+          <WorkspaceState kind="loading" />
+        )}
 
         {/* Render Notes Editor Mode or Normal Task Dashboard Content */}
-        {activeFilePath !== null && activeFileContent !== null ? (
+        {selectedSection === "settings" ? (
+          <UnifiedSettings
+            activeSection={settingsSection}
+            onSectionChange={setSettingsSection}
+            panels={settingsPanels}
+          />
+        ) : activeFilePath !== null && activeFileContent !== null ? (
           <div
             className="editor-canvas-column"
             style={{ flex: 1, display: "flex", flexDirection: "column", height: "100%" }}
@@ -1839,56 +1919,6 @@ export function App() {
               contexts={contexts}
             />
           </div>
-        ) : selectedSection === "settings" ? (
-          taskSettings.value ? (
-            <div className="task-settings-app-surface">
-              {applicationUpdates.runtime && (
-                <ApplicationUpdateSettings
-                  runtime={applicationUpdates.runtime}
-                  available={applicationUpdates.available}
-                  checking={applicationUpdates.checking}
-                  installing={applicationUpdates.installing}
-                  savingChannel={applicationUpdates.savingChannel}
-                  error={applicationUpdates.error}
-                  onChannelChange={(channel) => void applicationUpdates.changeChannel(channel)}
-                  onCheck={() => void applicationUpdates.check()}
-                  onInstall={(update) => void applicationUpdates.install(update)}
-                />
-              )}
-              <TaskCreationSettings
-                value={taskSettings.value}
-                errors={taskSettings.errors}
-                migrationSource={taskSettings.migrationSource}
-                saving={taskSettings.saving}
-                saved={taskSettings.saved}
-                onChange={taskSettings.setValue}
-                onSave={() => void taskSettings.save()}
-              />
-              <div className="task-settings-recovery-section">
-                <ProjectMergeRecoveryList
-                  bundles={projectMergeRecoveryBundles}
-                  onOpen={(operationId) => void openMergeRecovery(operationId)}
-                  onDelete={(operationId) => void deleteMergeRecovery(operationId)}
-                />
-              </div>
-            </div>
-          ) : taskSettings.loading ? (
-            <WorkspaceState kind="loading" />
-          ) : (
-            <div className="empty-state">
-              <h3>Task settings unavailable</h3>
-              <p>{taskSettings.loadError}</p>
-              <button className="new-task-button" onClick={() => void taskSettings.load()}>
-                Retry
-              </button>
-            </div>
-          )
-        ) : selectedSection === "perspectives-settings" ? (
-          <PerspectiveSettings
-            activePerspectiveId={perspectiveRuntime.activePerspectiveId}
-            onActivate={handleSwitchPerspective}
-            onSaved={handlePerspectiveSaved}
-          />
         ) : !loading && selectedSection === "events" ? (
           <CalendarSurface
             tasks={tasks}

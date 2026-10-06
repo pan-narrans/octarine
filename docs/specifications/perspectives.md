@@ -136,6 +136,10 @@ shortcuts `Meta+Alt+ArrowRight` / `Meta+Alt+ArrowLeft` or `Ctrl+Alt+ArrowRight` 
 `Ctrl+Alt+ArrowLeft`. Shortcuts are ignored in editable controls. No command palette exists in the
 current application.
 
+The Perspective editor lives in the Perspectives tab of the unified Settings page. Open Settings
+from the sidebar or with `Meta+,` on macOS and `Ctrl+,` elsewhere. This shortcut works while a note
+or editable control has focus.
+
 The selected ID is stored client-locally under a key namespaced by workspace ID. If the saved ID is
 missing from the loaded configuration, the runtime selects the first valid Perspective and reports
 that recovery. Storage failures leave the current selection active and produce a visible warning.
@@ -173,8 +177,9 @@ reference, editor, and existing sidebar renderer are implemented. The existing s
 **CURRENT**: Storybook approval and rendered app inspection on 2026-10-05 confirmed built-in
 modules, Perspective switching with and without a switcher, query results, retained unsaved note
 text, and mobile navigation/footer. The shared settings editor is **CURRENT** and wired
-into App through a permanent sidebar-footer route; creation, module editing, saving, activation,
-and mobile navigation were inspected on 2026-10-06. The browser
+into one Settings page with Task settings and Perspectives tabs. Sidebar navigation and
+`Meta+,`/`Ctrl+,` open this page; both panels stay mounted while switching tabs. Creation, module
+editing, saving, activation, and mobile navigation were inspected on 2026-10-06. The browser
 fixture mocks Tauri IPC in memory; native shell and filesystem behavior rely on Rust tests. See
 [`docs/visual-development.md`](../visual-development.md) for the Storybook-to-app review gate and
 [`ADR 0016`](../adr/0016-perspective-surfaces-and-module-registry.md) for the architecture decision.

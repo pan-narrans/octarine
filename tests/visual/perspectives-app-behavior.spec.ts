@@ -6,6 +6,11 @@ function navigation(page: import("@playwright/test").Page) {
   return page.getByRole("complementary", { name: "Octarine navigation" });
 }
 
+async function openPerspectivesSettings(page: import("@playwright/test").Page) {
+  await navigation(page).getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("tab", { name: "Perspectives" }).click();
+}
+
 async function switchWithShortcut(
   page: import("@playwright/test").Page,
   direction: "Left" | "Right",
@@ -116,21 +121,88 @@ test("mobile navigation exposes Workspace footer and closes on Escape", async ({
   await sidebar.locator(".sidebar-scroll-content").evaluate((element) => {
     element.scrollTop = element.scrollHeight;
   });
-  await expect(sidebar.getByRole("button", { name: "Task settings" })).toBeVisible();
-  await expect(sidebar.getByRole("button", { name: "Perspectives", exact: true })).toBeVisible();
+  await expect(sidebar.getByRole("button", { name: "Settings", exact: true })).toBeVisible();
+  await expect(sidebar.getByRole("button", { name: "Task settings", exact: true })).toHaveCount(0);
+  await expect(sidebar.getByRole("button", { name: "Perspectives", exact: true })).toHaveCount(0);
   await expect(sidebar.getByText("Active Vault Path", { exact: true })).toBeVisible();
 
-  await sidebar.getByRole("button", { name: "Task settings" }).click();
+  await sidebar.getByRole("button", { name: "Settings", exact: true }).click();
   await expect(sidebar).toBeHidden();
+  await expect(page.getByRole("tab", { name: "Task settings" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Perspectives" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Task creation", exact: true })).toBeVisible();
 });
 
-test("Perspectives footer creates, activates, and reloads saved configuration without switcher", async ({
+test("opening sidebar note from Settings exits Settings and shows editor", async ({ page }) => {
+  await page.goto(appUrl);
+  const sidebar = navigation(page);
+  await sidebar.getByRole("button", { name: "Settings", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Task creation", exact: true })).toBeVisible();
+
+  const notesHeading = sidebar.getByRole("heading", { name: "Notes", exact: true });
+  await notesHeading.locator("..").getByText("Expand", { exact: true }).click();
+  const notes = sidebar.locator(".sidebar-section").filter({ hasText: "inbox.md" });
+  await notes.getByText("inbox.md", { exact: true }).click();
+
+  await expect(page.getByRole("heading", { name: "Plaintext Note Editor" })).toBeVisible();
+  await expect(page.locator(".cm-content")).toContainText("# Inbox");
+  await expect(page.getByRole("heading", { name: "Settings", exact: true })).toHaveCount(0);
+});
+
+test("opening Today's Entry from Settings exits Settings and shows editor", async ({ page }) => {
+  await page.goto(appUrl);
+  const sidebar = navigation(page);
+  await sidebar.getByRole("button", { name: "Settings", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Task creation", exact: true })).toBeVisible();
+
+  await sidebar.getByRole("button", { name: "Write Today's Entry", exact: true }).click();
+
+  await expect(page.getByRole("heading", { name: "Plaintext Note Editor" })).toBeVisible();
+  await expect(page.locator(".cm-content")).toContainText("Journal");
+  await expect(page.getByRole("heading", { name: "Settings", exact: true })).toHaveCount(0);
+});
+
+for (const { platform, shortcut } of [
+  { platform: "MacIntel", shortcut: "Meta+," },
+  { platform: "Linux x86_64", shortcut: "Control+," },
+]) {
+  test(`${shortcut} opens Settings from note editor and editable field`, async ({ page }) => {
+    await page.addInitScript((platformName) => {
+      Object.defineProperty(window.navigator, "platform", {
+        configurable: true,
+        value: platformName,
+      });
+    }, platform);
+    await page.goto(appUrl);
+    const sidebar = navigation(page);
+    const notesHeading = sidebar.getByRole("heading", { name: "Notes", exact: true });
+    await notesHeading.locator("..").getByText("Expand", { exact: true }).click();
+    const notes = sidebar.locator(".sidebar-section").filter({ hasText: "inbox.md" });
+    await notes.getByText("inbox.md", { exact: true }).click();
+
+    const editor = page.locator(".cm-content");
+    await expect(editor).toBeFocused();
+    await page.keyboard.press(shortcut);
+    await expect(page.getByRole("heading", { name: "Settings", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Task creation", exact: true })).toBeVisible();
+
+    const inboxFile = page.getByRole("textbox", { name: "Inbox file", exact: true });
+    await inboxFile.fill("draft-inbox.md");
+    await page.keyboard.press(shortcut);
+    await expect(page.getByRole("tab", { name: "Task settings" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await expect(inboxFile).toHaveValue("draft-inbox.md");
+  });
+}
+
+test("Settings menu creates, activates, and reloads saved configuration without switcher", async ({
   page,
 }) => {
   await page.goto(appUrl);
   const sidebar = navigation(page);
-  await sidebar.getByRole("button", { name: "Perspectives", exact: true }).click();
+  await openPerspectivesSettings(page);
   const initialEditor = page.locator(".perspective-settings");
   await initialEditor
     .getByRole("region", { name: "Perspective list" })
@@ -142,22 +214,25 @@ test("Perspectives footer creates, activates, and reloads saved configuration wi
     .click();
   await sidebar.getByRole("button", { name: "Focus", exact: true }).click();
   await expect(sidebar.locator('[aria-label="Perspective switcher"]')).toHaveCount(0);
-  await sidebar.getByRole("button", { name: "Task settings", exact: true }).click();
+  await page.getByRole("tab", { name: "Task settings" }).click();
   await expect(page.getByRole("heading", { name: "Task creation", exact: true })).toBeVisible();
-  await sidebar.getByRole("button", { name: "Perspectives", exact: true }).click();
+  await page.getByRole("tab", { name: "Perspectives" }).click();
 
   const editor = page.locator(".perspective-settings");
   const detail = editor.getByRole("region", { name: "Edit Perspective" });
   await editor.getByRole("button", { name: "Create Perspective" }).click();
   await editor.getByRole("textbox", { name: "Name" }).fill("Research");
+  await page.getByRole("tab", { name: "Task settings" }).click();
+  await page.getByRole("tab", { name: "Perspectives" }).click();
+  await expect(editor.getByRole("textbox", { name: "Name" })).toHaveValue("Research");
   await editor.getByRole("button", { name: "Save changes" }).click();
   await expect(editor.getByText("Saved", { exact: true })).toBeVisible();
   await expect(detail.getByText("Stable ID new-perspective")).toBeVisible();
   await detail.getByRole("button", { name: "Use", exact: true }).click();
   await expect(detail.getByText("Active", { exact: true })).toBeVisible();
 
-  await sidebar.getByRole("button", { name: "Task settings", exact: true }).click();
-  await sidebar.getByRole("button", { name: "Perspectives", exact: true }).click();
+  await page.getByRole("tab", { name: "Task settings" }).click();
+  await page.getByRole("tab", { name: "Perspectives" }).click();
   const reloadedEditor = page.locator(".perspective-settings");
   await reloadedEditor.getByRole("button", { name: "Research", exact: true }).click();
   const reloadedDetail = reloadedEditor.getByRole("region", { name: "Edit Perspective" });
@@ -170,7 +245,7 @@ test("pending save refreshes configuration for workspace selected before write c
 }) => {
   await page.goto(`${appUrl}&defer-perspective-save=1`);
   const sidebar = navigation(page);
-  await sidebar.getByRole("button", { name: "Perspectives", exact: true }).click();
+  await openPerspectivesSettings(page);
 
   const editor = page.locator(".perspective-settings");
   const detail = editor.getByRole("region", { name: "Edit Perspective" });
@@ -197,7 +272,7 @@ test("saved query edits update title and filter, and removal clears sidebar entr
 }) => {
   await page.goto(appUrl);
   const sidebar = navigation(page);
-  await sidebar.getByRole("button", { name: "Perspectives", exact: true }).click();
+  await openPerspectivesSettings(page);
 
   const editor = page.locator(".perspective-settings");
   const list = editor.getByRole("region", { name: "Perspective list" });
@@ -219,7 +294,7 @@ test("saved query edits update title and filter, and removal clears sidebar entr
     0,
   );
 
-  await sidebar.getByRole("button", { name: "Perspectives", exact: true }).click();
+  await openPerspectivesSettings(page);
   const editAgain = page.locator(".perspective-settings");
   const writingDetail = editAgain.getByRole("region", { name: "Edit Perspective" });
   await editAgain
@@ -247,7 +322,7 @@ test("removing active query during pending save falls back to all tasks after re
 }) => {
   await page.goto(`${appUrl}&defer-perspective-save=1`);
   const sidebar = navigation(page);
-  await sidebar.getByRole("button", { name: "Perspectives", exact: true }).click();
+  await openPerspectivesSettings(page);
 
   const editor = page.locator(".perspective-settings");
   const detail = editor.getByRole("region", { name: "Edit Perspective" });
@@ -259,7 +334,7 @@ test("removing active query during pending save falls back to all tasks after re
   await sidebar.getByText("Active work", { exact: true }).click();
   await expect(page.locator(".main-header h1")).toHaveText("Query: Active work");
 
-  await sidebar.getByRole("button", { name: "Perspectives", exact: true }).click();
+  await openPerspectivesSettings(page);
   const editAgain = page.locator(".perspective-settings");
   await editAgain
     .getByRole("region", { name: "Perspective list" })
