@@ -456,6 +456,7 @@ function WorkspaceLayoutStory({
             vaultInput={vaultInput}
             savingVault={false}
             onOpenSettings={() => setSelectedSection("settings")}
+            onOpenPerspectives={() => setSelectedSection("perspectives-settings")}
             onEditVault={() => setIsEditingVault(true)}
             onVaultInputChange={setVaultInput}
             onCancelVaultEdit={() => setIsEditingVault(false)}

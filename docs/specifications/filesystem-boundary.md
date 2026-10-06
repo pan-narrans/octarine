@@ -1,19 +1,33 @@
 # Filesystem Capability Boundary
 
-The configured vault and journal directories are capability roots. A frontend-provided path does not grant access by itself.
+The configured vault is sole filesystem capability root. Journal and project folders are configured locations beneath that vault. A frontend-provided path does not grant access by itself.
 
 ## Authorization Rules
 
-- Configured roots are created if needed and stored in application state as canonical paths.
-- Existing paths are canonicalized before use and must remain beneath an allowed root.
+- The configured vault is created if needed and stored in application state as a canonical path. Journal and project folders resolve beneath it.
+- Existing paths are canonicalized before use and must remain beneath the configured vault.
 - A capability root itself cannot be deleted, renamed, read as a file, or overwritten.
 - New paths authorize their existing canonical parent before a file or directory name is appended.
 - Child names must be one normal path component; absolute names and traversal components are rejected.
 - Symlinks that resolve outside an allowed root are rejected.
 
-Task status, schedule, raw-block, file-tree, create, delete, and rename commands are restricted to the vault. File-content reads and writes accept paths in either the vault or journal. Selecting a new configured root is an explicit user action and establishes a new capability.
+Task status, schedule, raw-block, file-tree, create, delete, rename, and file-content commands are restricted to the vault. Selecting a new vault is an explicit user action and establishes the filesystem capability. Journal and project settings do not establish separate capabilities.
 
 These checks are enforced in Rust. Frontend path construction is not a security boundary.
+
+## Perspective Workspace Roots
+
+Perspective file-tree configuration accepts logical IDs `vault`, `journal`, and `projects` only.
+Rust resolves them from the active vault, the configured Journal folder, and the configured Project
+folder. `Active Vault Path` in the sidebar selects the authorized vault; `Journal folder` and
+`Project folder` in Task settings are relative to that vault. The Perspective file cannot grant
+another root or supply an absolute path.
+
+Every resolved Perspective root must remain beneath the canonical configured vault. An unavailable
+Journal or Project folder is returned as unavailable and surfaced by the module; Rust does not
+substitute a different root. Traversal and symlink escape checks run at native resolution. Tree
+scans skip symlinked files and directories, matching task scanner policy. V1 does not support
+arbitrary external roots or a separate authorization mechanism.
 
 ## Cross-file Task Mutations
 

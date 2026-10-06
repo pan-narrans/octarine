@@ -6,6 +6,7 @@ pub mod file_ops;
 pub mod markdown;
 pub mod parser;
 pub mod path_security;
+pub mod perspectives;
 pub mod project;
 pub mod project_merge;
 pub mod project_rename;
@@ -48,6 +49,8 @@ mod ipc_bindings {
         updates::UpdateInstallStrategy::export(&config).unwrap();
         updates::UpdateRuntimeInfo::export(&config).unwrap();
         file_ops::FileNode::export(&config).unwrap();
+        perspectives::PerspectiveWorkspaceRoot::export(&config).unwrap();
+        perspectives::PerspectiveWorkspaceRoots::export(&config).unwrap();
         parser::ParsedCustomView::export(&config).unwrap();
         parser::ParsedTask::export(&config).unwrap();
         project_merge::PreparedProjectMerge::export(&config).unwrap();

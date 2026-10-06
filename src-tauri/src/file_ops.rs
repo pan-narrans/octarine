@@ -31,6 +31,16 @@ pub fn scan_dir_tree(dir_path: &Path) -> Result<FileNode, String> {
             let entry_path = entry.path();
             let entry_name = entry.file_name().to_string_lossy().to_string();
 
+            // Tree scans must never follow a link outside the approved root (or expose linked
+            // files inside it). Other filesystem operations apply their own path checks.
+            if entry
+                .file_type()
+                .map(|file_type| file_type.is_symlink())
+                .unwrap_or(true)
+            {
+                continue;
+            }
+
             // Skip hidden folders/files like .git, .idea, .agent-session, etc.
             if entry_name.starts_with('.') {
                 continue;
@@ -279,7 +289,11 @@ pub fn build_journal_tree(journal_dir_path: &Path) -> Result<FileNode, String> {
             .map_err(|e| format!("Failed to read journal directory: {}", e))?;
         for entry in entries.flatten() {
             let entry_path = entry.path();
-            if entry_path.is_file() {
+            if entry
+                .file_type()
+                .map(|file_type| file_type.is_file())
+                .unwrap_or(false)
+            {
                 let file_name = entry_path
                     .file_name()
                     .map(|n| n.to_string_lossy().to_string())
@@ -455,6 +469,28 @@ mod tests {
         assert!(!new_file_a1.exists());
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn scan_dir_tree_skips_symlinked_files_and_directories() {
+        use std::os::unix::fs::symlink;
+
+        let temp_dir = tempdir().unwrap();
+        let vault = temp_dir.path().join("vault");
+        let outside = temp_dir.path().join("outside");
+        fs::create_dir_all(&vault).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+        fs::write(outside.join("secret.md"), "outside").unwrap();
+        fs::write(vault.join("note.md"), "inside").unwrap();
+        symlink(outside.join("secret.md"), vault.join("linked.md")).unwrap();
+        symlink(&outside, vault.join("linked-folder")).unwrap();
+
+        let tree = scan_dir_tree(&vault).unwrap();
+        let children = tree.children.unwrap();
+        let names: Vec<&str> = children.iter().map(|child| child.name.as_str()).collect();
+
+        assert_eq!(names, vec!["note.md"]);
+    }
+
     #[test]
     fn test_build_journal_tree() {
         let temp_dir = tempdir().unwrap();
@@ -497,5 +533,22 @@ mod tests {
             days_july[0].path,
             file_2026_07_23.to_string_lossy().to_string()
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn journal_tree_skips_symlinked_daily_notes() {
+        use std::os::unix::fs::symlink;
+
+        let temp_dir = tempdir().unwrap();
+        let journal = temp_dir.path().join("journal");
+        let outside = temp_dir.path().join("outside.md");
+        fs::create_dir_all(&journal).unwrap();
+        fs::write(&outside, "outside").unwrap();
+        fs::write(journal.join("2026-10-05.md"), "inside").unwrap();
+        symlink(outside, journal.join("2026-10-04.md")).unwrap();
+
+        let tree = build_journal_tree(&journal).unwrap();
+        assert_eq!(tree.name, "000 - journals (1)");
     }
 }

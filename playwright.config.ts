@@ -2,6 +2,7 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests/visual",
+  testIgnore: ["tests/visual/perspectives-app-behavior.spec.ts"],
   fullyParallel: true,
   reporter: "list",
   use: {

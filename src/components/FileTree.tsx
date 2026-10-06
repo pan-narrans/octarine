@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Folder,
   FolderOpen,
@@ -13,6 +13,12 @@ import {
   X,
 } from "lucide-react";
 import { FileNode } from "../types";
+
+function treeContainsPath(node: FileNode, target: string): boolean {
+  return (
+    node.path === target || Boolean(node.children?.some((child) => treeContainsPath(child, target)))
+  );
+}
 
 // Extends types.ts if needed, but we can declare local interface first for reliability
 export interface FileNodeLocal {
@@ -34,6 +40,9 @@ interface FileTreeProps {
   collapseAllTrigger?: number;
   initialOpen?: boolean;
   initialEditMode?: "rename" | "create_file" | "create_dir" | null;
+  expandedPaths?: string[];
+  onExpandedPathsChange?: (paths: string[]) => void;
+  revealPath?: string | null;
 }
 
 export interface FileTreePropsLocal {
@@ -56,15 +65,57 @@ export function FileTree({
   collapseAllTrigger = 0,
   initialOpen = false,
   initialEditMode = null,
+  expandedPaths,
+  onExpandedPathsChange,
+  revealPath = null,
 }: FileTreeProps) {
-  const [isOpen, setIsOpen] = useState<boolean>(initialOpen);
+  const [localOpen, setLocalOpen] = useState<boolean>(initialOpen);
+  const lastRevealedPath = useRef<string | null>(null);
+  const lastCollapseTrigger = useRef(0);
+  const isOpen = expandedPaths ? expandedPaths.includes(node.path) : localOpen;
+  const changeExpanded = useCallback(
+    (open: boolean) => {
+      const currentlyOpen = expandedPaths ? expandedPaths.includes(node.path) : localOpen;
+      if (currentlyOpen === open) return;
+      if (expandedPaths && onExpandedPathsChange) {
+        onExpandedPathsChange(
+          open
+            ? [...new Set([...expandedPaths, node.path])]
+            : expandedPaths.filter((path) => path !== node.path),
+        );
+      } else {
+        setLocalOpen(open);
+      }
+    },
+    [expandedPaths, localOpen, onExpandedPathsChange, node.path],
+  );
+
+  useEffect(() => {
+    if (!revealPath) {
+      lastRevealedPath.current = null;
+      return;
+    }
+    if (
+      revealPath !== lastRevealedPath.current &&
+      node.is_dir &&
+      node.children?.some((child) => treeContainsPath(child, revealPath))
+    ) {
+      lastRevealedPath.current = revealPath;
+      changeExpanded(true);
+    }
+  }, [changeExpanded, node.children, node.is_dir, revealPath]);
 
   // Collapse folders on global collapse trigger
   useEffect(() => {
-    if (collapseAllTrigger > 0 && node.is_dir) {
-      setIsOpen(false);
+    if (
+      collapseAllTrigger > 0 &&
+      collapseAllTrigger !== lastCollapseTrigger.current &&
+      node.is_dir
+    ) {
+      lastCollapseTrigger.current = collapseAllTrigger;
+      changeExpanded(false);
     }
-  }, [collapseAllTrigger, node.is_dir]);
+  }, [changeExpanded, collapseAllTrigger, node.is_dir]);
 
   // Inline input editor state for renaming or adding
   const [editMode, setEditMode] = useState<"rename" | "create_file" | "create_dir" | null>(
@@ -77,7 +128,7 @@ export function FileTree({
   const handleToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (node.is_dir) {
-      setIsOpen(!isOpen);
+      changeExpanded(!isOpen);
     } else {
       onSelectFile(node.path);
     }
@@ -109,10 +160,10 @@ export function FileTree({
         await onRename(node.path, newPath, node);
       } else if (editMode === "create_file" && onCreateFile) {
         await onCreateFile(node.path, inputText.trim());
-        setIsOpen(true); // Ensure expanded to show new file
+        changeExpanded(true); // Ensure expanded to show new file
       } else if (editMode === "create_dir" && onCreateFolder) {
         await onCreateFolder(node.path, inputText.trim());
-        setIsOpen(true); // Ensure expanded to show new directory
+        changeExpanded(true); // Ensure expanded to show new directory
       }
       setEditMode(null);
     } catch (err) {
@@ -247,6 +298,9 @@ export function FileTree({
               onDelete={onDelete}
               readOnly={readOnly}
               collapseAllTrigger={collapseAllTrigger}
+              expandedPaths={expandedPaths}
+              onExpandedPathsChange={onExpandedPathsChange}
+              revealPath={revealPath}
             />
           ))}
         </div>

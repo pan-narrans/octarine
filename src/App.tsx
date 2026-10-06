@@ -6,7 +6,7 @@ import {
   renameEditorProject,
   mergeEditorProjects,
 } from "./features/workspace/file-mutations";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTaskStore } from "./hooks/use-task-store";
 import { useTauriEvents } from "./hooks/use-tauri-events";
 import {
@@ -21,7 +21,6 @@ import {
   type ProjectRenameRecoveryReport,
 } from "./types";
 import { MarkdownEditor } from "./components/MarkdownEditor";
-import { WorkspaceSidebarCollections } from "./components/WorkspaceSidebarCollections";
 import { WorkspaceSidebarFooter } from "./components/WorkspaceSidebarFooter";
 import { WorkspaceState } from "./components/WorkspaceState";
 import { EditTaskModal } from "./components/EditTaskModal";
@@ -39,6 +38,13 @@ import { TaskCreationSettings } from "./components/TaskCreationSettings";
 import { ApplicationUpdateSettings } from "./components/ApplicationUpdateSettings";
 import { TaskCard } from "./features/tasks/TaskCard";
 import { SidebarNavigation } from "./features/navigation/SidebarNavigation";
+import { PerspectiveSidebar } from "./features/perspectives/PerspectiveSidebar";
+import { PerspectiveSettings } from "./features/perspectives/PerspectiveSettings";
+import { usePerspectiveRuntime } from "./features/perspectives/use-perspective-runtime";
+import type {
+  PerspectiveDefinition,
+  PerspectiveModuleRuntimeContext,
+} from "./features/perspectives/model";
 import { projectCatalogs } from "./features/navigation/project-visibility";
 import {
   readShowInactiveProjects,
@@ -88,8 +94,6 @@ import {
   getJournalConfig,
   getVaultConfig,
   readFileContent,
-  readJournalTree,
-  readVaultTree,
   importAttachment,
   resolveMarkdownLink,
   setVaultConfig,
@@ -113,6 +117,23 @@ function rootProjects(rawMarkdown: string): string[] {
     .split(/\s+/)
     .filter((token) => token.startsWith("+") && token.length > 1)
     .map((token) => token.slice(1));
+}
+
+function perspectiveQueryForSection(
+  perspectives: PerspectiveDefinition[],
+  section: string,
+): PerspectiveDefinition["sidebar"][number] | undefined {
+  const match = /^perspective-query:([a-z0-9][a-z0-9-]{0,63}):([a-z0-9][a-z0-9-]{0,63})$/.exec(
+    section,
+  );
+  if (!match) return undefined;
+  return perspectives
+    .find((perspective) => perspective.id === match[1])
+    ?.sidebar.find((instance) => instance.type === "custom-query" && instance.id === match[2]);
+}
+
+function isPerspectiveQuerySection(section: string): boolean {
+  return /^perspective-query:([a-z0-9][a-z0-9-]{0,63}):([a-z0-9][a-z0-9-]{0,63})$/.test(section);
 }
 
 function projectNameFromVaultPath(
@@ -176,10 +197,12 @@ export function App() {
   const {
     tasks,
     customViews,
+    activeFilter,
     loading,
     error,
     pendingTaskMoves,
     fetchTasks,
+    setFilter,
     fetchCustomViews,
     updateTaskStatus,
     moveTask,
@@ -231,19 +254,18 @@ export function App() {
   // -----------------------------------------------------------------
   // NEW OBSIDIAN-REPLACEMENT NOTES EDITOR STATE
   // -----------------------------------------------------------------
-  const [dirTree, setDirTree] = useState<FileNode | null>(null);
   const [activeFilePath, setActiveFilePath] = useState<string | null>(null);
   const [activeFileContent, setActiveFileContent] = useState<string | null>(null);
   const [activeFileFragment, setActiveFileFragment] = useState<string | null>(null);
+  const [activeFileSource, setActiveFileSource] =
+    useState<PerspectiveModuleRuntimeContext["activeFileSource"]>(null);
+  const fileOpenRequestRef = useRef(0);
 
   // -----------------------------------------------------------------
   // NEW VIRTUAL JOURNAL WORKSPACE STATE
   // -----------------------------------------------------------------
-  const [journalTree, setJournalTree] = useState<FileNode | null>(null);
   const [activeJournalPath, setActiveJournalPath] = useState<string>("Loading...");
   const [journalSetupRequired, setJournalSetupRequired] = useState(false);
-  const [notesExpanded, setNotesExpanded] = useState<boolean>(false);
-  const [journalsExpanded, setJournalsExpanded] = useState<boolean>(false);
   const [modalTask, setModalTask] = useState<Task | null>(null);
   const [pendingProjectMove, setPendingProjectMove] = useState<PendingProjectMove | null>(null);
   const [movingProject, setMovingProject] = useState(false);
@@ -270,10 +292,46 @@ export function App() {
   const todayJournalPathRef = useRef(todayJournalPath);
   todayJournalPathRef.current = todayJournalPath;
   const [todayJournalLoading, setTodayJournalLoading] = useState<boolean>(true);
+  const perspectiveRuntime = usePerspectiveRuntime(
+    activeVaultPath === "Loading..." ? null : activeVaultPath,
+  );
+  const refreshPerspectiveWorkspaceRoots = perspectiveRuntime.refreshWorkspaceRoots;
+  const refreshPerspectiveConfigurationRef = useRef(perspectiveRuntime.refreshConfiguration);
+  refreshPerspectiveConfigurationRef.current = perspectiveRuntime.refreshConfiguration;
+  const handlePerspectiveSaved = useCallback(
+    () => refreshPerspectiveConfigurationRef.current(),
+    [],
+  );
+  const activePerspectiveIdRef = useRef(perspectiveRuntime.activePerspectiveId);
+  activePerspectiveIdRef.current = perspectiveRuntime.activePerspectiveId;
+
+  useEffect(() => {
+    if (!isPerspectiveQuerySection(selectedSection)) return;
+    const query = perspectiveQueryForSection(perspectiveRuntime.perspectives, selectedSection);
+    if (!query) {
+      setSelectedSection("all");
+      if (activeFilter !== "") setFilter("");
+      return;
+    }
+    const filter = typeof query.filter === "string" ? query.filter : "";
+    if (filter !== activeFilter) setFilter(filter);
+  }, [activeFilter, perspectiveRuntime.perspectives, selectedSection, setFilter]);
+
+  const clearActiveFile = () => {
+    fileOpenRequestRef.current += 1;
+    setActiveFilePath(null);
+    setActiveFileContent(null);
+    setActiveFileFragment(null);
+    setActiveFileSource(null);
+  };
 
   useEffect(() => {
     writeProjectViewMode(window.localStorage, projectViewMode);
   }, [projectViewMode]);
+
+  useEffect(() => {
+    fileOpenRequestRef.current += 1;
+  }, [perspectiveRuntime.activePerspectiveId]);
 
   useEffect(() => {
     if (activeVaultPath === "Loading...") return;
@@ -284,8 +342,6 @@ export function App() {
   useEffect(() => {
     fetchTasks();
     fetchCustomViews();
-    fetchDirTree();
-    fetchJournalTree();
 
     // Fetch active vault path dynamically from Tauri state
     getVaultConfig()
@@ -317,8 +373,7 @@ export function App() {
           console.log(
             "Vault change event detected on frontend! Refreshing trees and today's journal...",
           );
-          fetchDirTree();
-          fetchJournalTree();
+          void refreshPerspectiveWorkspaceRoots();
           fetchTodayJournal(activeJournalPath);
         });
       } catch (e) {
@@ -329,7 +384,7 @@ export function App() {
     return () => {
       if (unlistenFn) unlistenFn();
     };
-  }, [activeJournalPath]);
+  }, [activeJournalPath, refreshPerspectiveWorkspaceRoots]);
 
   useEffect(() => {
     if (visualScenario !== "task-modal" || openedVisualModal.current || tasks.length === 0) return;
@@ -488,14 +543,11 @@ export function App() {
   });
 
   const handleSidebarItemClick = (section: string, filterStr?: string) => {
-    setActiveFilePath(null);
-    setActiveFileContent(null);
+    clearActiveFile();
     setSelectedSection(section);
-    if (section.startsWith("view:") && filterStr) {
-      fetchTasks(filterStr);
-    } else {
-      fetchTasks();
-    }
+    setFilter(
+      section.startsWith("view:") || isPerspectiveQuerySection(section) ? (filterStr ?? "") : "",
+    );
   };
 
   const handleShowInactiveProjectsChange = (showInactive: boolean) => {
@@ -517,29 +569,16 @@ export function App() {
   // NEW DIRECTORY TREE & NOTE MANIPULATION API CALLS
   // -------------------------------------------------------------
 
-  const fetchDirTree = async () => {
-    try {
-      const tree = await readVaultTree();
-      setDirTree(tree);
-    } catch (e) {
-      console.error("Failed to load directory tree:", e);
-    }
-  };
-
-  const fetchJournalTree = async () => {
-    try {
-      const tree = await readJournalTree();
-      setJournalTree(tree);
-    } catch (e) {
-      console.error("Failed to load journal tree:", e);
-    }
-  };
-
-  const handleOpenTodayJournal = async () => {
+  const handleOpenTodayJournal = async (
+    sourceInstanceId?: string,
+    sourcePerspectiveId = perspectiveRuntime.activePerspectiveId,
+  ) => {
     if (journalSetupRequired) {
       handleSidebarItemClick("settings");
       return;
     }
+    if (activeJournalPath === "Loading..." || !activeJournalPath) return;
+    const requestId = ++fileOpenRequestRef.current;
     try {
       const today = new Date();
       const yyyy = today.getFullYear();
@@ -556,10 +595,28 @@ export function App() {
         await writeFileContent(filePath, `# 📓 Journal Entry: ${todayStr}\n\n`, null);
         content = `# 📓 Journal Entry: ${todayStr}\n\n`;
       }
-      await fetchJournalTree();
+      await refreshPerspectiveWorkspaceRoots();
+      if (
+        requestId !== fileOpenRequestRef.current ||
+        (sourceInstanceId && sourcePerspectiveId !== activePerspectiveIdRef.current)
+      ) {
+        return;
+      }
       setActiveFilePath(filePath);
       setActiveFileContent(content);
+      setActiveFileFragment(null);
+      setActiveFileSource(
+        sourceInstanceId
+          ? { filePath, perspectiveId: sourcePerspectiveId, instanceId: sourceInstanceId }
+          : null,
+      );
     } catch (e) {
+      if (
+        requestId !== fileOpenRequestRef.current ||
+        (sourceInstanceId && sourcePerspectiveId !== activePerspectiveIdRef.current)
+      ) {
+        return;
+      }
       console.error("Failed to open today's journal note:", e);
       alert(`Error opening journal: ${e}`);
     }
@@ -605,25 +662,50 @@ export function App() {
     }
   };
 
-  const handleSelectFile = async (path: string) => {
+  const handleSelectFile = async (
+    path: string,
+    sourceInstanceId?: string,
+    sourcePerspectiveId = perspectiveRuntime.activePerspectiveId,
+  ) => {
+    const requestId = ++fileOpenRequestRef.current;
     try {
       const content = await readFileContent(path);
+      if (
+        requestId !== fileOpenRequestRef.current ||
+        (sourceInstanceId && sourcePerspectiveId !== activePerspectiveIdRef.current)
+      ) {
+        return;
+      }
       setActiveFilePath(path);
       setActiveFileContent(content);
       setActiveFileFragment(null);
+      setActiveFileSource(
+        sourceInstanceId
+          ? { filePath: path, perspectiveId: sourcePerspectiveId, instanceId: sourceInstanceId }
+          : null,
+      );
     } catch (e) {
+      if (
+        requestId !== fileOpenRequestRef.current ||
+        (sourceInstanceId && sourcePerspectiveId !== activePerspectiveIdRef.current)
+      ) {
+        return;
+      }
       console.error("Failed to read file:", e);
       alert(`Error loading note: ${e}`);
     }
   };
 
   const handleOpenMarkdownLink = async (documentPath: string, target: string) => {
+    const requestId = ++fileOpenRequestRef.current;
     const resolved = await resolveMarkdownLink(documentPath, target);
     if (resolved.path !== documentPath) {
       const content = await readFileContent(resolved.path);
+      if (requestId !== fileOpenRequestRef.current) return resolved;
       setActiveFilePath(resolved.path);
       setActiveFileContent(content);
       setActiveFileFragment(resolved.fragment);
+      setActiveFileSource(null);
     }
     return resolved;
   };
@@ -631,12 +713,20 @@ export function App() {
   const handleImportAttachment = (documentPath: string, fileName: string, bytes: Uint8Array) =>
     importAttachment(documentPath, fileName, bytes);
 
-  const handleCreateFile = async (parentPath: string, name: string) => {
+  const handleCreateFile = async (
+    parentPath: string,
+    name: string,
+    sourceInstanceId?: string,
+    sourcePerspectiveId = perspectiveRuntime.activePerspectiveId,
+  ) => {
+    const requestId = ++fileOpenRequestRef.current;
     try {
       const createdPath = await createFile(parentPath, name);
-      await fetchDirTree();
-      await handleSelectFile(createdPath);
+      await refreshPerspectiveWorkspaceRoots();
+      if (requestId !== fileOpenRequestRef.current) return;
+      await handleSelectFile(createdPath, sourceInstanceId, sourcePerspectiveId);
     } catch (e) {
+      if (requestId !== fileOpenRequestRef.current) return;
       console.error("Failed to create file:", e);
       alert(`Error creating note: ${e}`);
     }
@@ -645,7 +735,7 @@ export function App() {
   const handleCreateFolder = async (parentPath: string, name: string) => {
     try {
       await createDirectory(parentPath, name);
-      await fetchDirTree();
+      await refreshPerspectiveWorkspaceRoots();
     } catch (e) {
       console.error("Failed to create directory:", e);
       alert(`Error creating directory: ${e}`);
@@ -653,12 +743,16 @@ export function App() {
   };
 
   const handleDeletePath = async (path: string) => {
+    fileOpenRequestRef.current += 1;
     try {
       await deleteEditorPath(path);
       setActiveFilePath((current) =>
         current && isEditorPathWithin(current, path) ? null : current,
       );
-      await fetchDirTree();
+      setActiveFileSource((current) =>
+        current && isEditorPathWithin(current.filePath, path) ? null : current,
+      );
+      await refreshPerspectiveWorkspaceRoots();
     } catch (e) {
       console.error("Failed to delete path:", e);
       alert(`Error deleting path: ${e}`);
@@ -666,6 +760,7 @@ export function App() {
   };
 
   const handleRenamePath = async (oldPath: string, newPath: string, node: FileNode) => {
+    fileOpenRequestRef.current += 1;
     try {
       const config = await getTaskCreationConfig();
       const sourceProject = projectNameFromVaultPath(
@@ -709,7 +804,10 @@ export function App() {
       setActiveFilePath((current) =>
         current && isEditorPathWithin(current, oldPath) ? null : current,
       );
-      await fetchDirTree();
+      setActiveFileSource((current) =>
+        current && isEditorPathWithin(current.filePath, oldPath) ? null : current,
+      );
+      await refreshPerspectiveWorkspaceRoots();
     } catch (e) {
       console.error("Failed to rename path:", e);
       pushNotification({
@@ -839,12 +937,27 @@ export function App() {
     setSavingVault(true);
     try {
       await setVaultConfig(vaultInput.trim());
-      setActiveVaultPath(vaultInput.trim());
+      const canonicalVaultPath = await getVaultConfig();
+      if (canonicalVaultPath !== activeVaultPath) clearActiveFile();
+      setActiveVaultPath(canonicalVaultPath);
+      setVaultInput(canonicalVaultPath);
       setIsEditingVault(false);
-      await fetchTasks();
-      await fetchCustomViews();
-      await fetchDirTree();
-      await fetchJournalTree();
+      let journalPath: string | null = null;
+      try {
+        journalPath = await getJournalConfig();
+        setJournalSetupRequired(false);
+        setActiveJournalPath(journalPath);
+      } catch {
+        setJournalSetupRequired(true);
+        setTodayJournalContent(null);
+        setTodayJournalPath("");
+      }
+      await Promise.all([
+        fetchTasks(),
+        fetchCustomViews(),
+        refreshPerspectiveWorkspaceRoots(),
+        journalPath ? fetchTodayJournal(journalPath) : Promise.resolve(),
+      ]);
     } catch (e) {
       console.error("Failed to update active vault path:", e);
       alert(`Failed to save: ${e}`);
@@ -856,7 +969,7 @@ export function App() {
   const taskCreation = useTaskCreationController({
     selectedSection,
     refreshTasks: fetchTasks,
-    refreshFiles: fetchDirTree,
+    refreshFiles: refreshPerspectiveWorkspaceRoots,
     openFile: handleSelectFile,
   });
   const taskSettings = useTaskCreationSettings({
@@ -865,7 +978,7 @@ export function App() {
       const journalPath = await getJournalConfig();
       setJournalSetupRequired(false);
       setActiveJournalPath(journalPath);
-      await Promise.all([fetchJournalTree(), fetchDirTree(), fetchTodayJournal(journalPath)]);
+      await Promise.all([refreshPerspectiveWorkspaceRoots(), fetchTodayJournal(journalPath)]);
     },
   });
 
@@ -984,7 +1097,7 @@ export function App() {
         pendingProjectMove.originalRawMarkdown,
         pendingProjectMove.newRawMarkdown,
       );
-      await Promise.all([fetchTasks(), fetchDirTree()]);
+      await Promise.all([fetchTasks(), refreshPerspectiveWorkspaceRoots()]);
       setPendingProjectMove(null);
       setModalTask(null);
       const warningCode = result.warning?.code;
@@ -1016,7 +1129,7 @@ export function App() {
       setPendingProjectMove(null);
       if (moveError?.recoveryRequired || moveError?.code === "index_failed") {
         setModalTask(null);
-        await Promise.all([fetchTasks(), fetchDirTree()]);
+        await Promise.all([fetchTasks(), refreshPerspectiveWorkspaceRoots()]);
       }
       pushNotification({
         id: "task-project-move-error",
@@ -1040,11 +1153,15 @@ export function App() {
       return;
     }
     const plan = pendingProjectRename;
+    fileOpenRequestRef.current += 1;
     setRenamingProject(true);
     try {
       const result = await renameEditorProject(activeVaultPath, plan.planToken);
       setActiveFilePath((current) =>
         current && isEditorPathWithin(current, activeVaultPath) ? null : current,
+      );
+      setActiveFileSource((current) =>
+        current && isEditorPathWithin(current.filePath, activeVaultPath) ? null : current,
       );
       if (selectedSection.startsWith("proj:")) {
         const selectedProject = selectedSection.slice("proj:".length);
@@ -1055,7 +1172,7 @@ export function App() {
         );
         if (renamed !== selectedProject) setSelectedSection(`proj:${renamed}`);
       }
-      await Promise.all([fetchTasks(), fetchCustomViews(), fetchDirTree()]);
+      await Promise.all([fetchTasks(), fetchCustomViews(), refreshPerspectiveWorkspaceRoots()]);
       setPendingProjectRename(null);
       setProjectRenameRecovery(null);
       pushNotification(
@@ -1072,7 +1189,7 @@ export function App() {
       const renameError = parseProjectRenameError(error);
       if (renameError?.recovery) {
         setProjectRenameRecovery(renameError.recovery);
-        await Promise.all([fetchTasks(), fetchCustomViews(), fetchDirTree()]);
+        await Promise.all([fetchTasks(), fetchCustomViews(), refreshPerspectiveWorkspaceRoots()]);
       } else {
         setPendingProjectRename(null);
       }
@@ -1274,6 +1391,7 @@ export function App() {
   const commitPendingProjectMerge = async () => {
     if (!pendingProjectMerge) return;
     const plan = pendingProjectMerge;
+    fileOpenRequestRef.current += 1;
     setProjectMergeStage("committing");
     try {
       const result = await mergeEditorProjects(activeVaultPath, plan.planToken);
@@ -1294,8 +1412,11 @@ export function App() {
       setActiveFilePath((current) =>
         current && isEditorPathWithin(current, activeVaultPath) ? null : current,
       );
+      setActiveFileSource((current) =>
+        current && isEditorPathWithin(current.filePath, activeVaultPath) ? null : current,
+      );
       const [, bundles] = await Promise.all([
-        Promise.all([fetchTasks(), fetchCustomViews(), fetchDirTree()]),
+        Promise.all([fetchTasks(), fetchCustomViews(), refreshPerspectiveWorkspaceRoots()]),
         listProjectMergeRecovery(),
       ]);
       setProjectMergeRecoveryBundles(bundles);
@@ -1314,7 +1435,7 @@ export function App() {
       if (mergeError?.recovery) {
         setProjectMergeRecovery(mergeError.recovery);
         setProjectMergeStage("partial");
-        await Promise.all([fetchTasks(), fetchCustomViews(), fetchDirTree()]);
+        await Promise.all([fetchTasks(), fetchCustomViews(), refreshPerspectiveWorkspaceRoots()]);
       } else if (mergeError?.code === "cancelled") {
         setProjectMergeStage("cancelled");
       } else {
@@ -1384,6 +1505,97 @@ export function App() {
     }
   };
 
+  const handleSwitchPerspective = (id: string) => {
+    // A pending tree read belongs to the sidebar that started it. Keep any editor already open.
+    fileOpenRequestRef.current += 1;
+    perspectiveRuntime.switchPerspective(id);
+  };
+
+  const selectedPerspectiveQuery = perspectiveQueryForSection(
+    perspectiveRuntime.perspectives,
+    selectedSection,
+  );
+  const selectedQueryTitle =
+    selectedPerspectiveQuery && typeof selectedPerspectiveQuery.title === "string"
+      ? selectedPerspectiveQuery.title
+      : isPerspectiveQuerySection(selectedSection)
+        ? "Custom query"
+        : selectedSection.slice("view:".length);
+  const workspaceSidebarFooter = (
+    <WorkspaceSidebarFooter
+      activeFilePath={activeFilePath}
+      selectedSection={selectedSection}
+      activeVaultPath={activeVaultPath}
+      isEditingVault={isEditingVault}
+      vaultInput={vaultInput}
+      savingVault={savingVault}
+      onOpenSettings={() => handleSidebarItemClick("settings")}
+      onOpenPerspectives={() => handleSidebarItemClick("perspectives-settings")}
+      onEditVault={() => setIsEditingVault(true)}
+      onVaultInputChange={setVaultInput}
+      onCancelVaultEdit={() => setIsEditingVault(false)}
+      onSaveVault={() => void handleSaveVault()}
+    />
+  );
+  const perspectiveWorkspaceId = activeVaultPath === "Loading..." ? null : activeVaultPath;
+  const perspectiveSidebarContent =
+    perspectiveWorkspaceId === null || perspectiveRuntime.loading ? (
+      <>
+        <div className="sidebar-section" role="status">
+          <span style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>
+            Loading workspace...
+          </span>
+        </div>
+        {workspaceSidebarFooter}
+      </>
+    ) : (
+      <>
+        <PerspectiveSidebar
+          perspective={perspectiveRuntime.activePerspective}
+          configurationErrors={perspectiveRuntime.errors}
+          context={{
+            workspaceId: perspectiveWorkspaceId,
+            activePerspectiveId: perspectiveRuntime.activePerspectiveId,
+            selectedSection,
+            activeFilePath,
+            activeFileSource,
+            customViews,
+            projects: sidebarProjects,
+            projectCatalogSize: projects.length,
+            showInactiveProjects,
+            contexts,
+            tags,
+            rootPaths: perspectiveRuntime.rootPaths,
+            workspaceRootsLoaded: perspectiveRuntime.workspaceRootsLoaded,
+            readTree: perspectiveRuntime.readTree,
+            onSelectSection: handleSidebarItemClick,
+            onSelectFile: (path, instanceId) =>
+              void handleSelectFile(path, instanceId, perspectiveRuntime.activePerspective.id),
+            onOpenTodayJournal: (sourceInstanceId) =>
+              void handleOpenTodayJournal(
+                sourceInstanceId,
+                perspectiveRuntime.activePerspective.id,
+              ),
+            onShowInactiveProjectsChange: handleShowInactiveProjectsChange,
+            onRenameProject: handleSidebarProjectRename,
+            onCreateFile: (parentPath, name, sourceInstanceId) =>
+              handleCreateFile(
+                parentPath,
+                name,
+                sourceInstanceId,
+                perspectiveRuntime.activePerspective.id,
+              ),
+            onCreateFolder: handleCreateFolder,
+            onRenameFile: handleRenamePath,
+            onDeleteFile: handleDeletePath,
+            perspectives: perspectiveRuntime.perspectives,
+            onSwitchPerspective: handleSwitchPerspective,
+          }}
+        />
+        {workspaceSidebarFooter}
+      </>
+    );
+
   return (
     <>
       {/* 1. SIDEBAR PANEL */}
@@ -1401,43 +1613,7 @@ export function App() {
         onRenameProject={handleSidebarProjectRename}
         appVersion={applicationUpdates.runtime?.currentVersion}
         updateChannel={applicationUpdates.runtime?.channel}
-        beforeCollections={
-          <WorkspaceSidebarCollections
-            journalTree={journalTree}
-            notesTree={dirTree}
-            activeFilePath={activeFilePath}
-            journalsExpanded={journalsExpanded}
-            notesExpanded={notesExpanded}
-            setupRequired={journalSetupRequired}
-            onToggleJournals={() =>
-              journalSetupRequired
-                ? handleSidebarItemClick("settings")
-                : setJournalsExpanded(!journalsExpanded)
-            }
-            onOpenTodayJournal={() => void handleOpenTodayJournal()}
-            onToggleNotes={() => setNotesExpanded(!notesExpanded)}
-            onSelectFile={handleSelectFile}
-            onCreateFile={handleCreateFile}
-            onCreateFolder={handleCreateFolder}
-            onRename={handleRenamePath}
-            onDelete={handleDeletePath}
-          />
-        }
-        footer={
-          <WorkspaceSidebarFooter
-            activeFilePath={activeFilePath}
-            selectedSection={selectedSection}
-            activeVaultPath={activeVaultPath}
-            isEditingVault={isEditingVault}
-            vaultInput={vaultInput}
-            savingVault={savingVault}
-            onOpenSettings={() => handleSidebarItemClick("settings")}
-            onEditVault={() => setIsEditingVault(true)}
-            onVaultInputChange={setVaultInput}
-            onCancelVaultEdit={() => setIsEditingVault(false)}
-            onSaveVault={() => void handleSaveVault()}
-          />
-        }
+        contentOverride={perspectiveSidebarContent}
       />
 
       {/* 2. MAIN WORKSPACE PANEL */}
@@ -1556,7 +1732,10 @@ export function App() {
           />
         )}
 
-        {!(activeFilePath === null && selectedSection === "settings") && (
+        {!(
+          activeFilePath === null &&
+          (selectedSection === "settings" || selectedSection === "perspectives-settings")
+        ) && (
           <WorkspaceHeader
             title={
               <>
@@ -1575,8 +1754,9 @@ export function App() {
                   selectedSection.startsWith("tag:") &&
                   `Tag: #${selectedSection.slice(4)}`}
                 {activeFilePath === null &&
-                  selectedSection.startsWith("view:") &&
-                  `Query: ${selectedSection.slice(5)}`}
+                  (selectedSection.startsWith("view:") ||
+                    isPerspectiveQuerySection(selectedSection)) &&
+                  `Query: ${selectedQueryTitle}`}
               </>
             }
             subtitle={
@@ -1590,47 +1770,50 @@ export function App() {
         )}
 
         {/* Search Inputs (only displayed in dashboard mode) */}
-        {activeFilePath === null && selectedSection !== "settings" && (
-          <WorkspaceToolbar searchValue={searchQuery} onSearchChange={setSearchQuery}>
-            {selectedSection.startsWith("proj:") && (
-              <div className="project-view-controls" aria-label="Project view controls">
-                <div className="project-view-switch" aria-label="Project presentation">
-                  {(["board", "list"] as const).map((mode) => (
-                    <button
-                      type="button"
-                      key={mode}
-                      className={projectViewMode === mode ? "active" : ""}
-                      aria-pressed={projectViewMode === mode}
-                      onClick={() => setProjectViewMode(mode)}
-                    >
-                      {mode === "board" ? "Board" : "List"}
-                    </button>
-                  ))}
-                </div>
-                {projectViewMode === "board" && (
-                  <div className="project-status-filters" aria-label="Closed status columns">
-                    {(["done", "cancelled"] as const).map((status) => (
+        {activeFilePath === null &&
+          selectedSection !== "settings" &&
+          selectedSection !== "perspectives-settings" && (
+            <WorkspaceToolbar searchValue={searchQuery} onSearchChange={setSearchQuery}>
+              {selectedSection.startsWith("proj:") && (
+                <div className="project-view-controls" aria-label="Project view controls">
+                  <div className="project-view-switch" aria-label="Project presentation">
+                    {(["board", "list"] as const).map((mode) => (
                       <button
                         type="button"
-                        key={status}
-                        className={visibleClosedStatuses.includes(status) ? "active" : ""}
-                        aria-pressed={visibleClosedStatuses.includes(status)}
-                        onClick={() => toggleClosedStatus(status)}
+                        key={mode}
+                        className={projectViewMode === mode ? "active" : ""}
+                        aria-pressed={projectViewMode === mode}
+                        onClick={() => setProjectViewMode(mode)}
                       >
-                        {status === "done" ? "Done" : "Cancelled"}
+                        {mode === "board" ? "Board" : "List"}
                       </button>
                     ))}
                   </div>
-                )}
-              </div>
-            )}
-          </WorkspaceToolbar>
-        )}
+                  {projectViewMode === "board" && (
+                    <div className="project-status-filters" aria-label="Closed status columns">
+                      {(["done", "cancelled"] as const).map((status) => (
+                        <button
+                          type="button"
+                          key={status}
+                          className={visibleClosedStatuses.includes(status) ? "active" : ""}
+                          aria-pressed={visibleClosedStatuses.includes(status)}
+                          onClick={() => toggleClosedStatus(status)}
+                        >
+                          {status === "done" ? "Done" : "Cancelled"}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </WorkspaceToolbar>
+          )}
 
         {/* Active Loader */}
-        {loading && tasks.length === 0 && selectedSection !== "settings" && (
-          <WorkspaceState kind="loading" />
-        )}
+        {loading &&
+          tasks.length === 0 &&
+          selectedSection !== "settings" &&
+          selectedSection !== "perspectives-settings" && <WorkspaceState kind="loading" />}
 
         {/* Render Notes Editor Mode or Normal Task Dashboard Content */}
         {activeFilePath !== null && activeFileContent !== null ? (
@@ -1650,9 +1833,7 @@ export function App() {
               targetFragment={activeFileFragment}
               onFragmentNavigated={() => setActiveFileFragment(null)}
               onClose={() => {
-                setActiveFilePath(null);
-                setActiveFileContent(null);
-                setActiveFileFragment(null);
+                clearActiveFile();
               }}
               projects={projects}
               contexts={contexts}
@@ -1702,6 +1883,12 @@ export function App() {
               </button>
             </div>
           )
+        ) : selectedSection === "perspectives-settings" ? (
+          <PerspectiveSettings
+            activePerspectiveId={perspectiveRuntime.activePerspectiveId}
+            onActivate={handleSwitchPerspective}
+            onSaved={handlePerspectiveSaved}
+          />
         ) : !loading && selectedSection === "events" ? (
           <CalendarSurface
             tasks={tasks}
