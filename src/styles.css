@@ -6343,11 +6343,48 @@ body {
 }
 
 .perspective-editor-module {
+  position: relative;
   min-width: 0;
   overflow: visible;
   border: 1px solid var(--border-card);
   border-radius: var(--radius-card);
   background: rgba(255, 255, 255, 0.018);
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease,
+    opacity 120ms ease;
+}
+
+.perspective-editor-module.is-dragging {
+  opacity: 0.5;
+}
+
+.perspective-editor-module.is-drop-before,
+.perspective-editor-module.is-drop-after {
+  border-color: var(--color-violet);
+  background: rgba(139, 92, 246, 0.06);
+}
+
+.perspective-editor-module.is-drop-before::before,
+.perspective-editor-module.is-drop-after::after {
+  position: absolute;
+  z-index: 1;
+  right: var(--space-3);
+  left: var(--space-3);
+  height: 3px;
+  border-radius: 999px;
+  background: var(--color-violet);
+  box-shadow: 0 0 8px rgba(139, 92, 246, 0.6);
+  content: "";
+  pointer-events: none;
+}
+
+.perspective-editor-module.is-drop-before::before {
+  top: -2px;
+}
+
+.perspective-editor-module.is-drop-after::after {
+  bottom: -2px;
 }
 
 .perspective-editor-module > header {
@@ -6369,6 +6406,26 @@ body {
   margin-top: 2px;
   color: var(--text-muted);
   font-size: 0.65rem;
+}
+
+.perspective-editor-drag-handle:not(:disabled) {
+  cursor: grab;
+}
+
+.perspective-editor-drag-handle:not(:disabled):active {
+  cursor: grabbing;
+}
+
+.perspective-editor-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+  border: 0;
 }
 
 .perspective-editor-module-fields {

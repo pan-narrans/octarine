@@ -11,6 +11,7 @@ import {
   createPerspectiveDraft,
   createStablePerspectiveId,
   movePerspectiveModule,
+  movePerspectiveModuleToPosition,
   readPerspectiveEditorDocument,
   removePerspectiveDraft,
   removePerspectiveModule,
@@ -101,6 +102,25 @@ describe("Perspective editor model", () => {
     );
     expect(withoutTree.sidebar.map((instance) => instance.type)).toEqual(["tags"]);
     expect(withoutPerspective).toEqual([BUILT_IN_PERSPECTIVE]);
+  });
+
+  it("moves modules before or after drop targets and preserves no-op drafts", () => {
+    const perspective = {
+      ...createPerspectiveDraft("Research", [BUILT_IN_PERSPECTIVE]),
+      sidebar: [
+        { id: "one", type: "tags" },
+        { id: "two", type: "contexts" },
+        { id: "three", type: "file-tree" },
+      ],
+    };
+
+    const before = movePerspectiveModuleToPosition(perspective, "three", "one", "before");
+    const after = movePerspectiveModuleToPosition(perspective, "one", "three", "after");
+
+    expect(before.sidebar.map((instance) => instance.id)).toEqual(["three", "one", "two"]);
+    expect(after.sidebar.map((instance) => instance.id)).toEqual(["two", "three", "one"]);
+    expect(movePerspectiveModuleToPosition(perspective, "one", "one", "after")).toBe(perspective);
+    expect(movePerspectiveModuleToPosition(perspective, "one", "two", "before")).toBe(perspective);
   });
 
   it("keeps implicit built-in separate from persisted definitions", () => {

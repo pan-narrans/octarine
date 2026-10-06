@@ -93,6 +93,50 @@ test("creating Perspective saves semantic modules and omits unchanged built-in",
   expect(config.perspectives[0]?.sidebar[0]).not.toHaveProperty("collection");
 });
 
+test("dragging reorders modules and arrow controls still reorder saved modules", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(editorStory("create-and-persist"));
+  await page.getByRole("button", { name: "Create Perspective" }).click();
+
+  const addModule = async (name: string) => {
+    await detail(page).getByRole("button", { name: "Add module…" }).click();
+    await detail(page).getByRole("option", { name, exact: true }).click();
+  };
+  await addModule("File Tree");
+  await addModule("Tags");
+  await addModule("Contexts");
+
+  const modules = detail(page).locator(".perspective-editor-module");
+  const firstModule = modules.nth(0);
+  const lastModule = modules.nth(2);
+  const firstBox = await firstModule.boundingBox();
+  if (!firstBox) throw new Error("First Perspective module is not visible.");
+
+  await lastModule.getByRole("button", { name: "Drag Contexts to reorder" }).dragTo(firstModule, {
+    targetPosition: { x: Math.round(firstBox.width / 2), y: Math.round(firstBox.height * 0.8) },
+  });
+
+  await expect(modules.nth(0).locator("h4")).toHaveText("Files");
+  await expect(modules.nth(1).locator("h4")).toHaveText("Contexts");
+  await expect(modules.nth(2).locator("h4")).toHaveText("Tags");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+  expect(
+    (await persistedConfig(page)).perspectives[0]?.sidebar.map((module) => module.type),
+  ).toEqual(["file-tree", "contexts", "tags"]);
+
+  await modules.nth(2).getByRole("button", { name: "Move Tags up" }).click();
+  await expect(modules.nth(1).locator("h4")).toHaveText("Tags");
+  await expect(modules.nth(2).locator("h4")).toHaveText("Contexts");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+  expect(
+    (await persistedConfig(page)).perspectives[0]?.sidebar.map((module) => module.type),
+  ).toEqual(["file-tree", "tags", "contexts"]);
+});
+
 test("editing configured Perspective persists new title with same ID", async ({ page }) => {
   await page.goto(editorStory("edit-and-persist"));
   await page.getByRole("button", { name: "Writing", exact: true }).click();

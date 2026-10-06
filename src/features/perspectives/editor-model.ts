@@ -209,6 +209,31 @@ export function movePerspectiveModule(
   return { ...perspective, sidebar };
 }
 
+export type PerspectiveModuleDropPosition = "before" | "after";
+
+export function movePerspectiveModuleToPosition(
+  perspective: PerspectiveDefinition,
+  instanceId: string,
+  targetInstanceId: string,
+  position: PerspectiveModuleDropPosition,
+): PerspectiveDefinition {
+  const from = perspective.sidebar.findIndex((instance) => instance.id === instanceId);
+  const target = perspective.sidebar.findIndex((instance) => instance.id === targetInstanceId);
+  if (from < 0 || target < 0 || from === target) return perspective;
+
+  const sidebar = [...perspective.sidebar];
+  const [moving] = sidebar.splice(from, 1);
+  const targetAfterRemoval = sidebar.findIndex((instance) => instance.id === targetInstanceId);
+  const insertionIndex = targetAfterRemoval + (position === "after" ? 1 : 0);
+  sidebar.splice(insertionIndex, 0, moving!);
+
+  if (sidebar.every((instance, index) => instance.id === perspective.sidebar[index]?.id)) {
+    return perspective;
+  }
+
+  return { ...perspective, sidebar };
+}
+
 export function removePerspectiveDraft(
   perspectives: readonly PerspectiveDefinition[],
   id: string,

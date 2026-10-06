@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type DragEvent } from "react";
 import {
   AlertTriangle,
   ArrowDown,
   ArrowUp,
   Check,
+  GripVertical,
   Copy,
   Plus,
   RefreshCw,
@@ -20,10 +21,12 @@ import {
   createModuleInstanceDraft,
   createPerspectiveDraft,
   movePerspectiveModule,
+  movePerspectiveModuleToPosition,
   removePerspectiveDraft,
   removePerspectiveModule,
   renamePerspectiveDraft,
   updatePerspectiveModuleField,
+  type PerspectiveModuleDropPosition,
 } from "./editor-model";
 import { BUILT_IN_PERSPECTIVE } from "./default";
 import { findPerspectiveModule, PERSPECTIVE_MODULE_REGISTRY } from "./registry";
@@ -37,6 +40,32 @@ export interface PerspectiveSettingsProps {
   onSaved?: () => Promise<void> | void;
 }
 
+const PERSPECTIVE_MODULE_DRAG_TYPE = "application/x-octarine-perspective-module";
+
+interface PerspectiveModuleDragPayload {
+  perspectiveId: string;
+  instanceId: string;
+}
+
+function readModuleDragPayload(dataTransfer: DataTransfer): PerspectiveModuleDragPayload | null {
+  try {
+    const payload = JSON.parse(dataTransfer.getData(PERSPECTIVE_MODULE_DRAG_TYPE)) as unknown;
+    if (
+      typeof payload === "object" &&
+      payload !== null &&
+      "perspectiveId" in payload &&
+      typeof payload.perspectiveId === "string" &&
+      "instanceId" in payload &&
+      typeof payload.instanceId === "string"
+    ) {
+      return { perspectiveId: payload.perspectiveId, instanceId: payload.instanceId };
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 function moduleBaseLabel(
   definition: PerspectiveModuleDefinition | undefined,
   instance: PerspectiveDefinition["sidebar"][number],
@@ -44,6 +73,19 @@ function moduleBaseLabel(
   return typeof instance.title === "string" && instance.title.trim()
     ? instance.title.trim()
     : (definition?.title ?? instance.type);
+}
+
+function moduleDisplayLabel(
+  sidebar: PerspectiveDefinition["sidebar"],
+  instance: PerspectiveDefinition["sidebar"][number],
+): string {
+  const baseLabel = moduleBaseLabel(findPerspectiveModule(instance.type), instance);
+  const repeatedLabels = sidebar.filter(
+    (candidate) => moduleBaseLabel(findPerspectiveModule(candidate.type), candidate) === baseLabel,
+  );
+  return repeatedLabels.length > 1
+    ? `${baseLabel} ${repeatedLabels.findIndex((candidate) => candidate.id === instance.id) + 1}`
+    : baseLabel;
 }
 
 export function PerspectiveSettings({
@@ -54,6 +96,12 @@ export function PerspectiveSettings({
 }: PerspectiveSettingsProps) {
   const editor = usePerspectiveEditor({ io, onSaved });
   const [selectedId, setSelectedId] = useState(BUILT_IN_PERSPECTIVE.id);
+  const [draggedModule, setDraggedModule] = useState<PerspectiveModuleDragPayload | null>(null);
+  const [moduleDropTarget, setModuleDropTarget] = useState<{
+    instanceId: string;
+    position: PerspectiveModuleDropPosition;
+  } | null>(null);
+  const [moveAnnouncement, setMoveAnnouncement] = useState("");
   const selected =
     editor.draft.find((perspective) => perspective.id === selectedId) ??
     editor.draft[0] ??
@@ -87,6 +135,52 @@ export function PerspectiveSettings({
     editor.setDraft(
       editor.draft.map((perspective) => (perspective.id === next.id ? next : perspective)),
     );
+  };
+
+  const commitModuleReorder = (
+    next: PerspectiveDefinition,
+    moving: PerspectiveDefinition["sidebar"][number],
+    target: PerspectiveDefinition["sidebar"][number],
+    position: PerspectiveModuleDropPosition,
+  ) => {
+    if (next === selected) return;
+    replaceSelected(next);
+    setMoveAnnouncement(
+      `Moved ${moduleDisplayLabel(next.sidebar, moving)} ${position} ${moduleDisplayLabel(next.sidebar, target)}.`,
+    );
+  };
+
+  const resetModuleDrag = () => {
+    setDraggedModule(null);
+    setModuleDropTarget(null);
+  };
+
+  const getDropPosition = (clientY: number, top: number, height: number) =>
+    clientY < top + height / 2 ? "before" : "after";
+
+  const dropModuleOn = (
+    event: DragEvent<HTMLElement>,
+    target: PerspectiveDefinition["sidebar"][number],
+  ) => {
+    event.preventDefault();
+    const transferred = readModuleDragPayload(event.dataTransfer);
+    const source = transferred ?? draggedModule;
+    if (!editor.canEdit || !source || source.perspectiveId !== selected.id) {
+      resetModuleDrag();
+      return;
+    }
+
+    const moving = selected.sidebar.find((instance) => instance.id === source.instanceId);
+    if (!moving || !selected.sidebar.some((instance) => instance.id === target.id)) {
+      resetModuleDrag();
+      return;
+    }
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const position = getDropPosition(event.clientY, rect.top, rect.height);
+    const next = movePerspectiveModuleToPosition(selected, moving.id, target.id, position);
+    commitModuleReorder(next, moving, target, position);
+    resetModuleDrag();
   };
 
   const createNew = () => {
@@ -132,6 +226,9 @@ export function PerspectiveSettings({
 
   return (
     <main className="task-settings-review-surface perspective-settings-review-surface">
+      <p className="perspective-editor-sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {moveAnnouncement}
+      </p>
       <section
         className="task-settings perspective-settings"
         aria-labelledby="perspective-settings-title"
@@ -357,18 +454,54 @@ export function PerspectiveSettings({
               <div className="perspective-editor-modules">
                 {selected.sidebar.map((instance, index) => {
                   const definition = findPerspectiveModule(instance.type);
-                  const baseLabel = moduleBaseLabel(definition, instance);
-                  const repeatedLabels = selected.sidebar.filter(
-                    (candidate) =>
-                      moduleBaseLabel(findPerspectiveModule(candidate.type), candidate) ===
-                      baseLabel,
-                  );
-                  const displayLabel =
-                    repeatedLabels.length > 1
-                      ? `${baseLabel} ${repeatedLabels.findIndex((candidate) => candidate.id === instance.id) + 1}`
-                      : baseLabel;
+                  const displayLabel = moduleDisplayLabel(selected.sidebar, instance);
+                  const isDragged =
+                    draggedModule?.perspectiveId === selected.id &&
+                    draggedModule.instanceId === instance.id;
+                  const dropPosition =
+                    moduleDropTarget?.instanceId === instance.id ? moduleDropTarget.position : null;
                   return (
-                    <article className="perspective-editor-module" key={instance.id}>
+                    <article
+                      className={[
+                        "perspective-editor-module",
+                        isDragged && "is-dragging",
+                        dropPosition && `is-drop-${dropPosition}`,
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                      key={instance.id}
+                      onDragOver={(event) => {
+                        if (
+                          !editor.canEdit ||
+                          !draggedModule ||
+                          draggedModule.perspectiveId !== selected.id ||
+                          draggedModule.instanceId === instance.id
+                        ) {
+                          return;
+                        }
+                        event.preventDefault();
+                        event.dataTransfer.dropEffect = "move";
+                        const rect = event.currentTarget.getBoundingClientRect();
+                        const position = getDropPosition(event.clientY, rect.top, rect.height);
+                        setModuleDropTarget((current) =>
+                          current?.instanceId === instance.id && current.position === position
+                            ? current
+                            : { instanceId: instance.id, position },
+                        );
+                      }}
+                      onDragLeave={(event) => {
+                        if (
+                          event.relatedTarget instanceof Node &&
+                          event.currentTarget.contains(event.relatedTarget)
+                        ) {
+                          return;
+                        }
+                        setModuleDropTarget((current) =>
+                          current?.instanceId === instance.id ? null : current,
+                        );
+                      }}
+                      onDrop={(event) => dropModuleOn(event, instance)}
+                    >
                       <header>
                         <div>
                           <h4>{displayLabel}</h4>
@@ -380,13 +513,48 @@ export function PerspectiveSettings({
                         <div className="perspective-editor-module-actions">
                           <ActionButton
                             variant="secondary"
+                            className="perspective-editor-icon-action perspective-editor-drag-handle"
+                            aria-label={`Drag ${displayLabel} to reorder`}
+                            title="Drag to reorder"
+                            disabled={!editor.canEdit || selected.sidebar.length < 2}
+                            draggable={editor.canEdit && selected.sidebar.length > 1}
+                            onDragStart={(event) => {
+                              if (!editor.canEdit) {
+                                event.preventDefault();
+                                return;
+                              }
+                              const payload = {
+                                perspectiveId: selected.id,
+                                instanceId: instance.id,
+                              };
+                              event.dataTransfer.effectAllowed = "move";
+                              event.dataTransfer.setData(
+                                PERSPECTIVE_MODULE_DRAG_TYPE,
+                                JSON.stringify(payload),
+                              );
+                              setDraggedModule(payload);
+                              setModuleDropTarget(null);
+                            }}
+                            onDragEnd={resetModuleDrag}
+                          >
+                            <GripVertical size={14} />
+                          </ActionButton>
+                          <ActionButton
+                            variant="secondary"
                             className="perspective-editor-icon-action"
                             aria-label={`Move ${displayLabel} up`}
                             title="Move up"
                             disabled={!editor.canEdit || index === 0}
-                            onClick={() =>
-                              replaceSelected(movePerspectiveModule(selected, instance.id, -1))
-                            }
+                            onClick={() => {
+                              const target = selected.sidebar[index - 1];
+                              if (!target) return;
+                              commitModuleReorder(
+                                movePerspectiveModule(selected, instance.id, -1),
+                                instance,
+                                target,
+                                "before",
+                              );
+                            }}
                           >
                             <ArrowUp size={14} />
                           </ActionButton>
@@ -396,9 +564,16 @@ export function PerspectiveSettings({
                             aria-label={`Move ${displayLabel} down`}
                             title="Move down"
                             disabled={!editor.canEdit || index === selected.sidebar.length - 1}
-                            onClick={() =>
-                              replaceSelected(movePerspectiveModule(selected, instance.id, 1))
-                            }
+                            onClick={() => {
+                              const target = selected.sidebar[index + 1];
+                              if (!target) return;
+                              commitModuleReorder(
+                                movePerspectiveModule(selected, instance.id, 1),
+                                instance,
+                                target,
+                                "after",
+                              );
+                            }}
                           >
                             <ArrowDown size={14} />
                           </ActionButton>
