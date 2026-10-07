@@ -20,6 +20,11 @@ function treeContainsPath(node: FileNode, target: string): boolean {
   );
 }
 
+function directoryPaths(node: FileNode): string[] {
+  if (!node.is_dir) return [];
+  return [node.path, ...(node.children?.flatMap(directoryPaths) ?? [])];
+}
+
 // Extends types.ts if needed, but we can declare local interface first for reliability
 export interface FileNodeLocal {
   name: string;
@@ -71,7 +76,7 @@ export function FileTree({
 }: FileTreeProps) {
   const [localOpen, setLocalOpen] = useState<boolean>(initialOpen);
   const lastRevealedPath = useRef<string | null>(null);
-  const lastCollapseTrigger = useRef(0);
+  const lastCollapseTrigger = useRef(collapseAllTrigger);
   const isOpen = expandedPaths ? expandedPaths.includes(node.path) : localOpen;
   const changeExpanded = useCallback(
     (open: boolean) => {
@@ -113,9 +118,14 @@ export function FileTree({
       node.is_dir
     ) {
       lastCollapseTrigger.current = collapseAllTrigger;
-      changeExpanded(false);
+      if (expandedPaths !== undefined && onExpandedPathsChange) {
+        const pathsToCollapse = new Set(directoryPaths(node));
+        onExpandedPathsChange(expandedPaths.filter((path) => !pathsToCollapse.has(path)));
+      } else {
+        changeExpanded(false);
+      }
     }
-  }, [changeExpanded, collapseAllTrigger, node.is_dir]);
+  }, [changeExpanded, collapseAllTrigger, expandedPaths, node, onExpandedPathsChange]);
 
   // Inline input editor state for renaming or adding
   const [editMode, setEditMode] = useState<"rename" | "create_file" | "create_dir" | null>(
@@ -297,7 +307,9 @@ export function FileTree({
               onRename={onRename}
               onDelete={onDelete}
               readOnly={readOnly}
-              collapseAllTrigger={collapseAllTrigger}
+              collapseAllTrigger={
+                expandedPaths !== undefined && onExpandedPathsChange ? 0 : collapseAllTrigger
+              }
               expandedPaths={expandedPaths}
               onExpandedPathsChange={onExpandedPathsChange}
               revealPath={revealPath}

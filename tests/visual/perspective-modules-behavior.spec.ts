@@ -161,8 +161,10 @@ test("controlled FileTree collapse trigger allows folders to reopen", async ({ p
   await expect(page.getByText("Roadmap.md", { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Collapse all folders" }).click();
+  await expect(page.getByText("Projects", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Roadmap.md", { exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Reopen all folders" }).click();
 
+  await expect(page.getByText("Projects", { exact: true })).toBeVisible();
   await expect(page.getByText("Roadmap.md", { exact: true })).toBeVisible();
 });
