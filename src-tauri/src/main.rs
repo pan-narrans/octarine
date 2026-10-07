@@ -23,6 +23,10 @@ use octarine::path_security::{
     canonicalize_root, resolve_child_within, resolve_descendant_within, resolve_existing_within,
     resolve_new_within,
 };
+use octarine::perspectives::{
+    resolve_workspace_root, resolve_workspace_roots, PerspectiveWorkspaceRoot,
+    PerspectiveWorkspaceRoots,
+};
 use octarine::project_merge::{
     project_merge_recovery_path, PreparedProjectMerge, ProjectMergeBulkResolution,
     ProjectMergeError, ProjectMergeErrorCode, ProjectMergePlan, ProjectMergeRecoveryBundle,
@@ -676,6 +680,86 @@ fn read_journal_tree(state: State<'_, AppState>) -> Result<FileNode, String> {
     octarine::file_ops::build_journal_tree(path)
 }
 
+#[tauri::command]
+fn get_perspective_config(state: State<'_, AppState>) -> Result<Option<String>, String> {
+    let path = state
+        .config_path
+        .parent()
+        .ok_or_else(|| "Application configuration directory is unavailable.".to_string())?
+        .join("perspectives.json");
+
+    octarine::perspectives::read_config_text(path)
+}
+
+#[tauri::command]
+fn save_perspective_config(
+    state: State<'_, AppState>,
+    new_contents: String,
+    expected_original: Option<String>,
+) -> Result<bool, String> {
+    let _write_guard = state
+        .perspective_config_write
+        .lock()
+        .map_err(|_| "Perspective configuration save state is unavailable.".to_string())?;
+    let path = state
+        .config_path
+        .parent()
+        .ok_or_else(|| "Application configuration directory is unavailable.".to_string())?
+        .join("perspectives.json");
+    octarine::perspectives::save_config_text(&path, &new_contents, expected_original.as_deref())
+}
+
+#[tauri::command]
+fn get_perspective_workspace_roots(
+    state: State<'_, AppState>,
+) -> Result<PerspectiveWorkspaceRoots, String> {
+    let vault_dir = state
+        .vault_dir
+        .lock()
+        .map_err(|_| "Workspace root state is unavailable.".to_string())?
+        .clone();
+    let journal_dir = state
+        .journal_dir
+        .lock()
+        .map_err(|_| "Journal root state is unavailable.".to_string())?
+        .clone();
+    let config = state
+        .config
+        .lock()
+        .map_err(|_| "Application configuration is unavailable.".to_string())?
+        .clone();
+    resolve_workspace_roots(&vault_dir, journal_dir.as_deref(), &config)
+}
+
+#[tauri::command]
+fn read_perspective_tree(
+    state: State<'_, AppState>,
+    root: PerspectiveWorkspaceRoot,
+) -> Result<FileNode, String> {
+    let vault_dir = state
+        .vault_dir
+        .lock()
+        .map_err(|_| "Workspace root state is unavailable.".to_string())?
+        .clone();
+    let journal_dir = state
+        .journal_dir
+        .lock()
+        .map_err(|_| "Journal root state is unavailable.".to_string())?
+        .clone();
+    let config = state
+        .config
+        .lock()
+        .map_err(|_| "Application configuration is unavailable.".to_string())?
+        .clone();
+    let root_path = resolve_workspace_root(root, &vault_dir, journal_dir.as_deref(), &config)?;
+
+    if root == PerspectiveWorkspaceRoot::Journal {
+        octarine::file_ops::build_journal_tree(&root_path)
+    } else {
+        scan_dir_tree(&root_path)
+    }
+}
+
 // -----------------------------------------------------------------
 // NEW FILE OPERATIONS TAURI IPC COMMANDS
 // -----------------------------------------------------------------
@@ -938,6 +1022,10 @@ fn main() {
             set_vault_config,
             get_journal_config,
             set_journal_config,
+            get_perspective_config,
+            save_perspective_config,
+            get_perspective_workspace_roots,
+            read_perspective_tree,
             get_task_creation_config,
             set_task_creation_config,
             get_update_runtime_info,

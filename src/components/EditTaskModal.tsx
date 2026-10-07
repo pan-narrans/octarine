@@ -250,6 +250,12 @@ export function EditTaskModal({
               onPointerDown={() => setSelectedTask("main")}
               onFocusCapture={() => setSelectedTask("main")}
             >
+              {task.file_path && (
+                <div className="task-note-location" title={task.file_path}>
+                  <span>Note</span>
+                  <span>{task.file_path}</span>
+                </div>
+              )}
               <div className="form-group task-summary-title">
                 <FormInput
                   id="task-title"

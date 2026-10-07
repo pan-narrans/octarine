@@ -42,6 +42,23 @@ Unknown fields and unsupported versions are rejected. Insertion mode is `heading
 Saving migrated journal settings creates configured internal journal directory and clears migration
 metadata; external source remains untouched.
 
+## Perspective Configuration
+
+Optional Perspective JSON is stored separately as `perspectives.json` beside `config.json`. It uses
+its own schema version, currently version 1; it does not change or extend application settings version 3. The format, module validation, recovery behavior, and state boundary are specified in
+[`perspectives.md`](perspectives.md).
+
+The native command returns raw Perspective text without rewriting it. Missing file selects the
+built-in Perspective. Malformed JSON, unsupported schema versions, and invalid modules produce
+visible configuration errors and recover to the validated built-in definition. Recovery preserves
+the file contents. Shared Perspective settings editor is **CURRENT** and mounted in App inside the
+unified Settings page's Perspectives tab. Open Settings from the sidebar or with `Meta+,` on macOS
+and `Ctrl+,` elsewhere. Desktop and 390px App fixture flows were verified on 2026-10-06. Guarded
+native saves
+compare original text, reject stale writes, and atomically replace valid version 1 configuration.
+Malformed-file replacement requires explicit recovery draft and Save; read failures keep saving
+disabled.
+
 ## Identifier and Version 2 Migration
 
 Application identifier changed from `com.octarine.app` to `net.auranimnus.octarine`. When new

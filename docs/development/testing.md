@@ -31,12 +31,23 @@ npx vitest run src/hooks/use-task-store.test.ts
 cargo test --manifest-path src-tauri/Cargo.toml --test data_integrity
 cargo test --manifest-path src-tauri/Cargo.toml watcher::tests::deterministic --lib
 npm run visual:test -- tests/visual/markdown-editor-behavior.spec.ts --workers=1
+npm run visual:test -- tests/visual/perspective-editor-behavior.spec.ts --workers=1
+npm run visual:app:test
 ```
 
 `npm test` runs fast Vitest tests under `src/`. `npm run visual:test` starts Storybook and runs
-Playwright component behavior and approved screenshot tests. Chromium must be installed through
-`npx playwright install chromium`; browser tests require localhost binding. Keep this heavier tier
-separate from the fast Vitest loop. Screenshot updates require the approval described in
+Playwright component behavior and approved screenshot tests. `npm run visual:app:test` starts Vite
+and exercises the mounted application with deterministic visual fixtures. App browser tests mock
+Tauri IPC, so they verify React wiring and layout without proving native command registration or
+filesystem writes. Perspective App tests cover create/edit/save/activate, route-remount reload,
+workspace changes during pending saves, active-query edits/removal, and no-switcher footer access.
+Perspective editor browser tests render the real settings editor and runtime hook with controlled
+persistence and Tauri IPC. They cover create/edit saves, malformed recovery,
+read/save failures, external conflicts, save completion after editor unmount, runtime refresh warnings,
+workspace transitions, and selection retention after a storage write failure. Chromium must be
+installed through `npx playwright install chromium`; browser
+tests require localhost binding. Keep this heavier tier separate from the fast Vitest loop. Screenshot
+updates require the approval described in
 `../visual-development.md`; behavior tests use explicit assertions and do not update baselines.
 
 GitHub Actions `Quality` runs frontend tests in its quality job, all Rust targets in the same job,
@@ -52,7 +63,7 @@ pull requests and pushes. No additional framework or coverage threshold is requi
 | Public cross-module integration     | `src-tauri/tests/`: parser/writer round-trips, guarded deletion, stale rename/merge, merge failures, guarded file persistence, corrupt-cache recovery, fresh-cache rebuild after external changes | Tests call Rust domain boundaries without running Tauri desktop shell                                                     |
 | Watchers                            | Synchronous injected event sequences in `watcher.rs`; separate `PollWatcher` integration checks for creation and ignore reload                                                                    | Channel shutdown and directory events are tested; PollWatcher does not prove native delivery or watcher replacement       |
 | Frontend unit/state                 | Colocated Vitest suites for Kanban projection/preferences/moves, task store and capture controller, notifications, navigation, settings, updates                                                  | Some hook/controller tests mock React wiring; pure model tests named after components do not constitute rendered coverage |
-| Component/UI                        | Playwright renders real Storybook components; editor behavior asserts dirty, rejected save, retry, reopen, external refresh, and pending-save/document-switch races                               | Most existing specs are screenshots, not interaction tests; controlled persistence callback is not a native filesystem    |
+| Component/UI                        | Playwright renders real Storybook components; Perspective editor/runtime tests cover semantic create/edit, recovery, retries, conflicts, post-unmount save completion, and workspace transitions  | Controlled persistence and Tauri IPC do not prove native filesystem writes or App-mount integration                       |
 | IPC boundary                        | Vitest adapter tests validate command payloads, runtime guards, and structured errors; `ipc:check` checks Rust-generated DTOs                                                                     | Mocked invoke does not prove command registration, path enforcement, or desktop event wiring                              |
 | Desktop end-to-end                  | Release smoke procedures exist                                                                                                                                                                    | No automated native desktop end-to-end suite; browser fixtures cannot prove native restart persistence                    |
 

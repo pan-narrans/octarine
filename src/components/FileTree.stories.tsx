@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { useState } from "react";
 import type { FileNode } from "../types";
 import { FileTree } from "./FileTree";
 
@@ -69,6 +70,30 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+function ControlledCollapseStory() {
+  const [expandedPaths, setExpandedPaths] = useState(["/vault", "/vault/Projects"]);
+  const [collapseAllTrigger, setCollapseAllTrigger] = useState(0);
+
+  return (
+    <>
+      <button type="button" onClick={() => setCollapseAllTrigger((trigger) => trigger + 1)}>
+        Collapse all folders
+      </button>
+      <button type="button" onClick={() => setExpandedPaths(["/vault", "/vault/Projects"])}>
+        Reopen all folders
+      </button>
+      <FileTree
+        node={projectTree}
+        selectedPath={null}
+        onSelectFile={() => undefined}
+        expandedPaths={expandedPaths}
+        onExpandedPathsChange={setExpandedPaths}
+        collapseAllTrigger={collapseAllTrigger}
+      />
+    </>
+  );
+}
+
 export const Folder: Story = {};
 
 export const File: Story = {
@@ -110,4 +135,8 @@ export const Narrow: Story = {
     selectedPath: "/vault/Projects/Octarine.md",
   },
   globals: { viewport: { value: "octarineNarrow", isRotated: false } },
+};
+
+export const ControlledCollapseReopen: Story = {
+  render: () => <ControlledCollapseStory />,
 };

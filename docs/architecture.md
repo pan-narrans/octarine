@@ -38,6 +38,21 @@ Visible catalog omits projects without `todo`, `doing`, or `deferred` items unle
 visible until navigation leaves it, and hierarchical tree construction retains ancestors of visible
 descendants. Reveal preference persists client-locally per effective vault path.
 
+Perspective configuration defines an ordered sidebar composition over existing capabilities.
+`src/features/perspectives/registry.ts` owns semantic module types, validation fields, supported
+surfaces, examples, and React implementations. Storybook's module reference derives its catalog from
+that registry. Runtime UI state is keyed by workspace, Perspective, and module instance; selected
+Perspective is stored client-locally per workspace. Version 1 permits only the sidebar surface and
+the logical workspace roots described in [`specifications/perspectives.md`](specifications/perspectives.md).
+The model, registry, runtime hooks, and existing sidebar renderer are integrated in `App.tsx` through
+the registry-backed Perspective renderer inside the existing navigation shell. App-level switching
+and sidebar composition render `perspectives.json` and remain **CURRENT**, based on prior Storybook
+approval and rendered app review. The shared settings editor is **CURRENT** inside one Settings
+page with Task settings and Perspectives tabs. Sidebar Settings and the system shortcut open that
+page: `Meta+,` on macOS and `Ctrl+,` elsewhere. Both tab panels stay mounted while Settings is open
+so editing drafts survive tab changes. Vite fixtures verify React behavior with in-memory Tauri IPC,
+while Rust tests cover native file writes and filesystem authority.
+
 Feature-owned adapters under `src/features/*/ipc.ts` are the only frontend modules that call Tauri commands. Rust returns normalized task metadata, including tags, contexts, and source file paths, so the frontend does not reinterpret raw Markdown. Shared response and error DTOs are generated from Rust into `src/generated/ipc`; frontend aliases and runtime guards live in `src/types`.
 
 Task creation orchestration lives in `src/features/tasks/use-task-creation-controller.ts` and its
@@ -48,9 +63,13 @@ feedback, timed dismissal, persistent failures, Open file, Undo, and index-refre
 
 ## Tauri Command Boundary
 
-`src-tauri/src/main.rs` owns startup and command registration. `app_state.rs` owns the shared runtime resources, while `watcher_service.rs` owns watcher construction and frontend event wiring. Commands expose task queries and mutations, configuration, file operations, directory trees, and journal trees; parser, writer, query, database, configuration, diagnostics, watcher, and filesystem modules provide the domain and infrastructure behavior behind them.
+`src-tauri/src/main.rs` owns startup and command registration. `app_state.rs` owns the shared runtime resources, while `watcher_service.rs` owns watcher construction and frontend event wiring. Commands expose task queries and mutations, configuration, file operations, directory trees, journal trees, and Perspective logical-root resolution; parser, writer, query, database, configuration, diagnostics, watcher, and filesystem modules provide the domain and infrastructure behavior behind them.
 
-Commands accept path strings from the frontend but authorize them in Rust before filesystem access. Existing paths and destination parents are canonicalized and constrained to the configured vault or journal capability root. Task and vault-tree mutations are vault-only; content reads and writes may address either root. Traversal, root mutation, and symlink escapes are rejected.
+Commands accept path strings from the frontend but authorize them in Rust before filesystem access. Existing paths and destination parents are canonicalized and constrained to the configured vault, sole filesystem capability root. Journal and project folders resolve as descendants of that vault. All file and task operations remain vault-scoped; traversal, root mutation, and symlink escapes are rejected. Tree scans skip symlinked files and directories, matching task scanner policy.
+
+Perspective file trees send stable logical root IDs (`vault`, `journal`, or `projects`). Rust resolves
+them from existing authorized configuration and constrains the result to the active vault. The
+Perspective file cannot add or widen filesystem access.
 
 The main-window Tauri capability grants core IPC access plus URL opening through the opener plugin. Application link parsing restricts opened links to validated HTTP or HTTPS URLs; no blanket native API access is enabled.
 

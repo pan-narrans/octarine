@@ -1,7 +1,6 @@
 import { Check, Edit2, Loader2, Settings, X } from "lucide-react";
 
 interface WorkspaceSidebarFooterProps {
-  activeFilePath: string | null;
   selectedSection: string;
   activeVaultPath: string;
   isEditingVault: boolean;
@@ -15,7 +14,6 @@ interface WorkspaceSidebarFooterProps {
 }
 
 export function WorkspaceSidebarFooter({
-  activeFilePath,
   selectedSection,
   activeVaultPath,
   isEditingVault,
@@ -33,12 +31,10 @@ export function WorkspaceSidebarFooter({
         <li>
           <button
             type="button"
-            className={`sidebar-item ${
-              activeFilePath === null && selectedSection === "settings" ? "active" : ""
-            }`}
+            className={`sidebar-item ${selectedSection === "settings" ? "active" : ""}`}
             onClick={onOpenSettings}
           >
-            <Settings size={16} /> Task settings
+            <Settings size={16} /> Settings
           </button>
         </li>
       </ul>

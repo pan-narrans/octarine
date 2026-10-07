@@ -449,7 +449,6 @@ function WorkspaceLayoutStory({
         }
         footer={
           <WorkspaceSidebarFooter
-            activeFilePath={surface === "editor" ? activeDocumentPath : null}
             selectedSection={selectedSection}
             activeVaultPath="~/OctarineVault"
             isEditingVault={isEditingVault}

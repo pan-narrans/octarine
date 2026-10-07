@@ -2,11 +2,31 @@ import { invoke } from "@tauri-apps/api/core";
 import type { AttachmentImportResult } from "../../generated/ipc/AttachmentImportResult";
 import type { MarkdownLinkTarget } from "../../generated/ipc/MarkdownLinkTarget";
 import type { FileNode } from "../../types";
+import type { PerspectiveWorkspaceRoot } from "../../generated/ipc/PerspectiveWorkspaceRoot";
+import type { PerspectiveWorkspaceRoots } from "../../generated/ipc/PerspectiveWorkspaceRoots";
 
 export const getVaultConfig = (): Promise<string> => invoke("get_vault_config");
 export const getJournalConfig = (): Promise<string> => invoke("get_journal_config");
 export const readVaultTree = (): Promise<FileNode> => invoke("read_dir_tree");
 export const readJournalTree = (): Promise<FileNode> => invoke("read_journal_tree");
+export const getPerspectiveConfigText = (): Promise<string | null> =>
+  invoke("get_perspective_config");
+// Returns false when file changed after the editor loaded its original snapshot.
+export async function savePerspectiveConfigText(
+  newContents: string,
+  expectedOriginal: string | null,
+): Promise<boolean> {
+  const saved = await invoke<unknown>("save_perspective_config", {
+    newContents,
+    expectedOriginal,
+  });
+  if (typeof saved !== "boolean") throw new Error("Invalid Perspective save response.");
+  return saved;
+}
+export const getPerspectiveWorkspaceRoots = (): Promise<PerspectiveWorkspaceRoots> =>
+  invoke("get_perspective_workspace_roots");
+export const readPerspectiveTree = (root: PerspectiveWorkspaceRoot): Promise<FileNode> =>
+  invoke("read_perspective_tree", { root });
 
 export const setVaultConfig = (newDir: string): Promise<void> =>
   invoke("set_vault_config", { newDir });

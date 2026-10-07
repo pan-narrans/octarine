@@ -6,6 +6,7 @@ export const visualScenarios = [
   "kanban",
   "settings",
   "empty",
+  "perspectives",
 ] as const;
 
 export type VisualScenario = (typeof visualScenarios)[number];

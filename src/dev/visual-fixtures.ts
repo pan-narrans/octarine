@@ -127,7 +127,44 @@ const customViews: CustomView[] = [
     title: "Design follow-up",
     query_raw: 'filter: "#frontend or #design-system"',
   },
+  {
+    line_number: 3,
+    title: "work:today",
+    query_raw: 'filter: "status = doing"',
+  },
 ];
+
+const perspectiveVisualConfiguration = {
+  version: 1,
+  perspectives: [
+    {
+      id: "writing",
+      title: "Writing",
+      sidebar: [
+        { id: "switcher", type: "perspective-switcher" },
+        {
+          id: "active-work",
+          type: "custom-query",
+          title: "Active work",
+          filter: "status = doing",
+        },
+        {
+          id: "journal-files",
+          type: "file-tree",
+          title: "Journals",
+          root: "journal",
+          collection: "journal",
+        },
+        { id: "notes", type: "file-tree", title: "Notes", root: "vault" },
+      ],
+    },
+    {
+      id: "focus",
+      title: "Focus",
+      sidebar: [{ id: "notes", type: "file-tree", title: "Notes", root: "vault" }],
+    },
+  ],
+};
 
 const vaultTree: FileNode = {
   name: "vault",
@@ -170,6 +207,32 @@ const journalTree: FileNode = {
   ],
 };
 
+const projectsTree: FileNode = {
+  name: "projects",
+  path: "/visual/vault/projects",
+  is_dir: true,
+  children: [
+    {
+      name: "Octarine.md",
+      path: "/visual/vault/Projects/Octarine.md",
+      is_dir: false,
+      children: null,
+    },
+  ],
+};
+
+function rebaseTree(node: FileNode, sourceRoot: string, destinationRoot: string): FileNode {
+  const path =
+    node.path === sourceRoot || node.path.startsWith(`${sourceRoot}/`)
+      ? `${destinationRoot}${node.path.slice(sourceRoot.length)}`
+      : node.path;
+  return {
+    ...node,
+    path,
+    children: node.children?.map((child) => rebaseTree(child, sourceRoot, destinationRoot)) ?? null,
+  };
+}
+
 function replaceTaskMarker(rawMarkdown: string, status: Task["status"]): string {
   const marker = { todo: " ", doing: "/", deferred: ">", done: "x", cancelled: "-" }[status];
   return rawMarkdown.replace(/^(\s*[-*+]\s+\[).(\])/, `$1${marker}$2`);
@@ -193,7 +256,42 @@ function mockVisualIPC(handler: Parameters<typeof mockIPC>[0]): void {
 }
 
 export function installVisualFixtures(scenario: VisualScenario): void {
+  const perspectiveScenario = scenario === "perspectives";
+  const deferPerspectiveSave =
+    perspectiveScenario &&
+    new URLSearchParams(window.location.search).get("defer-perspective-save") === "1";
+  let perspectiveConfigurationText: string | null = perspectiveScenario
+    ? JSON.stringify(perspectiveVisualConfiguration)
+    : null;
+  const vaultPath = perspectiveScenario ? "/visual/perspectives/vault" : "/visual/vault";
+  const journalPath = perspectiveScenario ? `${vaultPath}/journals` : "/visual/journal";
+  let activeVaultPath = vaultPath;
+  let activeJournalPath = journalPath;
   let tasks = scenario === "empty" ? [] : populatedTasks();
+  if (perspectiveScenario) {
+    tasks = tasks.map((entry) => ({
+      ...entry,
+      file_path: entry.file_path?.replace("/visual/vault", vaultPath) ?? null,
+    }));
+  }
+  const perspectiveTrees = perspectiveScenario
+    ? {
+        vault: rebaseTree(vaultTree, "/visual/vault", vaultPath),
+        journal: rebaseTree(journalTree, "/visual/journal", journalPath),
+        projects: {
+          ...projectsTree,
+          path: `${vaultPath}/projects`,
+          children: [
+            {
+              name: "Octarine.md",
+              path: `${vaultPath}/projects/Octarine.md`,
+              is_dir: false,
+              children: null,
+            },
+          ],
+        },
+      }
+    : { vault: vaultTree, journal: journalTree, projects: projectsTree };
   let pendingRename = { source: "octarine", destination: "product" };
   let pendingMerge = { source: "octarine/launch", destination: "octarine/ui" };
   let mergeCompleted = false;
@@ -222,28 +320,80 @@ export function installVisualFixtures(scenario: VisualScenario): void {
   let updateChannel: UpdateChannel = "stable";
   const files = new Map<string, string>([
     [
-      `/visual/journal/${localDate()}.md`,
+      `${journalPath}/${localDate()}.md`,
       `# Journal — ${localDate()}\n\n## Focus\n\nKeep the visual verification loop fast and explicit.\n`,
     ],
     [
-      "/visual/vault/Projects/Octarine.md",
+      `${vaultPath}/Projects/Octarine.md`,
       "# Octarine\n\nA local-first task workspace with rendered visual verification.\n",
     ],
-    ["/visual/vault/inbox.md", "# Inbox\n\nVisual fixture data is kept in memory.\n"],
+    [`${vaultPath}/inbox.md`, "# Inbox\n\nVisual fixture data is kept in memory.\n"],
   ]);
+  if (perspectiveScenario) {
+    files.set(`${vaultPath}/projects/Octarine.md`, "# Octarine\n\nProject note fixture.\n");
+  }
 
   mockWindows("main");
-  mockVisualIPC((command, payload) => {
+  mockVisualIPC(async (command, payload) => {
     const args = (payload ?? {}) as Record<string, unknown>;
     switch (command) {
       case "get_tasks":
-        return tasks.map((entry) => ({ ...entry }));
+        if (
+          perspectiveScenario &&
+          typeof args.filter === "string" &&
+          args.filter !== "" &&
+          args.filter !== "status = doing" &&
+          args.filter !== "status = todo"
+        ) {
+          throw new Error(`Unhandled Perspective visual query: ${args.filter}`);
+        }
+        return tasks
+          .filter(
+            (entry) =>
+              !perspectiveScenario ||
+              ((args.filter !== "status = doing" || entry.status === "doing") &&
+                (args.filter !== "status = todo" || entry.status === "todo")),
+          )
+          .map((entry) => ({ ...entry }));
       case "get_custom_views":
         return customViews;
       case "get_vault_config":
-        return "/visual/vault";
+        return activeVaultPath;
       case "get_journal_config":
-        return "/visual/journal";
+        return activeJournalPath;
+      case "get_perspective_config":
+        return perspectiveConfigurationText;
+      case "save_perspective_config":
+        if (args.expectedOriginal !== perspectiveConfigurationText) return false;
+        if (typeof args.newContents !== "string") {
+          throw new Error("Invalid Perspective fixture contents.");
+        }
+        if (deferPerspectiveSave) {
+          await new Promise<void>((resolve) => {
+            window.addEventListener("perspective-fixture-release-save", () => resolve(), {
+              once: true,
+            });
+          });
+        }
+        perspectiveConfigurationText = args.newContents;
+        return true;
+      case "get_perspective_workspace_roots":
+        return {
+          vault: activeVaultPath,
+          journal: activeJournalPath,
+          projects: `${activeVaultPath}/projects`,
+        };
+      case "read_perspective_tree":
+        switch (args.root) {
+          case "vault":
+            return perspectiveTrees.vault;
+          case "journal":
+            return perspectiveTrees.journal;
+          case "projects":
+            return perspectiveTrees.projects;
+          default:
+            throw new Error(`Unknown visual Perspective root: ${String(args.root)}`);
+        }
       case "get_task_creation_config":
         return structuredClone(taskCreationConfig);
       case "set_task_creation_config":
@@ -613,11 +763,16 @@ export function installVisualFixtures(scenario: VisualScenario): void {
         );
         return undefined;
       }
-      case "set_vault_config":
-      case "set_journal_config":
       case "create_directory":
       case "delete_path":
       case "rename_path":
+        return undefined;
+      case "set_vault_config":
+        activeVaultPath = String(args.newDir);
+        if (perspectiveScenario) activeJournalPath = `${activeVaultPath}/journals`;
+        return undefined;
+      case "set_journal_config":
+        activeJournalPath = String(args.newDir);
         return undefined;
       case "create_file":
         return `${String(args.parentDir)}/${String(args.name)}`;

@@ -15,6 +15,7 @@
     "storybook": "storybook dev -p 6006",
     "storybook:build": "storybook build",
     "visual:test": "playwright test",
+    "visual:app:test": "playwright test --config=playwright.app.config.ts",
     "visual:update": "playwright test --update-snapshots",
     "test:updater-manifests": "node --test .github/scripts/update-manifests.test.mjs",
     "test:canonical-updater-manifest": "node --test .github/scripts/canonicalize-updater-manifest.test.mjs",
