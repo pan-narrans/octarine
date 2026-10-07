@@ -43,22 +43,6 @@ type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {};
 
-export const NoteLocationProposed: Story = {
-  args: { showNoteLocation: true },
-};
-
-export const NoteLocationProposedTablet: Story = {
-  args: { showNoteLocation: true },
-  tags: ["visual"],
-  globals: { viewport: { value: "octarineTablet", isRotated: false } },
-};
-
-export const NoteLocationProposedMobile: Story = {
-  args: { showNoteLocation: true },
-  tags: ["visual"],
-  globals: { viewport: { value: "octarineMobile", isRotated: false } },
-};
-
 export const EmptyTask: Story = {
   args: {
     task: {

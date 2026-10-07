@@ -45,6 +45,7 @@ Octarine uses a dark, interstellar workspace aesthetic: deep navy surfaces, rest
 - A task card's complete surface is the single entry point to the structured task editor, including keyboard activation with Enter or Space. Status controls remain independent and task cards do not expose a separate edit button.
 - Shared radii are exposed as `--radius-control` (6px), `--radius-md` (8px), and `--radius-card`/`--radius-modal` (12px).
 - Metadata on task cards appears as compact colored pills with subtle tinted fill/border. In the task editor, current context, project, and tag values sit beneath their add inputs as solid semantic-color capsules with dark, readable labels. Keep labels concise and preserve their established colors.
+- The task editor shows the source note path in a compact, muted monospace row above the title and description when a path is available. Long paths truncate visually and remain available as hover text.
 - Primary task checkboxes are circular; priority badges are compact square 4px-radius marks.
 - Structured task editing groups each task title and description into one compact bordered card. Root task rows align to the form width; nested rows use a small inset while preserving the same typography, surface, and delete-control placement.
 - The task editor keeps the title and description together in their shared compact card at desktop, tablet, and mobile breakpoints; responsive layout must not reintroduce a divider or separate input borders between them.

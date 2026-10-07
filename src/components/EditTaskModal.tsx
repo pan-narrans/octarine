@@ -21,7 +21,6 @@ interface EditTaskModalProps {
   initialShowMarkdown?: boolean;
   initialSelectedTask?: "main" | number | null;
   initialSaving?: boolean;
-  showNoteLocation?: boolean;
 }
 
 const TASK_PREFIX = /^(\s*[-*+]\s+\[.*?\]\s*(?:\([A-Da-d]\)\s*)?)/i;
@@ -66,7 +65,6 @@ export function EditTaskModal({
   initialShowMarkdown = false,
   initialSelectedTask = null,
   initialSaving = false,
-  showNoteLocation = false,
 }: EditTaskModalProps) {
   const [rawMarkdown, setRawMarkdown] = useState(task.raw_markdown);
   const [showMarkdown, setShowMarkdown] = useState(initialShowMarkdown);
@@ -252,7 +250,7 @@ export function EditTaskModal({
               onPointerDown={() => setSelectedTask("main")}
               onFocusCapture={() => setSelectedTask("main")}
             >
-              {showNoteLocation && task.file_path && (
+              {task.file_path && (
                 <div className="task-note-location" title={task.file_path}>
                   <span>Note</span>
                   <span>{task.file_path}</span>
